@@ -45,7 +45,7 @@ export default function ForgotPasswordPage() {
         const msg = resetError.message.toLowerCase();
         if (msg.includes("rate") || msg.includes("limit")) {
           setError("Too many requests. Please wait a moment before trying again.");
-        } else if (msg.includes("failed to fetch") || msg.includes("network")) {
+        } else if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
           setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
         } else {
           setError(resetError.message);

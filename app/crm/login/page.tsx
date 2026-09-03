@@ -48,8 +48,12 @@ function LoginForm() {
 
       if (signInError) {
         const msg = signInError.message.toLowerCase();
-        if (msg.includes("invalid api key")) {
-          setError("The app could not authenticate with the server because the Supabase API key is missing, incorrect, or belongs to a different project. An administrator must check the NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables in the deployment settings, then redeploy.");
+        if (msg.includes("failed to fetch") || msg.includes("networkrequestfailed") || msg.includes("network error") || msg.includes("load failed")) {
+          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        } else if (msg.includes("invalid api key") || msg.includes("invalidapikey")) {
+          setError("Authentication configuration error. Please contact your administrator to check the Supabase project settings.");
+        } else if (msg.includes("invalid login") || msg.includes("invalid credentials")) {
+          setError("Invalid email or password. Please try again.");
         } else {
           setError(signInError.message);
         }
@@ -96,7 +100,10 @@ function LoginForm() {
 
       if (profileError) {
         const code = profileError.code || "";
-        if (code === "42501" || code === "PGRST301") {
+        const pmsg = (profileError.message || "").toLowerCase();
+        if (pmsg.includes("failed to fetch") || pmsg.includes("network") || pmsg.includes("load failed")) {
+          setError("Unable to connect to the database service. Please check your internet connection and try again.");
+        } else if (code === "42501" || code === "PGRST301") {
           setError("Your account is authenticated, but your CRM profile has not been configured. Please contact your administrator.");
         } else {
           setError("Unable to load your account profile. Please try again or contact your administrator.");

@@ -59,7 +59,7 @@ function RegisterForm() {
           setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
         } else if (msg.includes("email")) {
           setError("Please enter a valid email address.");
-        } else if (msg.includes("failed to fetch") || msg.includes("network")) {
+        } else if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
           setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
         } else {
           setError(signUpError.message);
