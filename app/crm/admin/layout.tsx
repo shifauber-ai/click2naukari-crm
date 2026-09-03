@@ -16,7 +16,6 @@ import {
   Shield,
   IdCard,
   CreditCard,
-  MessageCircle,
   Calendar,
   AlertTriangle,
   PhoneCall,
@@ -29,6 +28,7 @@ import {
   X,
   ChevronLeft,
 } from "lucide-react";
+
 import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
@@ -45,7 +45,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/crm/admin/caller-queue", label: "Caller Queue", icon: PhoneCall },
   { href: "/crm/admin/hero-ids", label: "Hero IDs", icon: IdCard },
   { href: "/crm/admin/sims", label: "SIM", icon: CreditCard },
-  { href: "/crm/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/crm/admin/followups", label: "Follow-ups", icon: Calendar },
   { href: "/crm/admin/issues", label: "Issues", icon: AlertTriangle },
   { href: "/crm/admin/other-hero", label: "Other Hero", icon: PhoneCall },

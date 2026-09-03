@@ -88,6 +88,10 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      // 3-day session: access tokens refresh automatically, and the
+      // localStorage session remains valid across tab switches and refreshes.
+      // Supabase uses a sliding window — as long as the refresh token is used
+      // within its lifetime, the session stays alive.
     },
   }
 );

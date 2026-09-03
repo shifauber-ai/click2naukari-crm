@@ -25,8 +25,18 @@ import {
 } from "@/components/ui/dialog";
 import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Plus, Pencil, Search, Loader2 } from "lucide-react";
+import { Package, Plus, Pencil, Search, Loader2, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,6 +47,8 @@ export default function ProductsPage() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -101,6 +113,20 @@ export default function ProductsPage() {
       }
     }
     setSaving(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteProduct) return;
+    setDeleting(true);
+    const { error } = await supabase.from("products").delete().eq("id", deleteProduct.id);
+    if (error) {
+      toast({ title: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Product deleted successfully" });
+      setDeleteProduct(null);
+      load();
+    }
+    setDeleting(false);
   };
 
   const toggleActive = async (p: Product) => {
@@ -190,15 +216,27 @@ export default function ProductsPage() {
                   <TableCell className="text-muted-foreground text-sm">
                     {format(new Date(p.created_at), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => openEdit(p)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openEdit(p)}
+                        title="Edit product"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        onClick={() => setDeleteProduct(p)}
+                        title="Delete product"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -255,6 +293,31 @@ export default function ProductsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteProduct} onOpenChange={() => setDeleteProduct(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteProduct?.name}</strong> ({deleteProduct?.code})?
+              This will also remove it from caller queues. Existing leads will keep their product reference.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</>
+              ) : (
+                "Delete Product"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

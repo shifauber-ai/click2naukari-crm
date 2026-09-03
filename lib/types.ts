@@ -223,6 +223,25 @@ export interface ImportBatch {
   created_at: string;
 }
 
+export interface CallHistory {
+  id: string;
+  lead_id: string | null;
+  product_id: string | null;
+  caller_id: string | null;
+  phone_number: string;
+  direction: string;
+  call_status: string;
+  duration_seconds: number;
+  outcome: string | null;
+  remarks: string | null;
+  is_simulated: boolean;
+  call_timestamp: string;
+  created_at: string;
+  lead?: Lead | null;
+  product?: Product | null;
+  caller?: Profile | null;
+}
+
 export interface AuditLog {
   id: string;
   actor_id: string | null;

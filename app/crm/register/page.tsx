@@ -39,54 +39,64 @@ function RegisterForm() {
 
     setLoading(true);
 
-    if (supabaseConfigError) {
-      setError(supabaseConfigError);
-      setLoading(false);
-      return;
-    }
-
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
-
-    if (signUpError) {
-      const msg = signUpError.message.toLowerCase();
-      if (msg.includes("already") || msg.includes("registered")) {
-        setError("This email is already registered. Try signing in instead.");
-      } else if (msg.includes("weak") || msg.includes("password")) {
-        setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
-      } else if (msg.includes("email")) {
-        setError("Please enter a valid email address.");
-      } else {
-        setError(signUpError.message);
+    try {
+      if (supabaseConfigError) {
+        setError(supabaseConfigError);
+        return;
       }
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName } },
+      });
+
+      if (signUpError) {
+        const msg = signUpError.message.toLowerCase();
+        if (msg.includes("already") || msg.includes("registered")) {
+          setError("This email is already registered. Try signing in instead.");
+        } else if (msg.includes("weak") || msg.includes("password")) {
+          setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
+        } else if (msg.includes("email")) {
+          setError("Please enter a valid email address.");
+        } else if (msg.includes("failed to fetch") || msg.includes("network")) {
+          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        } else {
+          setError(signUpError.message);
+        }
+        return;
+      }
+
+      if (!data.user) {
+        setError("Registration failed. Please try again.");
+        return;
+      }
+
+      const { error: profileError } = await supabase.rpc("bootstrap_profile", {
+        p_user_id: data.user.id,
+        p_email: email,
+        p_full_name: fullName,
+        p_role: "ADMIN",
+      });
+
+      if (profileError) {
+        setError("Your account was created but the admin profile could not be set up. Please contact support.");
+        return;
+      }
+
+      router.push("/crm/admin");
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
+        setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+      } else {
+        setError("An unexpected error occurred during registration. Please try again.");
+      }
+      console.error("[Register] Unhandled error:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (!data.user) {
-      setError("Registration failed. Please try again.");
-      setLoading(false);
-      return;
-    }
-
-    const { error: profileError } = await supabase.rpc("bootstrap_profile", {
-      p_user_id: data.user.id,
-      p_email: email,
-      p_full_name: fullName,
-      p_role: "ADMIN",
-    });
-
-    if (profileError) {
-      setError("Your account was created but the admin profile could not be set up. Please contact support.");
-      setLoading(false);
-      return;
-    }
-
-    router.push("/crm/admin");
-    router.refresh();
   };
 
   return (

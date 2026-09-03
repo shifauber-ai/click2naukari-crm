@@ -47,31 +47,42 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
 
-    if (supabaseConfigError) {
-      setError(supabaseConfigError);
-      setLoading(false);
-      return;
-    }
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-    });
-
-    if (updateError) {
-      const msg = updateError.message.toLowerCase();
-      if (msg.includes("weak") || msg.includes("password")) {
-        setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
-      } else if (msg.includes("token") || msg.includes("expired")) {
-        setError("This reset link has expired. Please request a new one.");
-      } else {
-        setError(updateError.message);
+    try {
+      if (supabaseConfigError) {
+        setError(supabaseConfigError);
+        return;
       }
-      setLoading(false);
-      return;
-    }
 
-    setUpdated(true);
-    setLoading(false);
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+      });
+
+      if (updateError) {
+        const msg = updateError.message.toLowerCase();
+        if (msg.includes("weak") || msg.includes("password")) {
+          setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
+        } else if (msg.includes("token") || msg.includes("expired")) {
+          setError("This reset link has expired. Please request a new one.");
+        } else if (msg.includes("failed to fetch") || msg.includes("network")) {
+          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        } else {
+          setError(updateError.message);
+        }
+        return;
+      }
+
+      setUpdated(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
+        setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+      } else {
+        setError("An unexpected error occurred. Please try again.");
+      }
+      console.error("[ResetPassword] Unhandled error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (verifying) {

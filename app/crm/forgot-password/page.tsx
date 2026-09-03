@@ -27,33 +27,44 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
 
-    if (supabaseConfigError) {
-      setError(supabaseConfigError);
-      setLoading(false);
-      return;
-    }
-
-    const siteUrl =
-      typeof window !== "undefined" ? window.location.origin : "";
-
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-      email,
-      { redirectTo: `${siteUrl}/crm/reset-password` }
-    );
-
-    if (resetError) {
-      const msg = resetError.message.toLowerCase();
-      if (msg.includes("rate") || msg.includes("limit")) {
-        setError("Too many requests. Please wait a moment before trying again.");
-      } else {
-        setError(resetError.message);
+    try {
+      if (supabaseConfigError) {
+        setError(supabaseConfigError);
+        return;
       }
-      setLoading(false);
-      return;
-    }
 
-    setSent(true);
-    setLoading(false);
+      const siteUrl =
+        typeof window !== "undefined" ? window.location.origin : "";
+
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email,
+        { redirectTo: `${siteUrl}/crm/reset-password` }
+      );
+
+      if (resetError) {
+        const msg = resetError.message.toLowerCase();
+        if (msg.includes("rate") || msg.includes("limit")) {
+          setError("Too many requests. Please wait a moment before trying again.");
+        } else if (msg.includes("failed to fetch") || msg.includes("network")) {
+          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        } else {
+          setError(resetError.message);
+        }
+        return;
+      }
+
+      setSent(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
+        setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+      } else {
+        setError("An unexpected error occurred. Please try again.");
+      }
+      console.error("[ForgotPassword] Unhandled error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
