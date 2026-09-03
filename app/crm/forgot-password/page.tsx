@@ -61,7 +61,6 @@ export default function ForgotPasswordPage() {
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
-      console.error("[ForgotPassword] Unhandled error:", err);
     } finally {
       setLoading(false);
     }

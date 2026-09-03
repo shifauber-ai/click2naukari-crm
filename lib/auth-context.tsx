@@ -90,12 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadProfile]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
     setUser(null);
     setSession(null);
-  };
+    profileUidRef.current = null;
+  }, []);
 
   return (
     <AuthContext.Provider

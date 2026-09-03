@@ -37,18 +37,6 @@ function diagnoseConfig(url: string | undefined, key: string | undefined) {
     keyProjectRef !== 'unreadable' &&
     urlProjectRef !== keyProjectRef;
 
-  if (typeof window !== 'undefined') {
-    console.info('[Supabase Config]', {
-      urlPresent,
-      keyPresent,
-      keyType,
-      urlValid,
-      urlProjectRef,
-      keyProjectRef: keyType === 'legacy-jwt' ? keyProjectRef : 'n/a (publishable keys do not embed project ref)',
-      urlKeyMismatch: mismatch,
-    });
-  }
-
   if (!urlPresent || !keyPresent) {
     console.error(
       '[Supabase] Missing environment variables. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set.'

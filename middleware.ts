@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const publicPaths = ["/crm/login", "/crm/register", "/crm/forgot-password", "/crm/reset-password"];
+  const publicPaths = ["/crm/login", "/crm/register", "/crm/register-admin", "/crm/forgot-password", "/crm/reset-password"];
   if (!pathname.startsWith("/crm") || publicPaths.includes(pathname)) {
     return NextResponse.next();
   }

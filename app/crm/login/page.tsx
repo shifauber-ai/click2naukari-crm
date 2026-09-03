@@ -57,12 +57,9 @@ function LoginForm() {
       }
 
       if (!data.user) {
-        console.error("[Auth] signInWithPassword returned no user but no error");
         setError("Login failed. Please try again.");
         return;
       }
-
-      console.info("[Auth] signInWithPassword SUCCESS, user:", data.user.id);
 
       // signInWithPassword already sets the session internally. Verify it's
       // available before querying the profile, with a retry for environments
@@ -73,15 +70,12 @@ function LoginForm() {
         sessionReady = !!sessionData.session;
       }
       if (!sessionReady) {
-        console.error("[Auth] No session available after sign-in");
-        await supabase.auth.signOut();
         setError("Authentication session could not be established. Please try again.");
         return;
       }
 
       // Query the profile with one retry. On Vercel, the auth token may not
       // be fully attached to the first REST call immediately after sign-in.
-      console.info("[Auth] profile query START");
       let profile: { role: string; is_active: boolean } | null = null;
       let profileError: { code?: string; message?: string } | null = null;
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -92,25 +86,18 @@ function LoginForm() {
           .maybeSingle();
         if (!result.error) {
           profile = result.data as { role: string; is_active: boolean } | null;
-          console.info("[Auth] profile query SUCCESS, attempt:", attempt + 1);
           break;
         }
         profileError = result.error;
-        console.error("[Auth] profile query FAILED attempt", attempt + 1, {
-          code: result.error.code,
-          message: result.error.message,
-        });
         if (attempt === 0) {
-          // Re-fetch the session to ensure the token is fresh for the retry.
           await supabase.auth.getSession();
         }
       }
 
       if (profileError) {
-        await supabase.auth.signOut();
         const code = profileError.code || "";
         if (code === "42501" || code === "PGRST301") {
-          setError("Profile access denied. Your account may not be fully configured. Please contact your administrator.");
+          setError("Your account is authenticated, but your CRM profile has not been configured. Please contact your administrator.");
         } else {
           setError("Unable to load your account profile. Please try again or contact your administrator.");
         }
@@ -118,14 +105,11 @@ function LoginForm() {
       }
 
       if (!profile) {
-        console.error("[Auth] No profile row found for user:", data.user.id);
-        await supabase.auth.signOut();
-        setError("No profile found for your account. Please contact your administrator to set up your account.");
+        setError("Your account is authenticated, but your CRM profile has not been configured. Please contact your administrator.");
         return;
       }
 
       if (!profile.is_active) {
-        await supabase.auth.signOut();
         setError("Your account has been deactivated. Contact your administrator.");
         return;
       }
@@ -227,7 +211,7 @@ export default function LoginPage() {
         </Card>
         <div className="mt-6 flex items-center justify-center gap-4 text-center text-xs text-muted-foreground">
           <Link
-            href="/crm/register"
+            href="/crm/register-admin"
             className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
           >
             <Shield className="h-3 w-3" /> Register as Admin

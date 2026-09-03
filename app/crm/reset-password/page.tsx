@@ -79,7 +79,6 @@ export default function ResetPasswordPage() {
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
-      console.error("[ResetPassword] Unhandled error:", err);
     } finally {
       setLoading(false);
     }
