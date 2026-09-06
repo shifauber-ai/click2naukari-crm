@@ -80,9 +80,9 @@ import {
   Pencil,
   UserPlus,
   Trash2,
-
+  BookMarked,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 
 const PAGE_SIZE = 25;
 
@@ -108,6 +108,10 @@ export default function AdminLeadsPage() {
   const [productFilter, setProductFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [deleteFilter, setDeleteFilter] = useState<DeleteFilter>("ACTIVE");
+  const [platformFilter, setPlatformFilter] = useState("ALL");
+  const [employeeFilter, setEmployeeFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState(subDays(new Date(), 2).toISOString().split("T")[0]);
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -118,6 +122,8 @@ export default function AdminLeadsPage() {
   const [deleteLead, setDeleteLead] = useState<Lead | null>(null);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDirOpen, setBulkDirOpen] = useState(false);
+  const [bulkDirSaving, setBulkDirSaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [name, setName] = useState("");
@@ -192,6 +198,25 @@ export default function AdminLeadsPage() {
       countQuery = countQuery.eq("status", statusFilter);
       query = query.eq("status", statusFilter);
     }
+    if (platformFilter !== "ALL") {
+      countQuery = countQuery.eq("platform", platformFilter);
+      query = query.eq("platform", platformFilter);
+    }
+    if (employeeFilter !== "ALL") {
+      countQuery = countQuery.eq("current_caller_id", employeeFilter);
+      query = query.eq("current_caller_id", employeeFilter);
+    }
+    if (dateFrom) {
+      countQuery = countQuery.gte("created_at", dateFrom);
+      query = query.gte("created_at", dateFrom);
+    }
+    if (dateTo) {
+      const endDate = new Date(dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+      const endStr = endDate.toISOString().split("T")[0];
+      countQuery = countQuery.lt("created_at", endStr);
+      query = query.lt("created_at", endStr);
+    }
     if (search) {
       countQuery = countQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
       query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
@@ -205,7 +230,7 @@ export default function AdminLeadsPage() {
       setLeads((dataRes.data as Lead[]) || []);
     }
     setLoading(false);
-  }, [page, productFilter, statusFilter, search, deleteFilter, toast]);
+  }, [page, productFilter, statusFilter, platformFilter, employeeFilter, dateFrom, dateTo, search, deleteFilter, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -215,7 +240,7 @@ export default function AdminLeadsPage() {
   // Clear selection when filters change.
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [productFilter, statusFilter, search, deleteFilter, page]);
+  }, [productFilter, statusFilter, platformFilter, employeeFilter, dateFrom, dateTo, search, deleteFilter, page]);
 
   const productMap = new Map(products.map((p) => [p.id, p]));
   const employeeMap = new Map(employees.map((e) => [e.id, e]));
@@ -516,6 +541,52 @@ export default function AdminLeadsPage() {
     setBulkSaving(false);
   };
 
+  // ============ BULK SAVE TO DIRECTORY ============
+  const handleBulkDirectory = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDirSaving(true);
+    const selectedLeads = leads.filter((l) => selectedIds.has(l.id));
+    const entries = selectedLeads.map((l) => ({
+      lead_id: l.id,
+      product_id: l.product_id,
+      platform: l.platform || null,
+      city: l.city || null,
+      status: l.status,
+      candidate_name: l.name,
+      phone_number: l.phone,
+      employee_id: l.current_caller_id || null,
+      remarks: l.remarks,
+    }));
+    let successCount = 0;
+    let dupCount = 0;
+    let failCount = 0;
+    const chunkSize = 25;
+    for (let i = 0; i < entries.length; i += chunkSize) {
+      const chunk = entries.slice(i, i + chunkSize);
+      const { data, error } = await supabase
+        .from("directory_entries")
+        .upsert(chunk, { onConflict: "lead_id", ignoreDuplicates: true })
+        .select("id");
+      if (error) {
+        failCount += chunk.length;
+      } else {
+        successCount += (data?.length || 0);
+        dupCount += chunk.length - (data?.length || 0);
+      }
+    }
+    if (failCount > 0) {
+      toast({
+        title: `${successCount} saved, ${dupCount} duplicates skipped, ${failCount} failed`,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: `${successCount} leads saved to Directory${dupCount > 0 ? `, ${dupCount} duplicates skipped` : ""}` });
+    }
+    setBulkDirOpen(false);
+    setSelectedIds(new Set());
+    setBulkDirSaving(false);
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Eligible callers for the assign modal.
@@ -606,6 +677,57 @@ export default function AdminLeadsPage() {
           </SelectContent>
         </Select>
         <Select
+          value={platformFilter}
+          onValueChange={(v) => {
+            setPlatformFilter(v);
+            setPage(0);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-36">
+            <SelectValue placeholder="All platforms" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All platforms</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={employeeFilter}
+          onValueChange={(v) => {
+            setEmployeeFilter(v);
+            setPage(0);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue placeholder="All callers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All callers</SelectItem>
+            {employees.filter((e) => e.is_active).map((e) => (
+              <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => {
+            setDateFrom(e.target.value);
+            setPage(0);
+          }}
+          className="w-full sm:w-36"
+          title="From date (defaults to 2 days ago)"
+        />
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(e) => {
+            setDateTo(e.target.value);
+            setPage(0);
+          }}
+          className="w-full sm:w-36"
+          title="To date (leave empty for today)"
+        />
+        <Select
           value={deleteFilter}
           onValueChange={(v) => {
             setDeleteFilter(v as DeleteFilter);
@@ -632,6 +754,13 @@ export default function AdminLeadsPage() {
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => setBulkAssignOpen(true)}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setBulkDirOpen(true)}
+            >
+              <BookMarked className="mr-2 h-4 w-4" /> Save to Directory
             </Button>
             <Button
               size="sm"
@@ -1464,6 +1593,24 @@ export default function AdminLeadsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Bulk save to directory dialog */}
+      <Dialog open={bulkDirOpen} onOpenChange={() => setBulkDirOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save to Directory</DialogTitle>
+            <DialogDescription>
+              Save {selectedIds.size} selected leads to the Directory for future reference. Duplicate leads will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBulkDirOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkDirectory} disabled={bulkDirSaving}>
+              {bulkDirSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save to Directory
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,11 +12,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { StatusBadge } from "@/components/status-badge";
 import { Countdown } from "@/components/countdown";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Calendar, Clock, AlertCircle, CheckCircle2, Search } from "lucide-react";
 import { format } from "date-fns";
 
 interface FollowLead extends Lead {
@@ -31,7 +39,23 @@ export default function AdminFollowupsPage() {
   const [interested, setInterested] = useState<FollowLead[]>([]);
   const [callback, setCallback] = useState<FollowLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [productFilter, setProductFilter] = useState("ALL");
+  const [employeeFilter, setEmployeeFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [employees, setEmployees] = useState<Profile[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: prods }, { data: emps }] = await Promise.all([
+        supabase.from("products").select("*").order("name"),
+        supabase.from("profiles").select("*").order("full_name"),
+      ]);
+      setProducts((prods as Product[]) || []);
+      setEmployees((emps as Profile[]) || []);
+    })();
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,13 +63,17 @@ export default function AdminFollowupsPage() {
     const endOfToday = new Date(now);
     endOfToday.setHours(23, 59, 59, 999);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("leads")
       .select("*, product:products(*), current_caller:profiles!current_caller_id(*)")
       .in("status", ["RINGING", "INTERESTED", "CALLBACK"])
       .not("next_followup_at", "is", null)
       .order("next_followup_at", { ascending: true })
       .limit(200);
+    if (productFilter !== "ALL") query = query.eq("product_id", productFilter);
+    if (employeeFilter !== "ALL") query = query.eq("current_caller_id", employeeFilter);
+    if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    const { data, error } = await query;
     if (error) {
       toast({ title: "Failed to load follow-ups", variant: "destructive" });
     } else {
@@ -63,7 +91,7 @@ export default function AdminFollowupsPage() {
       setCallback(all.filter((l) => l.status === "CALLBACK"));
     }
     setLoading(false);
-  }, [toast]);
+  }, [toast, productFilter, employeeFilter, search]);
 
   useEffect(() => {
     load();
@@ -132,6 +160,45 @@ export default function AdminFollowupsPage() {
         description="Backend-scheduled rotations with live countdown (visual only)"
         icon={Calendar}
       />
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search name or phone..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={productFilter} onValueChange={setProductFilter}>
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="All products" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All products</SelectItem>
+            {products.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue placeholder="All callers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All callers</SelectItem>
+            {employees.filter((e) => e.is_active).map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Tabs defaultValue="due">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="due" className="gap-1.5">

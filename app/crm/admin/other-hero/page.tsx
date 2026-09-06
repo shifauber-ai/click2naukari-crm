@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { Product, OtherHeroLead, LeadStatus, LEAD_STATUSES, STATUS_LABELS } from "@/lib/types";
+import { Product, Profile, OtherHeroLead, LeadStatus, LEAD_STATUSES, STATUS_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,10 +39,12 @@ type DateRange = "ALL" | "TODAY" | "YESTERDAY" | "7D" | "30D" | "CUSTOM";
 export default function OtherHeroPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [employeeFilter, setEmployeeFilter] = useState("ALL");
   const [dateRange, setDateRange] = useState<DateRange>("ALL");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -51,8 +53,12 @@ export default function OtherHeroPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    supabase.from("products").select("*").order("name").then(({ data }) => {
-      setProducts((data as Product[]) || []);
+    Promise.all([
+      supabase.from("products").select("*").order("name"),
+      supabase.from("profiles").select("*").order("full_name"),
+    ]).then(([pRes, eRes]) => {
+      setProducts((pRes.data as Product[]) || []);
+      setEmployees((eRes.data as Profile[]) || []);
     });
   }, []);
 
@@ -79,6 +85,11 @@ export default function OtherHeroPage() {
       // Filter by lead status via the nested lead relationship
       countQuery = countQuery.eq("lead.status", statusFilter);
       query = query.eq("lead.status", statusFilter);
+    }
+
+    if (employeeFilter !== "ALL") {
+      countQuery = countQuery.eq("employee_id", employeeFilter);
+      query = query.eq("employee_id", employeeFilter);
     }
 
     if (dateRange !== "ALL") {
@@ -111,7 +122,7 @@ export default function OtherHeroPage() {
     }
 
     if (search) {
-      const filter = `lead.phone.ilike.%${search}%`;
+      const filter = `lead.phone.ilike.%${search}%,lead.name.ilike.%${search}%`;
       countQuery = countQuery.or(filter);
       query = query.or(filter);
     }
@@ -124,7 +135,7 @@ export default function OtherHeroPage() {
       setRows((dataRes.data as Row[]) || []);
     }
     setLoading(false);
-  }, [page, productFilter, statusFilter, dateRange, customStart, customEnd, search, toast]);
+  }, [page, productFilter, statusFilter, employeeFilter, dateRange, customStart, customEnd, search, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -133,7 +144,7 @@ export default function OtherHeroPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [productFilter, statusFilter, dateRange, customStart, customEnd, search]);
+  }, [productFilter, statusFilter, employeeFilter, dateRange, customStart, customEnd, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -141,12 +152,13 @@ export default function OtherHeroPage() {
     setSearch("");
     setProductFilter("ALL");
     setStatusFilter("ALL");
+    setEmployeeFilter("ALL");
     setDateRange("ALL");
     setCustomStart("");
     setCustomEnd("");
   };
 
-  const hasActiveFilters = search || productFilter !== "ALL" || statusFilter !== "ALL" || dateRange !== "ALL";
+  const hasActiveFilters = search || productFilter !== "ALL" || statusFilter !== "ALL" || employeeFilter !== "ALL" || dateRange !== "ALL";
 
   return (
     <div>
@@ -160,7 +172,7 @@ export default function OtherHeroPage() {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by phone..."
+            placeholder="Search by name or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -189,6 +201,17 @@ export default function OtherHeroPage() {
               <SelectItem key={s} value={s}>
                 {STATUS_LABELS[s]}
               </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue placeholder="All callers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All callers</SelectItem>
+            {employees.filter((e) => e.is_active).map((e) => (
+              <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
             ))}
           </SelectContent>
         </Select>

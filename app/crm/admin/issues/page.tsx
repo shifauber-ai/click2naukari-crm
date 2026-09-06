@@ -29,8 +29,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, Search } from "lucide-react";
 import { format } from "date-fns";
 
 const ISSUE_TYPE_LABELS: Record<string, string> = {
@@ -53,6 +54,13 @@ export default function IssuesPage() {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [productFilter, setProductFilter] = useState("ALL");
+  const [employeeFilter, setEmployeeFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [employees, setEmployees] = useState<Profile[]>([]);
   const [editIssue, setEditIssue] = useState<IssueRow | null>(null);
   const [editStatus, setEditStatus] = useState("OPEN");
   const [editRemarks, setEditRemarks] = useState("");
@@ -69,6 +77,14 @@ export default function IssuesPage() {
       .order("created_at", { ascending: false });
     if (typeFilter !== "ALL") query = query.eq("issue_type", typeFilter);
     if (statusFilter !== "ALL") query = query.eq("issue_status", statusFilter);
+    if (productFilter !== "ALL") query = query.eq("product_id", productFilter);
+    if (employeeFilter !== "ALL") query = query.eq("employee_id", employeeFilter);
+    if (dateFrom) query = query.gte("created_at", dateFrom);
+    if (dateTo) {
+      const end = new Date(dateTo); end.setDate(end.getDate() + 1);
+      query = query.lt("created_at", end.toISOString().split("T")[0]);
+    }
+    if (search) query = query.or(`lead.name.ilike.%${search}%,lead.phone.ilike.%${search}%`);
     const { data, error } = await query;
     if (error) {
       toast({ title: "Failed to load issues", variant: "destructive" });
@@ -76,7 +92,18 @@ export default function IssuesPage() {
       setIssues((data as IssueRow[]) || []);
     }
     setLoading(false);
-  }, [typeFilter, statusFilter, toast]);
+  }, [typeFilter, statusFilter, productFilter, employeeFilter, search, dateFrom, dateTo, toast]);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: p }, { data: e }] = await Promise.all([
+        supabase.from("products").select("*").order("name"),
+        supabase.from("profiles").select("*").order("full_name"),
+      ]);
+      setProducts((p as Product[]) || []);
+      setEmployees((e as Profile[]) || []);
+    })();
+  }, []);
 
   useEffect(() => {
     load();
@@ -141,6 +168,53 @@ export default function IssuesPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={productFilter} onValueChange={setProductFilter}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All products" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All products</SelectItem>
+            {products.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All employees" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All employees</SelectItem>
+            {employees.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative w-full sm:w-56">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search lead name or phone"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="w-full sm:w-44"
+        />
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="w-full sm:w-44"
+        />
       </div>
 
       {loading ? (

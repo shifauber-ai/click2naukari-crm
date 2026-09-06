@@ -63,6 +63,12 @@ export default function ImportExportPage() {
   // Export state.
   const [exportProduct, setExportProduct] = useState("ALL");
   const [exportStatus, setExportStatus] = useState("ALL");
+  const [exportPlatform, setExportPlatform] = useState("ALL");
+  const [exportEmployee, setExportEmployee] = useState("ALL");
+  const [exportDateFrom, setExportDateFrom] = useState("");
+  const [exportDateTo, setExportDateTo] = useState("");
+  const [employees, setEmployees] = useState<{ id: string; full_name: string }[]>([]);
+  const [platforms, setPlatforms] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
 
   // Load products once.
@@ -73,6 +79,19 @@ export default function ImportExportPage() {
         if (data.length > 0) setImportProduct((data[0] as Product).id);
       }
       setLoadingProducts(false);
+    });
+  }, []);
+
+  // Load employees and platforms for export filters.
+  useEffect(() => {
+    supabase.from("profiles").select("id, full_name").order("full_name").then(({ data }) => {
+      if (data) setEmployees(data as { id: string; full_name: string }[]);
+    });
+    supabase.from("leads").select("platform").not("platform", "is", null).limit(1000).then(({ data }) => {
+      if (data) {
+        const unique = Array.from(new Set((data as { platform: string }[]).map((r) => r.platform).filter(Boolean)));
+        setPlatforms(unique);
+      }
     });
   }, []);
 
@@ -241,6 +260,13 @@ export default function ImportExportPage() {
       .limit(5000);
     if (exportProduct !== "ALL") query = query.eq("product_id", exportProduct);
     if (exportStatus !== "ALL") query = query.eq("status", exportStatus);
+    if (exportPlatform !== "ALL") query = query.eq("platform", exportPlatform);
+    if (exportEmployee !== "ALL") query = query.eq("current_caller_id", exportEmployee);
+    if (exportDateFrom) query = query.gte("created_at", exportDateFrom);
+    if (exportDateTo) {
+      const end = new Date(exportDateTo); end.setDate(end.getDate() + 1);
+      query = query.lt("created_at", end.toISOString().split("T")[0]);
+    }
     const { data, error } = await query;
     if (error) {
       toast({ title: error.message, variant: "destructive" });
@@ -374,7 +400,7 @@ export default function ImportExportPage() {
           <Card className="border-border/60">
             <CardHeader><CardTitle className="text-base">Export Leads to CSV</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Product Filter</Label>
                   <Select value={exportProduct} onValueChange={setExportProduct}>
@@ -400,6 +426,34 @@ export default function ImportExportPage() {
                       <SelectItem value="ADMIN_REVIEW">Admin Review</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Platform Filter</Label>
+                  <Select value={exportPlatform} onValueChange={setExportPlatform}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Platforms</SelectItem>
+                      {platforms.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Employee Filter</Label>
+                  <Select value={exportEmployee} onValueChange={setExportEmployee}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Employees</SelectItem>
+                      {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Date From</Label>
+                  <Input type="date" value={exportDateFrom} onChange={(e) => setExportDateFrom(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Date To</Label>
+                  <Input type="date" value={exportDateTo} onChange={(e) => setExportDateTo(e.target.value)} />
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">

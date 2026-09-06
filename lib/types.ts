@@ -90,6 +90,8 @@ export interface Lead {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  platform?: string | null;
+  city?: string | null;
   product?: Product;
   current_caller?: Profile | null;
 }
@@ -240,6 +242,66 @@ export interface CallHistory {
   lead?: Lead | null;
   product?: Product | null;
   caller?: Profile | null;
+}
+
+export interface DirectoryLabel {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DirectoryEntry {
+  id: string;
+  lead_id: string | null;
+  product_id: string | null;
+  platform: string | null;
+  city: string | null;
+  status: string;
+  label_id: string | null;
+  candidate_name: string;
+  phone_number: string;
+  employee_id: string | null;
+  remarks: string;
+  saved_at: string;
+  created_at: string;
+  updated_at: string;
+  product?: Product | null;
+  label?: DirectoryLabel | null;
+  employee?: Profile | null;
+}
+
+export interface PaymentMerchant {
+  id: string;
+  name: string;
+  provider: string;
+  razorpay_key_id: string;
+  webhook_secret_configured: boolean;
+  is_active: boolean;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentRecord {
+  id: string;
+  employee_id: string | null;
+  product_id: string | null;
+  lead_id: string | null;
+  candidate_name: string;
+  amount: number;
+  payment_status: string;
+  payment_method: string;
+  transaction_id: string;
+  remarks: string;
+  payment_date: string;
+  payment_time: string;
+  created_at: string;
+  updated_at: string;
+  employee?: Profile | null;
+  product?: Product | null;
+  lead?: Lead | null;
 }
 
 export interface AuditLog {

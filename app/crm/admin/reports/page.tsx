@@ -30,8 +30,10 @@ import {
 } from "recharts";
 import { BarChart3 } from "lucide-react";
 import { subDays } from "date-fns";
+import { Input } from "@/components/ui/input";
+import { Product, Profile } from "@/lib/types";
 
-type RangeKey = "7d" | "30d" | "all";
+type RangeKey = "7d" | "30d" | "all" | "custom";
 
 export default function AdminReportsPage() {
   const [range, setRange] = useState<RangeKey>("7d");
@@ -39,16 +41,39 @@ export default function AdminReportsPage() {
   const [productPerf, setProductPerf] = useState<{ name: string; leads: number; idDone: number }[]>([]);
   const [employeePerf, setEmployeePerf] = useState<{ name: string; leads: number; calls: number; idDone: number }[]>([]);
   const [statusDist, setStatusDist] = useState<{ name: string; value: number }[]>([]);
+  const [productFilter, setProductFilter] = useState("ALL");
+  const [employeeFilter, setEmployeeFilter] = useState("ALL");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [employees, setEmployees] = useState<Profile[]>([]);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const from = range === "all" ? new Date(0) : subDays(new Date(), range === "30d" ? 30 : 7);
+    const from = range === "all"
+      ? new Date(0)
+      : range === "custom"
+        ? (customFrom ? new Date(customFrom + "T00:00:00") : new Date(0))
+        : subDays(new Date(), range === "30d" ? 30 : 7);
     const fromIso = from.toISOString();
+    const toIso = range === "custom" && customTo ? new Date(customTo + "T23:59:59").toISOString() : null;
+
+    const buildLeadQuery = (sel: string): any => {
+      let q = supabase.from("leads").select(sel).gte("created_at", fromIso);
+      if (toIso) q = q.lte("created_at", toIso);
+      if (productFilter !== "ALL") q = q.eq("product_id", productFilter);
+      return q;
+    };
+
+    let employeeQ: any = supabase.from("lead_status_history").select("employee_id, employee:profiles(full_name), new_status").gte("created_at", fromIso);
+    if (toIso) employeeQ = employeeQ.lte("created_at", toIso);
+    if (productFilter !== "ALL") employeeQ = employeeQ.eq("product_id", productFilter);
+    if (employeeFilter !== "ALL") employeeQ = employeeQ.eq("employee_id", employeeFilter);
 
     const [productRows, employeeRows, statusRows] = await Promise.all([
-      supabase.from("leads").select("product_id, product:products(name), status").gte("created_at", fromIso),
-      supabase.from("lead_status_history").select("employee_id, employee:profiles(full_name), new_status").gte("created_at", fromIso),
-      supabase.from("leads").select("status").gte("created_at", fromIso),
+      buildLeadQuery("product_id, product:products(name), status"),
+      employeeQ,
+      buildLeadQuery("status"),
     ]);
 
     // Product performance.
@@ -71,7 +96,9 @@ export default function AdminReportsPage() {
     });
 
     // Leads per employee (current assignment).
-    const { data: leadAssigns } = await supabase.from("leads").select("current_caller_id").not("current_caller_id", "is", null).gte("created_at", fromIso);
+    let leadAssignsQ: any = buildLeadQuery("current_caller_id").not("current_caller_id", "is", null);
+    if (employeeFilter !== "ALL") leadAssignsQ = leadAssignsQ.eq("current_caller_id", employeeFilter);
+    const { data: leadAssigns } = await leadAssignsQ;
     (leadAssigns as any[] || []).forEach((r) => {
       const id = r.current_caller_id;
       if (!eMap[id]) eMap[id] = { name: "Unknown", leads: 0, calls: 0, idDone: 0 };
@@ -85,15 +112,64 @@ export default function AdminReportsPage() {
     setStatusDist(Object.entries(sMap).map(([k, v]) => ({ name: k.replace(/_/g, " ").toLowerCase(), value: v })));
 
     setLoading(false);
-  }, [range]);
+  }, [range, productFilter, employeeFilter, customFrom, customTo]);
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    supabase.from("products").select("*").order("name").then(({ data }) => setProducts((data as Product[]) || []));
+    supabase.from("profiles").select("*").eq("is_active", true).order("full_name").then(({ data }) => setEmployees((data as Profile[]) || []));
+  }, []);
+
   return (
     <div>
-      <PageHeader title="Reports" description="Performance analytics across products and employees" icon={BarChart3}
-        actions={<Select value={range} onValueChange={(v) => setRange(v as RangeKey)}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="7d">Last 7 Days</SelectItem><SelectItem value="30d">Last 30 Days</SelectItem><SelectItem value="all">All Time</SelectItem></SelectContent></Select>}
-      />
+      <PageHeader title="Reports" description="Performance analytics across products and employees" icon={BarChart3} />
+      <div className="mb-2 flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Range</label>
+          <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+              <SelectItem value="30d">Last 30 Days</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {range === "custom" && (
+          <>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">From</label>
+              <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-40" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">To</label>
+              <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="w-40" />
+            </div>
+          </>
+        )}
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Product</label>
+          <Select value={productFilter} onValueChange={setProductFilter}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Products</SelectItem>
+              {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Employee</label>
+          <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Employees</SelectItem>
+              {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       {loading ? <LoadingState /> : (
         <div className="space-y-6">
           <div className="grid gap-4 lg:grid-cols-2">

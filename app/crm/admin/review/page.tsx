@@ -42,7 +42,7 @@ import {
 import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { StatusBadge } from "@/components/status-badge";
 import { useToast } from "@/hooks/use-toast";
-import { ClipboardCheck, Loader2, RotateCw, UserPlus, Loader2 as Spinner } from "lucide-react";
+import { ClipboardCheck, Loader2, RotateCw, UserPlus, Loader2 as Spinner, Search } from "lucide-react";
 import { format } from "date-fns";
 
 interface ReviewLead extends Lead {
@@ -69,6 +69,11 @@ export default function AdminReviewPage() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  const [productFilter, setProductFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -86,17 +91,31 @@ export default function AdminReviewPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    let countQuery = supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("in_admin_review", true)
+      .eq("is_active", true);
+    let query = supabase
+      .from("leads")
+      .select("*, product:products(*), current_caller:profiles!current_caller_id(*)")
+      .eq("in_admin_review", true)
+      .eq("is_active", true);
+    if (productFilter !== "ALL") { countQuery = countQuery.eq("product_id", productFilter); query = query.eq("product_id", productFilter); }
+    if (statusFilter !== "ALL") { countQuery = countQuery.eq("status", statusFilter); query = query.eq("status", statusFilter); }
+    if (dateFrom) { countQuery = countQuery.gte("created_at", dateFrom); query = query.gte("created_at", dateFrom); }
+    if (dateTo) {
+      const end = new Date(dateTo); end.setDate(end.getDate() + 1);
+      const endStr = end.toISOString().split("T")[0];
+      countQuery = countQuery.lt("created_at", endStr); query = query.lt("created_at", endStr);
+    }
+    if (search) {
+      const sf = `name.ilike.%${search}%,phone.ilike.%${search}%`;
+      countQuery = countQuery.or(sf); query = query.or(sf);
+    }
     const [countRes, dataRes] = await Promise.all([
-      supabase
-        .from("leads")
-        .select("*", { count: "exact", head: true })
-        .eq("in_admin_review", true)
-        .eq("is_active", true),
-      supabase
-        .from("leads")
-        .select("*, product:products(*), current_caller:profiles!current_caller_id(*)")
-        .eq("in_admin_review", true)
-        .eq("is_active", true)
+      countQuery,
+      query
         .order("updated_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1),
     ]);
@@ -107,7 +126,7 @@ export default function AdminReviewPage() {
       setLeads((dataRes.data as ReviewLead[]) || []);
     }
     setLoading(false);
-  }, [page, toast]);
+  }, [page, toast, productFilter, statusFilter, search, dateFrom, dateTo]);
 
   useEffect(() => {
     load();
@@ -259,6 +278,71 @@ export default function AdminReviewPage() {
         description="Leads that reached the final caller with no next active caller"
         icon={ClipboardCheck}
       />
+
+      <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-border/60 bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Product</Label>
+          <Select value={productFilter} onValueChange={(v) => { setProductFilter(v); setPage(0); }}>
+            <SelectTrigger>
+              <SelectValue placeholder="All products" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All products</SelectItem>
+              {products.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Status</Label>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
+            <SelectTrigger>
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All statuses</SelectItem>
+              {LEAD_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Search</Label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              placeholder="Name or phone"
+              className="pl-8"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Date range</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+              className="text-sm"
+            />
+            <span className="text-muted-foreground">—</span>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+              className="text-sm"
+            />
+          </div>
+        </div>
+      </div>
 
       {selectedIds.size > 0 && (
         <div className="mb-3 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
