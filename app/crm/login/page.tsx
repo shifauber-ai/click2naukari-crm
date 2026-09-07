@@ -27,6 +27,8 @@ function LoginForm() {
   useEffect(() => {
     if (params.get("error") === "inactive") {
       setError("Your account has been deactivated. Contact your administrator.");
+    } else if (params.get("error") === "expired") {
+      setError("Your 3-day login session has expired. Please login again.");
     }
   }, [params]);
 
@@ -119,6 +121,13 @@ function LoginForm() {
       if (!profile.is_active) {
         setError("Your account has been deactivated. Contact your administrator.");
         return;
+      }
+
+      // Record login timestamp for the 72-hour session window
+      try {
+        localStorage.setItem("crm_login_timestamp", String(Date.now()));
+      } catch {
+        // localStorage may be unavailable in some contexts
       }
 
       const redirect = params.get("redirect");

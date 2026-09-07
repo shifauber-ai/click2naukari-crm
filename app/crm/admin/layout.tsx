@@ -72,25 +72,41 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { profile, loading, signOut } = useAuth();
+  const { profile, loading, session, authError, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!loading && profile) {
-      if (profile.role !== "ADMIN") {
-        router.push("/crm/employee");
-      } else if (!profile.is_active) {
-        signOut();
-        router.push("/crm/login");
-      }
+    if (loading) return; // Wait for auth to finish initializing
+
+    // Session expired — show message and redirect to login
+    if (authError) {
+      const url = new URL("/crm/login", window.location.origin);
+      url.searchParams.set("error", "expired");
+      router.push(url.pathname + url.search);
+      return;
     }
-    if (!loading && !profile) {
+
+    // No session at all — redirect to login
+    if (!session) {
+      const url = new URL("/crm/login", window.location.origin);
+      url.searchParams.set("redirect", pathname);
+      router.push(url.pathname + url.search);
+      return;
+    }
+
+    // Session exists but profile not loaded yet — wait, don't redirect
+    if (!profile) return;
+
+    if (profile.role !== "ADMIN") {
+      router.push("/crm/employee");
+    } else if (!profile.is_active) {
+      signOut();
       router.push("/crm/login");
     }
-  }, [profile, loading, router, signOut]);
+  }, [profile, loading, session, authError, router, signOut, pathname]);
 
   if (loading || !profile) {
     return (

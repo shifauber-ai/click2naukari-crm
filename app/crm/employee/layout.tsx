@@ -40,24 +40,37 @@ export default function EmployeeLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { profile, loading, signOut } = useAuth();
+  const { profile, loading, session, authError, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && profile) {
-      if (profile.role !== "EMPLOYEE") {
-        router.push("/crm/admin");
-      } else if (!profile.is_active) {
-        signOut();
-        router.push("/crm/login");
-      }
+    if (loading) return;
+
+    if (authError) {
+      const url = new URL("/crm/login", window.location.origin);
+      url.searchParams.set("error", "expired");
+      router.push(url.pathname + url.search);
+      return;
     }
-    if (!loading && !profile) {
+
+    if (!session) {
+      const url = new URL("/crm/login", window.location.origin);
+      url.searchParams.set("redirect", pathname);
+      router.push(url.pathname + url.search);
+      return;
+    }
+
+    if (!profile) return;
+
+    if (profile.role !== "EMPLOYEE") {
+      router.push("/crm/admin");
+    } else if (!profile.is_active) {
+      signOut();
       router.push("/crm/login");
     }
-  }, [profile, loading, router, signOut]);
+  }, [profile, loading, session, authError, router, signOut, pathname]);
 
   if (loading || !profile) {
     return (
