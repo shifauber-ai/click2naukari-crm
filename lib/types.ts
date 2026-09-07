@@ -314,3 +314,12 @@ export interface AuditLog {
   created_at: string;
   actor?: Profile | null;
 }
+
+export interface ProductCity {
+  id: string;
+  product_id: string;
+  city_name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
