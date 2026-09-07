@@ -33,6 +33,7 @@ import {
   Bike,
   Truck,
   Wallet,
+  Smartphone,
 } from "lucide-react";
 
 import type { LucideIcon } from "lucide-react";
@@ -56,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/crm/admin/other-hero", label: "Other Hero", icon: PhoneCall },
   { href: "/crm/admin/review", label: "Admin Review", icon: ClipboardCheck },
   { href: "/crm/admin/directory", label: "Directory", icon: BookMarked },
+  { href: "/crm/admin/platforms", label: "Platforms", icon: Smartphone },
   { href: "/crm/admin/products", label: "Products", icon: Package },
   { href: "/crm/admin/employees", label: "Employees", icon: Users },
   { href: "/crm/admin/caller-queue", label: "Caller Queue", icon: PhoneCall },

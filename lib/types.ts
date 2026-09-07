@@ -323,3 +323,11 @@ export interface ProductCity {
   created_at: string;
   updated_at: string;
 }
+
+export interface Platform {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}

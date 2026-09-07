@@ -7,6 +7,7 @@ import {
   Profile,
   DirectoryEntry,
   DirectoryLabel,
+  Platform,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,7 @@ export default function DirectoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [labels, setLabels] = useState<DirectoryLabel[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("ALL");
@@ -77,6 +79,15 @@ export default function DirectoryPage() {
   const [newLabelColor, setNewLabelColor] = useState("default");
   const [labelSaving, setLabelSaving] = useState(false);
 
+  // Import form state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importProduct, setImportProduct] = useState("");
+  const [importPlatform, setImportPlatform] = useState("");
+  const [importCity, setImportCity] = useState("");
+  const [importCities, setImportCities] = useState<{ id: string; city_name: string }[]>([]);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importSaving, setImportSaving] = useState(false);
+
   // Edit form state
   const [eProduct, setEProduct] = useState("");
   const [ePlatform, setEPlatform] = useState("");
@@ -92,14 +103,16 @@ export default function DirectoryPage() {
 
   useEffect(() => {
     (async () => {
-      const [{ data: p }, { data: e }, { data: l }] = await Promise.all([
+      const [{ data: p }, { data: e }, { data: l }, { data: pf }] = await Promise.all([
         supabase.from("products").select("*").order("name"),
         supabase.from("profiles").select("*").order("full_name"),
         supabase.from("directory_labels").select("*").order("name"),
+        supabase.from("platforms").select("*").order("name"),
       ]);
       setProducts((p as Product[]) || []);
       setEmployees((e as Profile[]) || []);
       setLabels((l as DirectoryLabel[]) || []);
+      setPlatforms((pf as Platform[]) || []);
     })();
   }, []);
 
@@ -149,7 +162,7 @@ export default function DirectoryPage() {
   const labelMap = new Map(labels.map((l) => [l.id, l]));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const platforms = Array.from(new Set(entries.map((e) => e.platform).filter(Boolean))) as string[];
+  const activePlatforms = platforms.filter((p) => p.is_active);
   const cities = Array.from(new Set(entries.map((e) => e.city).filter(Boolean))) as string[];
   const statuses = Array.from(new Set(entries.map((e) => e.status).filter(Boolean))) as string[];
 
@@ -248,15 +261,42 @@ export default function DirectoryPage() {
     URL.revokeObjectURL(url);
   };
 
-  const importCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Load cities when import product changes
+  useEffect(() => {
+    if (!importProduct) {
+      setImportCities([]);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("product_cities")
+        .select("id, city_name")
+        .eq("product_id", importProduct)
+        .eq("is_active", true)
+        .order("city_name");
+      setImportCities((data as { id: string; city_name: string }[]) || []);
+    })();
+  }, [importProduct]);
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportFile(file);
+  };
+
+  const handleImportSubmit = async () => {
+    if (!importFile) {
+      toast({ title: "Please select a CSV file", variant: "destructive" });
+      return;
+    }
+    setImportSaving(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
       const lines = text.split("\n").filter((l) => l.trim());
       if (lines.length < 2) {
         toast({ title: "CSV is empty or has no data rows", variant: "destructive" });
+        setImportSaving(false);
         return;
       }
       const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
@@ -268,15 +308,17 @@ export default function DirectoryPage() {
         records.push({
           candidate_name: obj.Name || obj.name || "",
           phone_number: obj.Phone || obj.phone || "",
-          platform: obj.Platform || obj.platform || null,
-          city: obj.City || obj.city || null,
-          status: obj.Status || obj.status || "",
+          product_id: importProduct || null,
+          platform: importPlatform || null,
+          city: importCity || obj.City || obj.city || null,
+          status: obj.Status || obj.status || "ACTIVE",
           remarks: obj.Remarks || obj.remarks || "",
         });
       }
       const valid = records.filter((r) => r.candidate_name && r.phone_number);
       if (valid.length === 0) {
         toast({ title: "No valid records found (Name and Phone are required)", variant: "destructive" });
+        setImportSaving(false);
         return;
       }
       const { data, error } = await supabase.from("directory_entries").insert(valid).select("id");
@@ -284,11 +326,16 @@ export default function DirectoryPage() {
         toast({ title: error.message, variant: "destructive" });
       } else {
         toast({ title: `${data?.length || 0} records imported, ${records.length - valid.length} skipped` });
+        setImportOpen(false);
+        setImportFile(null);
+        setImportProduct("");
+        setImportPlatform("");
+        setImportCity("");
         load();
       }
+      setImportSaving(false);
     };
-    reader.readAsText(file);
-    e.target.value = "";
+    reader.readAsText(importFile);
   };
 
   return (
@@ -301,8 +348,7 @@ export default function DirectoryPage() {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setLabelModalOpen(true)}><Plus className="mr-2 h-4 w-4" /> Label</Button>
             <Button variant="outline" size="sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
-            <Button variant="outline" size="sm" onClick={() => document.getElementById("dir-import")?.click()}><Upload className="mr-2 h-4 w-4" /> Import</Button>
-            <input id="dir-import" type="file" accept=".csv" className="hidden" onChange={importCSV} />
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}><Upload className="mr-2 h-4 w-4" /> Import</Button>
           </div>
         }
       />
@@ -323,7 +369,7 @@ export default function DirectoryPage() {
           <SelectTrigger className="w-full sm:w-32"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Platforms</SelectItem>
-            {platforms.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+            {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={cityFilter} onValueChange={(v) => { setCityFilter(v); setPage(0); }}>
@@ -426,7 +472,16 @@ export default function DirectoryPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label>Platform</Label><Input value={ePlatform} onChange={(e) => setEPlatform(e.target.value)} /></div>
+              <div className="space-y-2">
+                <Label>Platform</Label>
+                <Select value={ePlatform} onValueChange={setEPlatform}>
+                  <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No platform</SelectItem>
+                    {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2"><Label>City</Label><Input value={eCity} onChange={(e) => setECity(e.target.value)} /></div>
@@ -462,6 +517,57 @@ export default function DirectoryPage() {
             <Button variant="outline" onClick={() => setDeleteEntry(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete}>Delete</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import dialog */}
+      <Dialog open={importOpen} onOpenChange={() => setImportOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Directory CSV</DialogTitle>
+            <DialogDescription>Select product, platform, and city for the imported records. CSV must have Name and Phone columns.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Product</Label>
+              <Select value={importProduct} onValueChange={(v) => { setImportProduct(v); setImportCity(""); }}>
+                <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                <SelectContent>
+                  {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Platform</Label>
+              <Select value={importPlatform} onValueChange={setImportPlatform}>
+                <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No platform</SelectItem>
+                  {activePlatforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>City</Label>
+              <Select value={importCity} onValueChange={setImportCity}>
+                <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No city</SelectItem>
+                  {importCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>CSV File</Label>
+              <Input type="file" accept=".csv" onChange={handleImportFile} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+              <Button onClick={handleImportSubmit} disabled={importSaving || !importFile}>
+                {importSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Import
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
