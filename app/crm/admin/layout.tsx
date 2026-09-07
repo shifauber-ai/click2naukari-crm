@@ -50,6 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/crm/admin/bike", label: "BIKE", icon: Bike },
   { href: "/crm/admin/auto", label: "AUTO", icon: Truck },
   { href: "/crm/admin/tempo", label: "TEMPO", icon: Truck },
+  { href: "/crm/admin/hc", label: "HC", icon: PhoneCall },
   { href: "/crm/admin/followups", label: "Follow Up", icon: Calendar },
   { href: "/crm/admin/issues", label: "Issues", icon: AlertTriangle },
   { href: "/crm/admin/other-hero", label: "Other Hero", icon: PhoneCall },

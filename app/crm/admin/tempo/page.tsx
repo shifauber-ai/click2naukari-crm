@@ -1,28 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase/client";
-import { Product } from "@/lib/types";
-import { ProductLeadsView } from "@/components/product-leads-view";
+import { useProduct } from "@/hooks/use-product";
+import { ProductDashboard } from "@/components/product-dashboard";
 import { LoadingState } from "@/components/page-parts";
+import { Button } from "@/components/ui/button";
+import { Truck } from "lucide-react";
 
 export default function TempoPage() {
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from("products")
-        .select("*")
-        .ilike("code", "TEMPO")
-        .maybeSingle();
-      setProduct((data as Product) || null);
-      setLoading(false);
-    })();
-  }, []);
+  const { product, loading } = useProduct("tempo");
 
   if (loading) return <LoadingState />;
-  if (!product) return <p className="text-muted-foreground">TEMPO product not found. Create it in the Products page.</p>;
-  return <ProductLeadsView product={product} />;
+  if (!product) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="rounded-xl border border-border/60 bg-card p-8 text-center max-w-md">
+          <Truck className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+          <h3 className="text-lg font-semibold mb-1">TEMPO Product Not Found</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            The TEMPO product does not exist in the database yet. Create it from the Products page.
+          </p>
+          <Button onClick={() => (window.location.href = "/crm/admin/products")}>
+            Go to Products
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return <ProductDashboard product={product} showPayment={false} />;
 }
