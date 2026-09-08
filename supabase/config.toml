@@ -1,2 +1,5 @@
 [functions.crm-admin-users]
 verify_jwt = true
+
+[functions.call-history-sync]
+verify_jwt = true
