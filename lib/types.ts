@@ -239,9 +239,26 @@ export interface CallHistory {
   is_simulated: boolean;
   call_timestamp: string;
   created_at: string;
+  sync_source: string | null;
+  device_id: string | null;
+  external_call_id: string | null;
+  normalized_phone: string | null;
+  synced_at: string | null;
   lead?: Lead | null;
   product?: Product | null;
   caller?: Profile | null;
+}
+
+export interface CallerDevice {
+  id: string;
+  employee_id: string;
+  device_name: string;
+  device_identifier: string;
+  phone_number: string | null;
+  is_active: boolean;
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DirectoryLabel {
