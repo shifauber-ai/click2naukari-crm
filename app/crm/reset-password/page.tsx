@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase, supabaseConfigError } from "@/lib/supabase/client";
+import { supabase, supabaseConfigError, classifyAuthError } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,11 +63,10 @@ export default function ResetPasswordPage() {
           setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
         } else if (msg.includes("token") || msg.includes("expired")) {
           setError("This reset link has expired. Please request a new one.");
-        } else if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
         } else {
-          setError(updateError.message);
+          setError(classifyAuthError(updateError, "auth"));
         }
+        console.error("[ResetPassword] Auth error:", updateError.message);
         return;
       }
 
@@ -75,10 +74,11 @@ export default function ResetPasswordPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-        setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        setError("Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.");
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
+      console.error("[ResetPassword] Exception:", err);
     } finally {
       setLoading(false);
     }

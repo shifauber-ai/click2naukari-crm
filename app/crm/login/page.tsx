@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { supabase, supabaseConfigError } from "@/lib/supabase/client";
+import { supabase, supabaseConfigError, supabaseUrl, checkSupabaseConnectivity, classifyAuthError } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Phone, LogIn, AlertCircle, Loader2, Shield, KeyRound } from "lucide-react";
+import { Phone, LogIn, AlertCircle, Loader2, Shield, KeyRound, WifiOff } from "lucide-react";
 
 function LoginForm() {
   const router = useRouter();
@@ -38,38 +38,45 @@ function LoginForm() {
     setLoading(true);
 
     try {
+      // Step 1: Check configuration
       if (supabaseConfigError) {
         setError(supabaseConfigError);
+        console.error("[Login] Supabase config error:", supabaseConfigError);
         return;
       }
 
+      // Step 2: Pre-check connectivity to give a specific error before
+      // attempting sign-in (distinguishes network vs. auth-credential errors)
+      const connectivity = await checkSupabaseConnectivity();
+      if (!connectivity.ok) {
+        setError(connectivity.detail);
+        console.error("[Login] Supabase connectivity check failed:", connectivity.reason, connectivity.detail);
+        return;
+      }
+      console.log("[Login] Supabase Auth reachable, HTTP", connectivity.status);
+
+      // Step 3: Attempt sign-in
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (signInError) {
-        const msg = signInError.message.toLowerCase();
-        if (msg.includes("failed to fetch") || msg.includes("networkrequestfailed") || msg.includes("network error") || msg.includes("load failed")) {
-          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
-        } else if (msg.includes("invalid api key") || msg.includes("invalidapikey")) {
-          setError("Authentication configuration error. Please contact your administrator to check the Supabase project settings.");
-        } else if (msg.includes("invalid login") || msg.includes("invalid credentials")) {
-          setError("Invalid email or password. Please try again.");
-        } else {
-          setError(signInError.message);
-        }
+        const userMsg = classifyAuthError(signInError, "auth");
+        setError(userMsg);
+        console.error("[Login] Auth error:", signInError.name, signInError.message, "code:", (signInError as { code?: string }).code);
         return;
       }
 
       if (!data.user) {
-        setError("Login failed. Please try again.");
+        setError("Login failed — no user returned. Please try again.");
+        console.error("[Login] signInWithPassword returned no user");
         return;
       }
 
-      // signInWithPassword already sets the session internally. Verify it's
-      // available before querying the profile, with a retry for environments
-      // where the session propagation may lag (e.g. Vercel production).
+      console.log("[Login] Auth succeeded for user:", data.user.id);
+
+      // Step 4: Verify session is established
       let sessionReady = !!data.session;
       if (!sessionReady) {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -77,11 +84,11 @@ function LoginForm() {
       }
       if (!sessionReady) {
         setError("Authentication session could not be established. Please try again.");
+        console.error("[Login] No session after sign-in");
         return;
       }
 
-      // Query the profile with one retry. On Vercel, the auth token may not
-      // be fully attached to the first REST call immediately after sign-in.
+      // Step 5: Load CRM profile with one retry
       let profile: { role: string; is_active: boolean } | null = null;
       let profileError: { code?: string; message?: string } | null = null;
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -95,33 +102,30 @@ function LoginForm() {
           break;
         }
         profileError = result.error;
+        console.error(`[Login] Profile query attempt ${attempt + 1} failed:`, result.error.code, result.error.message);
         if (attempt === 0) {
           await supabase.auth.getSession();
         }
       }
 
       if (profileError) {
-        const code = profileError.code || "";
-        const pmsg = (profileError.message || "").toLowerCase();
-        if (pmsg.includes("failed to fetch") || pmsg.includes("network") || pmsg.includes("load failed")) {
-          setError("Unable to connect to the database service. Please check your internet connection and try again.");
-        } else if (code === "42501" || code === "PGRST301") {
-          setError("Your account is authenticated, but your CRM profile has not been configured. Please contact your administrator.");
-        } else {
-          setError("Unable to load your account profile. Please try again or contact your administrator.");
-        }
+        setError(classifyAuthError(profileError, "profile"));
         return;
       }
 
       if (!profile) {
         setError("Your account is authenticated, but your CRM profile has not been configured. Please contact your administrator.");
+        console.error("[Login] No profile row for user:", data.user.id);
         return;
       }
 
       if (!profile.is_active) {
         setError("Your account has been deactivated. Contact your administrator.");
+        console.error("[Login] Profile inactive for user:", data.user.id);
         return;
       }
+
+      console.log("[Login] Profile loaded, role:", profile.role);
 
       // Record login timestamp for the 72-hour session window
       try {
@@ -139,8 +143,14 @@ function LoginForm() {
         router.push("/crm/employee");
       }
       router.refresh();
-    } catch {
-      setError("Unable to connect to the authentication server. Please try again.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
+        setError("Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.");
+      } else {
+        setError("An unexpected error occurred during login. Please try again.");
+      }
+      console.error("[Login] Unexpected exception:", err);
     } finally {
       setLoading(false);
     }
@@ -174,7 +184,11 @@ function LoginForm() {
       </div>
       {error && (
         <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          {error.includes("network") || error.includes("reach") || error.includes("connect") ? (
+            <WifiOff className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          )}
           <span>{error}</span>
         </div>
       )}

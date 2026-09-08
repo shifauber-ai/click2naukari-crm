@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { supabase, supabaseConfigError } from "@/lib/supabase/client";
+import { supabase, supabaseConfigError, classifyAuthError } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,11 +59,10 @@ function RegisterForm() {
           setError("Password is too weak. Use at least 8 characters with a mix of letters and numbers.");
         } else if (msg.includes("email")) {
           setError("Please enter a valid email address.");
-        } else if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
         } else {
-          setError(signUpError.message);
+          setError(classifyAuthError(signUpError, "auth"));
         }
+        console.error("[Register-Admin] Auth error:", signUpError.message);
         return;
       }
 
@@ -89,10 +88,11 @@ function RegisterForm() {
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-        setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        setError("Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.");
       } else {
         setError("An unexpected error occurred during registration. Please try again.");
       }
+      console.error("[Register-Admin] Exception:", err);
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+const supabaseUrlRaw = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
+const supabaseAnonKeyRaw = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
 
 function diagnoseConfig(url: string | undefined, key: string | undefined) {
   const urlPresent = !!url;
@@ -61,25 +61,93 @@ function diagnoseConfig(url: string | undefined, key: string | undefined) {
   return { urlValid, keyType, mismatch };
 }
 
-const diag = diagnoseConfig(supabaseUrl, supabaseAnonKey);
+const diag = diagnoseConfig(supabaseUrlRaw, supabaseAnonKeyRaw);
 
 export const supabaseConfigError =
-  !supabaseUrl || !supabaseAnonKey || !diag.urlValid
+  !supabaseUrlRaw || !supabaseAnonKeyRaw || !diag.urlValid
     ? 'Supabase configuration is missing or invalid. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your deployment environment.'
     : null;
 
-export const supabase = createClient(
-  (supabaseUrl as string) || 'https://placeholder.supabase.co',
-  (supabaseAnonKey as string) || 'placeholder-key',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      // 3-day session: access tokens refresh automatically, and the
-      // localStorage session remains valid across tab switches and refreshes.
-      // Supabase uses a sliding window — as long as the refresh token is used
-      // within its lifetime, the session stays alive.
-    },
+export const supabaseUrl = (supabaseUrlRaw as string) || 'https://placeholder.supabase.co';
+export const supabaseAnonKey = (supabaseAnonKeyRaw as string) || 'placeholder-key';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
+
+/**
+ * Tests network reachability of the Supabase Auth endpoint.
+ * Returns a structured result so callers can distinguish config errors,
+ * network failures, and successful connectivity.
+ */
+export async function checkSupabaseConnectivity(): Promise<{
+  ok: boolean;
+  reason: 'config-missing' | 'url-invalid' | 'network-error' | 'server-error' | 'reachable';
+  status?: number;
+  detail: string;
+}> {
+  if (!supabaseUrlRaw || !supabaseAnonKeyRaw) {
+    return { ok: false, reason: 'config-missing', detail: 'NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in the environment.' };
   }
-);
+  if (!diag.urlValid) {
+    return { ok: false, reason: 'url-invalid', detail: 'NEXT_PUBLIC_SUPABASE_URL must be the base project URL (https://yourproject.supabase.co) without /rest/v1 or /auth/v1 paths.' };
+  }
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
+      method: 'GET',
+      headers: { apikey: supabaseAnonKeyRaw },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      return { ok: true, reason: 'reachable', status: res.status, detail: 'Supabase Auth endpoint is reachable.' };
+    }
+    return { ok: false, reason: 'server-error', status: res.status, detail: `Supabase Auth endpoint returned HTTP ${res.status}.` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: 'network-error', detail: `Network request to Supabase Auth failed: ${msg}` };
+  }
+}
+
+/**
+ * Classifies an auth or database error into a safe, user-facing category.
+ * Never returns raw SQL errors, stack traces, or credentials.
+ */
+export function classifyAuthError(error: { message?: string; code?: string }, context: 'auth' | 'profile'): string {
+  const msg = (error.message || '').toLowerCase();
+  const code = error.code || '';
+
+  if (context === 'auth') {
+    if (msg.includes('failed to fetch') || msg.includes('networkrequestfailed') || msg.includes('network error') || msg.includes('load failed') || msg.includes('fetch')) {
+      return 'Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.';
+    }
+    if (msg.includes('invalid api key') || msg.includes('invalidapikey') || code === '401') {
+      return 'Authentication configuration error (invalid API key). Please contact your administrator to verify the Supabase project settings.';
+    }
+    if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password') || msg.includes('wrong email')) {
+      return 'Invalid email or password. Please try again.';
+    }
+    if (msg.includes('email not confirmed')) {
+      return 'Your email has not been confirmed. Please check your inbox for a confirmation link.';
+    }
+    if (msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
+      return 'Too many login attempts. Please wait a minute before trying again.';
+    }
+    if (msg.includes('timeout') || msg.includes('timed out')) {
+      return 'The authentication service took too long to respond. Please try again.';
+    }
+    return error.message || 'Authentication failed. Please try again.';
+  }
+
+  // Profile errors
+  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('load failed') || msg.includes('fetch')) {
+    return 'Unable to reach the database service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.';
+  }
+  if (code === '42501' || code === 'PGRST301') {
+    return 'Your account is authenticated, but your CRM profile could not be loaded due to a permissions issue. Please contact your administrator.';
+  }
+  return 'Unable to load your account profile. Please try again or contact your administrator.';
+}

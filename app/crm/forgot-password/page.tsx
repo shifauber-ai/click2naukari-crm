@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase, supabaseConfigError } from "@/lib/supabase/client";
+import { supabase, supabaseConfigError, classifyAuthError } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,11 +45,10 @@ export default function ForgotPasswordPage() {
         const msg = resetError.message.toLowerCase();
         if (msg.includes("rate") || msg.includes("limit")) {
           setError("Too many requests. Please wait a moment before trying again.");
-        } else if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-          setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
         } else {
-          setError(resetError.message);
+          setError(classifyAuthError(resetError, "auth"));
         }
+        console.error("[ForgotPassword] Auth error:", resetError.message);
         return;
       }
 
@@ -57,10 +56,11 @@ export default function ForgotPasswordPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-        setError("Unable to connect to the authentication service. Please check your internet connection and try again.");
+        setError("Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.");
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
+      console.error("[ForgotPassword] Exception:", err);
     } finally {
       setLoading(false);
     }
