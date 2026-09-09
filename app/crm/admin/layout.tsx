@@ -64,6 +64,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/crm/admin/hero-ids", label: "Hero IDs", icon: IdCard },
   { href: "/crm/admin/sims", label: "SIM", icon: CreditCard },
   { href: "/crm/admin/call-history", label: "Master Call History", icon: History },
+  { href: "/crm/admin/devices", label: "Call Sync Devices", icon: Smartphone },
   { href: "/crm/admin/reports", label: "Reports", icon: BarChart3 },
   { href: "/crm/admin/import-export", label: "Import / Export", icon: Upload },
   { href: "/crm/admin/audit", label: "Audit Logs", icon: Shield },
