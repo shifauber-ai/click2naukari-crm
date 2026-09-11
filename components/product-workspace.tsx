@@ -6,6 +6,7 @@ import { ProductDashboard } from "@/components/product-dashboard";
 import { ProductLeadsTab } from "@/components/product-leads-tab";
 import { ProductCallerQueueTab } from "@/components/product-caller-queue-tab";
 import { ProductPlatformsTab } from "@/components/product-platforms-tab";
+import { ProductCityTab } from "@/components/product-city-tab";
 import { ProductDirectoryTab } from "@/components/product-directory-tab";
 import { ProductImportExportTab } from "@/components/product-import-export-tab";
 import { HCLeadsTab } from "@/components/hc-leads-tab";
@@ -78,7 +79,8 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={false} />}
       {activeTab === "callers-queue" && <ProductCallerQueueTab product={product} />}
       {activeTab === "platforms" && <ProductPlatformsTab product={product} />}
-      {(activeTab === "reports" || activeTab === "city" || activeTab === "employee") && (
+      {activeTab === "city" && <ProductCityTab product={product} />}
+      {(activeTab === "reports" || activeTab === "employee") && (
         <TabPlaceholder tab={activeTab} productName={product.name} />
       )}
     </div>

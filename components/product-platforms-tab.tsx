@@ -57,6 +57,8 @@ export function ProductPlatformsTab({ product }: { product: Product }) {
   const [editIsActive, setEditIsActive] = useState(true);
 
   const isAdmin = profile?.role === "ADMIN";
+  const isManager = profile?.role === "MANAGER";
+  const canManage = isAdmin || isManager;
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -216,7 +218,7 @@ export function ProductPlatformsTab({ product }: { product: Product }) {
           <h2 className="text-lg font-bold tracking-tight">{product.name} Platforms</h2>
           <p className="text-sm text-muted-foreground">Manage platforms available for this product</p>
         </div>
-        {isAdmin && (
+        {canManage && (
           <Button onClick={() => setAddOpen(true)} disabled={availablePlatforms.length === 0}>
             <Plus className="mr-2 h-4 w-4" /> Add Platform
           </Button>
@@ -273,7 +275,7 @@ export function ProductPlatformsTab({ product }: { product: Product }) {
                 <TableHead>Product</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Updated</TableHead>
-                {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                {canManage && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -287,7 +289,7 @@ export function ProductPlatformsTab({ product }: { product: Product }) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {isAdmin ? (
+                      {canManage ? (
                         <Switch checked={m.is_active} onCheckedChange={() => handleToggle(m)} />
                       ) : (
                         <span className={`text-xs font-medium px-2 py-0.5 rounded ${m.is_active ? "bg-success/20 text-success-foreground" : "bg-muted text-muted-foreground"}`}>
@@ -303,7 +305,7 @@ export function ProductPlatformsTab({ product }: { product: Product }) {
                   <TableCell className="text-xs text-muted-foreground">
                     {format(new Date(m.updated_at), "dd MMM yyyy")}
                   </TableCell>
-                  {isAdmin && (
+                  {canManage && (
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} title="Edit">

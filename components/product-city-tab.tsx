@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-export function HCCityTab({ product }: { product: Product }) {
+export function ProductCityTab({ product }: { product: Product }) {
   const { profile } = useAuth();
   const { toast } = useToast();
 
@@ -95,6 +95,7 @@ export function HCCityTab({ product }: { product: Product }) {
     e.preventDefault();
     const trimmed = cityName.trim();
     if (!trimmed) return;
+    // Check for duplicate (case-insensitive)
     const { data: existing } = await supabase
       .from("product_cities")
       .select("id")
@@ -102,7 +103,7 @@ export function HCCityTab({ product }: { product: Product }) {
       .ilike("city_name", trimmed)
       .maybeSingle();
     if (existing) {
-      toast({ title: "This city is already added for HC.", variant: "destructive" });
+      toast({ title: "This city is already added for this product.", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -170,7 +171,7 @@ export function HCCityTab({ product }: { product: Product }) {
       toast({ title: "Failed to remove city.", variant: "destructive" });
     } else {
       setCities((prev) => prev.filter((c) => c.id !== deleteCity.id));
-      toast({ title: "City removed" });
+      toast({ title: "City removed from product" });
       setDeleteCity(null);
       loadStats();
     }
@@ -181,8 +182,8 @@ export function HCCityTab({ product }: { product: Product }) {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold tracking-tight">HC Cities</h2>
-          <p className="text-sm text-muted-foreground">Manage cities available for HC</p>
+          <h2 className="text-lg font-bold tracking-tight">{product.name} Cities</h2>
+          <p className="text-sm text-muted-foreground">Manage cities available for this product</p>
         </div>
         {canManage && (
           <Button onClick={() => { setCityName(""); setCreateOpen(true); }}>
@@ -224,15 +225,12 @@ export function HCCityTab({ product }: { product: Product }) {
 
       {/* Table */}
       {loading ? (
-        <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">Loading cities...</span>
-        </div>
+        <CitiesSkeleton />
       ) : cities.length === 0 ? (
         <EmptyState
           icon={MapPin}
           title={hasActiveFilters ? "No cities match your filters" : "No cities configured"}
-          description={hasActiveFilters ? "Try adjusting or clearing your filters." : "Add cities for HC to enable city-based lead filtering."}
+          description={hasActiveFilters ? "Try adjusting or clearing your filters." : "Add cities to enable city-based lead filtering for this product."}
         />
       ) : (
         <div className="rounded-xl border border-border/60 bg-card overflow-x-auto">
@@ -241,6 +239,7 @@ export function HCCityTab({ product }: { product: Product }) {
               <TableRow>
                 <TableHead>City</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Product</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Updated</TableHead>
                 {canManage && <TableHead className="text-right">Actions</TableHead>}
@@ -266,6 +265,7 @@ export function HCCityTab({ product }: { product: Product }) {
                       )}
                     </div>
                   </TableCell>
+                  <TableCell className="text-sm">{product.name}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {format(new Date(city.created_at), "dd MMM yyyy")}
                   </TableCell>
@@ -295,8 +295,8 @@ export function HCCityTab({ product }: { product: Product }) {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add City to HC</DialogTitle>
-            <DialogDescription>Enter a city name to add.</DialogDescription>
+            <DialogTitle>Add City to {product.name}</DialogTitle>
+            <DialogDescription>Enter a city name to add to this product.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             <div>
@@ -316,7 +316,7 @@ export function HCCityTab({ product }: { product: Product }) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Edit City</DialogTitle>
-            <DialogDescription>Update the city name.</DialogDescription>
+            <DialogDescription>Update the city name for {product.name}.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditSave} className="space-y-3">
             <div>
@@ -335,7 +335,7 @@ export function HCCityTab({ product }: { product: Product }) {
       <Dialog open={!!deleteCity} onOpenChange={(v) => !v && setDeleteCity(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Remove city from HC?</DialogTitle>
+            <DialogTitle>Remove city from {product.name}?</DialogTitle>
             <DialogDescription>
               "{deleteCity?.city_name}" will no longer be available for new leads. Existing lead records will keep their city information.
             </DialogDescription>
@@ -346,6 +346,24 @@ export function HCCityTab({ product }: { product: Product }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CitiesSkeleton() {
+  return (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      <div className="space-y-0">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 border-b border-border/40 p-3 last:border-0">
+            <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+            <div className="h-5 w-16 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
