@@ -75,15 +75,15 @@ function RegisterForm() {
         p_user_id: data.user.id,
         p_email: email,
         p_full_name: fullName,
-        p_role: "ADMIN",
+        p_role: "EMPLOYEE",
       });
 
       if (profileError) {
-        setError("Your account was created but the admin profile could not be set up. Please contact support.");
+        setError("Your account was created but the profile could not be set up. Please contact support.");
         return;
       }
 
-      router.push("/crm/admin");
+      router.push("/crm/employee");
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
@@ -161,7 +161,7 @@ function RegisterForm() {
           </>
         ) : (
           <>
-            <Shield className="mr-2 h-4 w-4" /> Create Admin Account
+            <Shield className="mr-2 h-4 w-4" /> Create Employee Account
           </>
         )}
       </Button>

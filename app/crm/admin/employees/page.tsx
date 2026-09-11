@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { callEdgeFunction } from "@/lib/edge";
-import { Profile } from "@/lib/types";
+import { Profile, Role } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,7 +58,7 @@ export default function EmployeesPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "EMPLOYEE">("EMPLOYEE");
+  const [role, setRole] = useState<Role>("EMPLOYEE");
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const { toast } = useToast();
@@ -357,13 +357,14 @@ export default function EmployeesPage() {
               <Label>Role</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole(v as "ADMIN" | "EMPLOYEE")}
+                onValueChange={(v) => setRole(v as Role)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                  <SelectItem value="MANAGER">Manager</SelectItem>
                   <SelectItem value="ADMIN">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -414,13 +415,14 @@ export default function EmployeesPage() {
               <Label>Role</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole(v as "ADMIN" | "EMPLOYEE")}
+                onValueChange={(v) => setRole(v as Role)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                  <SelectItem value="MANAGER">Manager</SelectItem>
                   <SelectItem value="ADMIN">Admin</SelectItem>
                 </SelectContent>
               </Select>

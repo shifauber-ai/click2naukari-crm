@@ -11,7 +11,7 @@ import {
 } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase/client";
-import { Profile, Role } from "./types";
+import { Profile, Role, Product } from "./types";
 
 interface AuthContextValue {
   user: User | null;
@@ -21,6 +21,7 @@ interface AuthContextValue {
   authError: string | null;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  assignedProducts: Product[];
 }
 
 // 72-hour session window in milliseconds
@@ -64,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [assignedProducts, setAssignedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const profileUidRef = useRef<string | null>(null);
@@ -74,15 +76,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profileUidRef.current = uid;
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, role, is_active, created_at, updated_at")
+      .select("id, email, full_name, role, is_active, phone, created_at, updated_at")
       .eq("id", uid)
       .maybeSingle();
     if (error || !data) {
       setProfile(null);
+      setAssignedProducts([]);
       profileUidRef.current = null;
       return;
     }
-    setProfile(data as Profile);
+    const p = data as Profile;
+    setProfile(p);
+
+    // Load product assignments for managers; admins get all products
+    if (p.role === "MANAGER") {
+      const { data: assignments } = await supabase
+        .from("manager_product_assignments")
+        .select("product:products(*)")
+        .eq("manager_id", uid);
+      const products = (assignments || [])
+        .map((a) => ((a as unknown as { product: Product }).product))
+        .filter(Boolean) as Product[];
+      setAssignedProducts(products);
+    } else if (p.role === "ADMIN") {
+      const { data: allProducts } = await supabase
+        .from("products")
+        .select("*")
+        .eq("is_active", true)
+        .order("name");
+      setAssignedProducts((allProducts as Product[]) || []);
+    } else {
+      setAssignedProducts([]);
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -105,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
         setProfile(null);
+        setAssignedProducts([]);
         profileUidRef.current = null;
         setAuthError("Your 3-day login session has expired. Please login again.");
         setLoading(false);
@@ -139,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSession(null);
             setUser(null);
             setProfile(null);
+            setAssignedProducts([]);
             profileUidRef.current = null;
             setAuthError("Your 3-day login session has expired. Please login again.");
             setLoading(false);
@@ -153,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           profileUidRef.current = null;
           setProfile(null);
+          setAssignedProducts([]);
           setLoading(false);
         }
       }
@@ -177,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
         setProfile(null);
+        setAssignedProducts([]);
         profileUidRef.current = null;
         setAuthError("Your 3-day login session has expired. Please login again.");
         setLoading(false);
@@ -196,12 +225,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setUser(null);
     setSession(null);
+    setAssignedProducts([]);
     profileUidRef.current = null;
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, session, profile, loading, authError, signOut, refreshProfile }}
+      value={{ user, session, profile, loading, authError, signOut, refreshProfile, assignedProducts }}
     >
       {children}
     </AuthContext.Provider>

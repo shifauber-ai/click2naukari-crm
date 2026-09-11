@@ -58,9 +58,22 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/crm/admin") && profile.role !== "ADMIN") {
+  if (pathname.startsWith("/crm/admin") && profile.role !== "ADMIN" && profile.role !== "MANAGER") {
     const url = req.nextUrl.clone();
     url.pathname = "/crm/employee";
+    return NextResponse.redirect(url);
+  }
+
+  // Admin-only routes that managers cannot access
+  const adminOnlyPaths = [
+    "/crm/admin/employees",
+    "/crm/admin/settings",
+    "/crm/admin/audit",
+    "/crm/admin/register-admin",
+  ];
+  if (profile.role === "MANAGER" && adminOnlyPaths.some((p) => pathname.startsWith(p))) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/crm/admin";
     return NextResponse.redirect(url);
   }
 

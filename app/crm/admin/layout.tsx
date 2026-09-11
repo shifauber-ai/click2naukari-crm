@@ -104,7 +104,7 @@ export default function AdminLayout({
     // Session exists but profile not loaded yet — wait, don't redirect
     if (!profile) return;
 
-    if (profile.role !== "ADMIN") {
+    if (profile.role !== "ADMIN" && profile.role !== "MANAGER") {
       router.push("/crm/employee");
     } else if (!profile.is_active) {
       signOut();
@@ -123,7 +123,36 @@ export default function AdminLayout({
     );
   }
 
-  if (profile.role !== "ADMIN") return null;
+  if (profile.role !== "ADMIN" && profile.role !== "MANAGER") return null;
+
+  const isManager = profile.role === "MANAGER";
+
+  // Managers see a restricted subset of nav items
+  const managerAllowedHrefs = new Set([
+    "/crm/admin",
+    "/crm/admin/leads",
+    "/crm/admin/car",
+    "/crm/admin/bike",
+    "/crm/admin/auto",
+    "/crm/admin/tempo",
+    "/crm/admin/hc",
+    "/crm/admin/followups",
+    "/crm/admin/issues",
+    "/crm/admin/other-hero",
+    "/crm/admin/caller-queue",
+    "/crm/admin/directory",
+    "/crm/admin/platforms",
+    "/crm/admin/call-history",
+    "/crm/admin/call-history",
+    "/crm/admin/devices",
+    "/crm/admin/reports",
+    "/crm/admin/import-export",
+    "/crm/admin/products",
+  ]);
+
+  const visibleNavItems = isManager
+    ? NAV_ITEMS.filter((item) => managerAllowedHrefs.has(item.href))
+    : NAV_ITEMS;
 
   const initials = profile.full_name
     .split(" ")
@@ -188,7 +217,7 @@ export default function AdminLayout({
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto scrollbar-thin p-2">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const active =
               item.href === "/crm/admin"
                 ? pathname === item.href
@@ -233,7 +262,7 @@ export default function AdminLayout({
                   {profile.full_name}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  Administrator
+                  {isManager ? "Manager" : "Administrator"}
                 </p>
               </div>
             )}
@@ -265,7 +294,7 @@ export default function AdminLayout({
           </Button>
           <div className="flex-1">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/60 px-2.5 py-1 text-xs font-medium text-accent-foreground">
-              <Shield className="h-3 w-3" /> Admin Workspace
+              <Shield className="h-3 w-3" /> {isManager ? "Manager Workspace" : "Admin Workspace"}
             </span>
           </div>
         </header>

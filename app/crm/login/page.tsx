@@ -137,7 +137,7 @@ function LoginForm() {
       const redirect = params.get("redirect");
       if (redirect && !redirect.includes("/crm/login")) {
         router.push(redirect);
-      } else if (profile.role === "ADMIN") {
+      } else if (profile.role === "ADMIN" || profile.role === "MANAGER") {
         router.push("/crm/admin");
       } else {
         router.push("/crm/employee");

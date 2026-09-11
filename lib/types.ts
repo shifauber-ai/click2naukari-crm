@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "EMPLOYEE";
+export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
 
 export type LeadStatus =
   | "NEW"
@@ -347,4 +347,12 @@ export interface Platform {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ManagerProductAssignment {
+  id: string;
+  manager_id: string;
+  product_id: string;
+  created_at: string;
+  product?: Product | null;
 }
