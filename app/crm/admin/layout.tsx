@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase/client";
+import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   Users,
@@ -34,9 +34,11 @@ import {
   Truck,
   Wallet,
   Smartphone,
+  UserCog,
+  MapPin,
+  Layers,
+  ChevronDown,
 } from "lucide-react";
-
-import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
   href: string;
@@ -44,48 +46,127 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/crm/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/crm/admin/leads", label: "All Leads", icon: Phone },
-  { href: "/crm/admin/car", label: "CAR", icon: Car },
-  { href: "/crm/admin/bike", label: "BIKE", icon: Bike },
-  { href: "/crm/admin/auto", label: "AUTO", icon: Truck },
-  { href: "/crm/admin/tempo", label: "TEMPO", icon: Truck },
+interface NavSection {
+  label: string;
+  items: NavItem[];
+  collapsible?: boolean;
+}
+
+const PRODUCT_ITEMS: NavItem[] = [
+  { href: "/crm/admin/car", label: "Car", icon: Car },
+  { href: "/crm/admin/auto", label: "Auto", icon: Truck },
+  { href: "/crm/admin/tempo", label: "Tempo", icon: Truck },
+  { href: "/crm/admin/bike", label: "Bike", icon: Bike },
   { href: "/crm/admin/hc", label: "HC", icon: PhoneCall },
-  { href: "/crm/admin/followups", label: "Follow Up", icon: Calendar },
-  { href: "/crm/admin/issues", label: "Issues", icon: AlertTriangle },
-  { href: "/crm/admin/other-hero", label: "Other Hero", icon: PhoneCall },
-  { href: "/crm/admin/review", label: "Admin Review", icon: ClipboardCheck },
-  { href: "/crm/admin/directory", label: "Directory", icon: BookMarked },
-  { href: "/crm/admin/platforms", label: "Platforms", icon: Smartphone },
-  { href: "/crm/admin/products", label: "Products", icon: Package },
-  { href: "/crm/admin/employees", label: "Employees", icon: Users },
-  { href: "/crm/admin/caller-queue", label: "Caller Queue", icon: PhoneCall },
-  { href: "/crm/admin/hero-ids", label: "Hero IDs", icon: IdCard },
-  { href: "/crm/admin/sims", label: "SIM", icon: CreditCard },
-  { href: "/crm/admin/call-history", label: "Master Call History", icon: History },
-  { href: "/crm/admin/devices", label: "Call Sync Devices", icon: Smartphone },
-  { href: "/crm/admin/reports", label: "Reports", icon: BarChart3 },
-  { href: "/crm/admin/import-export", label: "Import / Export", icon: Upload },
-  { href: "/crm/admin/audit", label: "Audit Logs", icon: Shield },
-  { href: "/crm/admin/settings", label: "Settings", icon: Settings },
 ];
+
+const ADMIN_SECTIONS: NavSection[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/crm/admin", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Products",
+    items: PRODUCT_ITEMS,
+  },
+  {
+    label: "Lead Management",
+    items: [
+      { href: "/crm/admin/leads", label: "All Leads", icon: Phone },
+      { href: "/crm/admin/caller-queue", label: "Caller Queue", icon: PhoneCall },
+      { href: "/crm/admin/followups", label: "Follow Up", icon: Calendar },
+      { href: "/crm/admin/issues", label: "Issues", icon: AlertTriangle },
+      { href: "/crm/admin/other-hero", label: "Other Hero", icon: PhoneCall },
+      { href: "/crm/admin/review", label: "Admin Review", icon: ClipboardCheck },
+    ],
+  },
+  {
+    label: "Directory & Data",
+    items: [
+      { href: "/crm/admin/directory", label: "Directory", icon: BookMarked },
+      { href: "/crm/admin/import-export", label: "Import / Export", icon: Upload },
+    ],
+  },
+  {
+    label: "Call Sync",
+    items: [
+      { href: "/crm/admin/call-history", label: "Master Call History", icon: History },
+      { href: "/crm/admin/devices", label: "Call Sync Devices", icon: Smartphone },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      { href: "/crm/admin/reports", label: "Reports", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/crm/admin/employees", label: "Users / Employees", icon: Users },
+      { href: "/crm/admin/products", label: "Products", icon: Package },
+      { href: "/crm/admin/platforms", label: "Platforms", icon: Smartphone },
+      { href: "/crm/admin/hero-ids", label: "Hero IDs", icon: IdCard },
+      { href: "/crm/admin/sims", label: "SIM", icon: CreditCard },
+      { href: "/crm/admin/audit", label: "Audit Logs", icon: Shield },
+      { href: "/crm/admin/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
+// Manager sees everything except system management pages
+const MANAGER_EXCLUDED_HREFS = new Set([
+  "/crm/admin/employees",
+  "/crm/admin/audit",
+  "/crm/admin/settings",
+  "/crm/admin/products",
+  "/crm/admin/review",
+]);
+
+function filterSections(sections: NavSection[], isManager: boolean, assignedProductSlugs: Set<string> | null): NavSection[] {
+  if (!isManager) return sections;
+  return sections
+    .map((section) => {
+      // Filter out excluded items
+      let items = section.items.filter((item) => !MANAGER_EXCLUDED_HREFS.has(item.href));
+      // Filter products by assignment
+      if (section.label === "Products" && assignedProductSlugs) {
+        items = items.filter((item) => {
+          const slug = item.href.split("/").pop() || "";
+          return assignedProductSlugs.has(slug);
+        });
+      }
+      return { ...section, items };
+    })
+    .filter((section) => section.items.length > 0);
+}
+
+// Map product IDs to slugs for manager filtering
+const PRODUCT_SLUG_MAP: Record<string, string> = {
+  MAINC001: "car", CAR: "car", C001: "car",
+  MAINB001: "bike", BIKE: "bike", B001: "bike", B002: "bike",
+  MAINA001: "auto", AUTO: "auto", A001: "auto",
+  MAINT001: "tempo", TEMPO: "tempo", T001: "tempo",
+  H001: "hc", HC: "hc",
+};
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { profile, loading, session, authError, signOut } = useAuth();
+  const { profile, loading, session, authError, signOut, assignedProducts } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [productsExpanded, setProductsExpanded] = useState(true);
 
   useEffect(() => {
-    if (loading) return; // Wait for auth to finish initializing
+    if (loading) return;
 
-    // Session expired — show message and redirect to login
     if (authError) {
       const url = new URL("/crm/login", window.location.origin);
       url.searchParams.set("error", "expired");
@@ -93,7 +174,6 @@ export default function AdminLayout({
       return;
     }
 
-    // No session at all — redirect to login
     if (!session) {
       const url = new URL("/crm/login", window.location.origin);
       url.searchParams.set("redirect", pathname);
@@ -101,7 +181,6 @@ export default function AdminLayout({
       return;
     }
 
-    // Session exists but profile not loaded yet — wait, don't redirect
     if (!profile) return;
 
     if (profile.role !== "ADMIN" && profile.role !== "MANAGER") {
@@ -127,32 +206,16 @@ export default function AdminLayout({
 
   const isManager = profile.role === "MANAGER";
 
-  // Managers see a restricted subset of nav items
-  const managerAllowedHrefs = new Set([
-    "/crm/admin",
-    "/crm/admin/leads",
-    "/crm/admin/car",
-    "/crm/admin/bike",
-    "/crm/admin/auto",
-    "/crm/admin/tempo",
-    "/crm/admin/hc",
-    "/crm/admin/followups",
-    "/crm/admin/issues",
-    "/crm/admin/other-hero",
-    "/crm/admin/caller-queue",
-    "/crm/admin/directory",
-    "/crm/admin/platforms",
-    "/crm/admin/call-history",
-    "/crm/admin/call-history",
-    "/crm/admin/devices",
-    "/crm/admin/reports",
-    "/crm/admin/import-export",
-    "/crm/admin/products",
-  ]);
+  // Build set of assigned product slugs for manager
+  const assignedSlugs = isManager
+    ? new Set(
+        assignedProducts
+          .map((p) => PRODUCT_SLUG_MAP[p.code] || "")
+          .filter(Boolean)
+      )
+    : null;
 
-  const visibleNavItems = isManager
-    ? NAV_ITEMS.filter((item) => managerAllowedHrefs.has(item.href))
-    : NAV_ITEMS;
+  const visibleSections = filterSections(ADMIN_SECTIONS, isManager, assignedSlugs);
 
   const initials = profile.full_name
     .split(" ")
@@ -166,9 +229,11 @@ export default function AdminLayout({
     router.push("/crm/login");
   };
 
+  const isActive = (href: string) =>
+    href === "/crm/admin" ? pathname === href : pathname.startsWith(href);
+
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/40 lg:hidden"
@@ -176,7 +241,6 @@ export default function AdminLayout({
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border/60 bg-card transition-all duration-300 lg:static",
@@ -216,32 +280,41 @@ export default function AdminLayout({
           </Button>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto scrollbar-thin p-2">
-          {visibleNavItems.map((item) => {
-            const active =
-              item.href === "/crm/admin"
-                ? pathname === item.href
-                : pathname.startsWith(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                  collapsed && "justify-center px-2"
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-3 overflow-y-auto scrollbar-thin p-2">
+          {visibleSections.map((section) => (
+            <div key={section.label}>
+              {!collapsed && (
+                <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {section.label}
+                </p>
+              )}
+              {collapsed && <div className="my-1 border-t border-border/40" />}
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const active = isActive(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                        collapsed && "justify-center px-2"
+                      )}
+                      title={collapsed ? item.label : undefined}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      {!collapsed && <span>{item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-border/60 p-3">
@@ -281,7 +354,6 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex flex-1 flex-col min-w-0">
         <header className="flex h-16 items-center gap-3 border-b border-border/60 bg-card/80 px-4 backdrop-blur-sm lg:px-6">
           <Button
