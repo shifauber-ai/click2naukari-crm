@@ -3,37 +3,23 @@
 import { useState } from "react";
 import { Product } from "@/lib/types";
 import { ProductDashboard } from "@/components/product-dashboard";
+import { ProductLeadsTab } from "@/components/product-leads-tab";
+import { ProductDirectoryTab } from "@/components/product-directory-tab";
+import { ProductImportExportTab } from "@/components/product-import-export-tab";
+import { HCLeadsTab } from "@/components/hc-leads-tab";
+import { HCCityTab } from "@/components/hc-city-tab";
 import { PageHeader, EmptyState } from "@/components/page-parts";
 import { cn } from "@/lib/utils";
 import {
-  Phone,
-  Wallet,
-  PhoneCall,
-  Smartphone,
-  BarChart3,
-  MapPin,
-  BookMarked,
-  Upload,
-  Users,
-  type LucideIcon,
+  Phone, Wallet, PhoneCall, Smartphone, BarChart3, MapPin,
+  BookMarked, Upload, Users, type LucideIcon,
 } from "lucide-react";
 
 export type ProductTab =
-  | "leads"
-  | "payment"
-  | "callers-queue"
-  | "platforms"
-  | "reports"
-  | "city"
-  | "directory"
-  | "import-export"
-  | "employee";
+  | "leads" | "payment" | "callers-queue" | "platforms"
+  | "reports" | "city" | "directory" | "import-export" | "employee";
 
-interface TabDef {
-  key: ProductTab;
-  label: string;
-  icon: LucideIcon;
-}
+interface TabDef { key: ProductTab; label: string; icon: LucideIcon; }
 
 interface ProductWorkspaceProps {
   product: Product;
@@ -60,11 +46,9 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
     <div>
       <PageHeader
         title={`${product.name} Dashboard`}
-        description={
-          showPayment
-            ? `Full product management including payments, leads, and call operations`
-            : `Lead management and call operations for ${product.name}`
-        }
+        description={showPayment
+          ? "Full product management including payments, leads, and call operations"
+          : `Lead management and call operations for ${product.name}`}
         icon={showPayment ? Wallet : Phone}
       />
 
@@ -73,16 +57,12 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
           const Icon = tab.icon;
           const active = activeTab === tab.key;
           return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={cn(
                 "flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all",
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                active ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
+              )}>
               <Icon className="h-4 w-4" />
               {tab.label}
             </button>
@@ -90,9 +70,11 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
         })}
       </div>
 
-      {activeTab === "leads" && <ProductDashboard product={product} showPayment={showPayment} />}
+      {activeTab === "leads" && <ProductLeadsTab product={product} />}
       {activeTab === "payment" && showPayment && <ProductDashboard product={product} showPayment={showPayment} />}
-      {activeTab !== "leads" && activeTab !== "payment" && (
+      {activeTab === "directory" && <ProductDirectoryTab product={product} />}
+      {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={false} />}
+      {(activeTab === "callers-queue" || activeTab === "platforms" || activeTab === "reports" || activeTab === "city" || activeTab === "employee") && (
         <TabPlaceholder tab={activeTab} productName={product.name} />
       )}
     </div>
@@ -111,17 +93,8 @@ function TabPlaceholder({ tab, productName }: { tab: ProductTab; productName: st
     "import-export": { title: "Import / Export", desc: `Import and export data for ${productName}`, icon: Upload },
     "employee": { title: "Employee", desc: `Manage employees assigned to ${productName}`, icon: Users },
   };
-
   const info = labels[tab];
-  const Icon = info.icon;
-
-  return (
-    <EmptyState
-      icon={Icon}
-      title={`${info.title} — Coming Soon`}
-      description={info.desc}
-    />
-  );
+  return <EmptyState icon={info.icon} title={`${info.title} — Coming Soon`} description={info.desc} />;
 }
 
 // HC Dashboard — separate workflow
@@ -135,17 +108,6 @@ export function HCDashboard({ product }: { product: Product }) {
     { key: "directory", label: "Directory", icon: BookMarked },
     { key: "import-export", label: "Import / Export", icon: Upload },
   ];
-
-  const hcInfo: Record<HCTab, { title: string; desc: string; icon: LucideIcon }> = {
-    leads: {
-      title: "HC Leads",
-      desc: "Driver Name, Contact, Vehicle No, DL No, Total Trips, License No, Call action, Status",
-      icon: Phone,
-    },
-    city: { title: "City", desc: "Manage cities for HC", icon: MapPin },
-    directory: { title: "Directory", desc: "Directory records for HC", icon: BookMarked },
-    "import-export": { title: "Import / Export", desc: "Import and export data for HC", icon: Upload },
-  };
 
   return (
     <div>
@@ -166,16 +128,12 @@ export function HCDashboard({ product }: { product: Product }) {
           const Icon = tab.icon;
           const active = activeTab === tab.key;
           return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={cn(
                 "flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all",
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                active ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
+              )}>
               <Icon className="h-4 w-4" />
               {tab.label}
             </button>
@@ -183,19 +141,10 @@ export function HCDashboard({ product }: { product: Product }) {
         })}
       </div>
 
-      {activeTab === "leads" ? (
-        <EmptyState
-          icon={Phone}
-          title="HC Leads — Coming Soon"
-          description="Driver Name, Contact, Vehicle No, DL No, Total Trips, License No, Call action, Status (Tag Added, Ringing). No WhatsApp action."
-        />
-      ) : (
-        <EmptyState
-          icon={hcInfo[activeTab].icon}
-          title={`${hcInfo[activeTab].title} — Coming Soon`}
-          description={hcInfo[activeTab].desc}
-        />
-      )}
+      {activeTab === "leads" && <HCLeadsTab product={product} />}
+      {activeTab === "city" && <HCCityTab product={product} />}
+      {activeTab === "directory" && <ProductDirectoryTab product={product} />}
+      {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={true} />}
     </div>
   );
 }

@@ -1,5 +1,12 @@
 export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
 
+export type HCLeadStatus = "TAG_ADDED" | "RINGING";
+export const HC_LEAD_STATUSES: HCLeadStatus[] = ["TAG_ADDED", "RINGING"];
+export const HC_STATUS_LABELS: Record<HCLeadStatus, string> = {
+  TAG_ADDED: "Tag Added",
+  RINGING: "Ringing",
+};
+
 export type LeadStatus =
   | "NEW"
   | "RINGING"
@@ -92,6 +99,10 @@ export interface Lead {
   updated_at: string;
   platform?: string | null;
   city?: string | null;
+  vehicle_no?: string | null;
+  dl_no?: string | null;
+  total_trips?: number | null;
+  license_no?: string | null;
   product?: Product;
   current_caller?: Profile | null;
 }
@@ -223,6 +234,32 @@ export interface ImportBatch {
   status: string;
   created_by: string | null;
   created_at: string;
+  product_id?: string | null;
+  platform?: string | null;
+  uploaded_by?: string | null;
+  existing_lead_duplicates?: number;
+  internal_duplicates?: number;
+  skipped?: number;
+}
+
+export type DuplicateType = "NONE" | "INTERNAL_DUPLICATE" | "EXISTING_LEAD_DUPLICATE";
+
+export interface ImportRecord {
+  id: string;
+  batch_id: string;
+  row_number: number;
+  name: string;
+  phone: string;
+  product_id: string | null;
+  platform: string | null;
+  city: string | null;
+  label: string | null;
+  status: string;
+  duplicate_type: DuplicateType;
+  existing_lead_id: string | null;
+  validation_error: string | null;
+  imported_at: string;
+  existing_lead?: Lead | null;
 }
 
 export interface CallHistory {
@@ -284,6 +321,9 @@ export interface DirectoryEntry {
   saved_at: string;
   created_at: string;
   updated_at: string;
+  import_batch_id?: string | null;
+  duplicate_type?: DuplicateType;
+  existing_lead_id?: string | null;
   product?: Product | null;
   label?: DirectoryLabel | null;
   employee?: Profile | null;
