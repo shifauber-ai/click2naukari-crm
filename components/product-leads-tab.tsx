@@ -2,64 +2,88 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { Product, Profile, Lead, LeadStatus, LEAD_STATUSES, STATUS_LABELS } from "@/lib/types";
+import {
+  Product, Profile, Lead, LeadStatus, LEAD_STATUSES, STATUS_LABELS,
+  LeadAssignment, LeadStatusHistory, CallerQueue,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/page-parts";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import { EmptyState, StatCard } from "@/components/page-parts";
 import { StatusBadge } from "@/components/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
   Phone, Search, ChevronLeft, ChevronRight, Loader2,
-  Pencil, Trash2, Users,
+  Pencil, Trash2, Users, UserPlus, History, Eye, PhoneCall,
+  Calendar, Filter, X,
 } from "lucide-react";
 import { format } from "date-fns";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZES = [25, 50, 100];
 
 interface ProductCityRow { id: string; city_name: string; is_active: boolean; }
+interface LeadWithCaller extends Omit<Lead, "current_caller"> {
+  current_caller?: { full_name: string } | null;
+}
+
+interface LeadStats {
+  total: number;
+  active: number;
+  followups: number;
+  unassigned: number;
+  interested: number;
+  callback: number;
+  ringing: number;
+  adminReview: number;
+}
 
 export function ProductLeadsTab({ product }: { product: Product }) {
   const { profile } = useAuth();
   const { toast } = useToast();
 
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<LeadWithCaller[]>([]);
   const [cities, setCities] = useState<ProductCityRow[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
+  const [callerQueues, setCallerQueues] = useState<CallerQueue[]>([]);
+  const [stats, setStats] = useState<LeadStats>({ total: 0, active: 0, followups: 0, unassigned: 0, interested: 0, callback: 0, ringing: 0, adminReview: 0 });
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [platformFilter, setPlatformFilter] = useState("ALL");
   const [cityFilter, setCityFilter] = useState("ALL");
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
-  const [editLead, setEditLead] = useState<Lead | null>(null);
-  const [deleteLead, setDeleteLead] = useState<Lead | null>(null);
+
+  // Dialogs
+  const [editLead, setEditLead] = useState<LeadWithCaller | null>(null);
+  const [deleteLead, setDeleteLead] = useState<LeadWithCaller | null>(null);
+  const [assignLead, setAssignLead] = useState<LeadWithCaller | null>(null);
+  const [statusLead, setStatusLead] = useState<LeadWithCaller | null>(null);
+  const [detailLead, setDetailLead] = useState<LeadWithCaller | null>(null);
+  const [historyLead, setHistoryLead] = useState<LeadWithCaller | null>(null);
   const [saving, setSaving] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [assignSaving, setAssignSaving] = useState(false);
 
   // Edit form
   const [eName, setEName] = useState("");
@@ -68,9 +92,85 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const [ePlatform, setEPlatform] = useState("");
   const [eCity, setECity] = useState("");
   const [eRemarks, setERemarks] = useState("");
+  const [eCallerId, setECallerId] = useState<string>("NONE");
+
+  // Status form
+  const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
+  const [statusRemarks, setStatusRemarks] = useState("");
+
+  // Assign form
+  const [assignCallerId, setAssignCallerId] = useState("");
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkCallerId, setBulkCallerId] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  // History data
+  const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
+  const [history, setHistory] = useState<LeadStatusHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Detail data
+  const [detailCalls, setDetailCalls] = useState<{ call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const isAdmin = profile?.role === "ADMIN";
   const isManager = profile?.role === "MANAGER";
+  const canManage = isAdmin || isManager;
+
+  // Load reference data
+  useEffect(() => {
+    (async () => {
+      const [{ data: c }, { data: e }, { data: cq }] = await Promise.all([
+        supabase.from("product_cities").select("id, city_name, is_active").eq("product_id", product.id).order("city_name"),
+        supabase.from("profiles").select("*").order("full_name"),
+        supabase.from("caller_queues").select("*").eq("product_id", product.id),
+      ]);
+      setCities((c as ProductCityRow[]) || []);
+      setEmployees((e as Profile[]) || []);
+      setCallerQueues((cq as CallerQueue[]) || []);
+    })();
+  }, [product.id]);
+
+  // Map of product_id -> Set of active caller employee_ids
+  const productCallers = new Map<string, Set<string>>();
+  callerQueues.forEach((cq) => {
+    if (cq.is_active) {
+      if (!productCallers.has(cq.product_id)) productCallers.set(cq.product_id, new Set());
+      productCallers.get(cq.product_id)!.add(cq.employee_id);
+    }
+  });
+
+  const activeEmployees = employees.filter((e) => e.is_active);
+  const eligibleCallers = activeEmployees.filter((e) => productCallers.get(product.id)?.has(e.id));
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    const baseFilter = supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id);
+    const [totalRes, activeRes, followupRes, unassignedRes, interestedRes, callbackRes, ringingRes, reviewRes] = await Promise.all([
+      baseFilter,
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("is_active", true),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).not("next_followup_at", "is", null).gt("next_followup_at", new Date().toISOString()),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).is("current_caller_id", null).eq("is_active", true),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "INTERESTED"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "CALLBACK"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "RINGING"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "ADMIN_REVIEW"),
+    ]);
+    setStats({
+      total: totalRes.count || 0,
+      active: activeRes.count || 0,
+      followups: followupRes.count || 0,
+      unassigned: unassignedRes.count || 0,
+      interested: interestedRes.count || 0,
+      callback: callbackRes.count || 0,
+      ringing: ringingRes.count || 0,
+      adminReview: reviewRes.count || 0,
+    });
+    setStatsLoading(false);
+  }, [product.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,12 +180,18 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       .select("*, current_caller:profiles!current_caller_id(full_name)")
       .eq("product_id", product.id)
       .order("created_at", { ascending: false })
-      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
     if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
+    if (dateFrom) { cq = cq.gte("created_at", dateFrom); q = q.gte("created_at", dateFrom); }
+    if (dateTo) {
+      const end = new Date(dateTo); end.setDate(end.getDate() + 1);
+      const endStr = end.toISOString().split("T")[0];
+      cq = cq.lt("created_at", endStr); q = q.lt("created_at", endStr);
+    }
     if (search) {
       cq = cq.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
       q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
@@ -96,98 +202,235 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       toast({ title: "Unable to load leads. Please try again.", variant: "destructive" });
     } else {
       setTotal(cr.count || 0);
-      setLeads((dr.data as Lead[]) || []);
+      setLeads((dr.data as LeadWithCaller[]) || []);
     }
     setLoading(false);
-  }, [product.id, page, statusFilter, platformFilter, cityFilter, employeeFilter, search, toast]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, dateFrom, dateTo, search, toast]);
 
-  useEffect(() => {
-    (async () => {
-      const [{ data: c }, { data: e }] = await Promise.all([
-        supabase.from("product_cities").select("id, city_name, is_active").eq("product_id", product.id).order("city_name"),
-        supabase.from("profiles").select("*").order("full_name"),
-      ]);
-      setCities((c as ProductCityRow[]) || []);
-      setEmployees((e as Profile[]) || []);
-    })();
-  }, [product.id]);
-
+  useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [statusFilter, platformFilter, cityFilter, employeeFilter, dateFrom, dateTo, search, page, pageSize]);
 
-  const openEdit = (lead: Lead) => {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const activeCities = cities.filter((c) => c.is_active);
+  const hasActiveFilters = statusFilter !== "ALL" || platformFilter !== "ALL" || cityFilter !== "ALL" || employeeFilter !== "ALL" || dateFrom || dateTo || search;
+
+  const clearFilters = () => {
+    setStatusFilter("ALL"); setPlatformFilter("ALL"); setCityFilter("ALL");
+    setEmployeeFilter("ALL"); setDateFrom(""); setDateTo(""); setSearch("");
+    setPage(0);
+  };
+
+  // ===== Edit =====
+  const openEdit = (lead: LeadWithCaller) => {
     setEditLead(lead);
-    setEName(lead.name);
-    setEPhone(lead.phone);
-    setEStatus(lead.status);
-    setEPlatform(lead.platform || "");
-    setECity(lead.city || "");
-    setERemarks(lead.remarks);
+    setEName(lead.name); setEPhone(lead.phone); setEStatus(lead.status);
+    setEPlatform(lead.platform || ""); setECity(lead.city || "");
+    setERemarks(lead.remarks); setECallerId(lead.current_caller_id || "NONE");
   };
 
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editLead) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("leads")
-      .update({
-        name: eName, phone: ePhone, status: eStatus,
-        platform: ePlatform || null, city: eCity || null,
-        remarks: eRemarks, updated_at: new Date().toISOString(),
-      })
-      .eq("id", editLead.id);
+    const { error } = await supabase.rpc("admin_edit_lead", {
+      p_lead_id: editLead.id,
+      p_name: eName, p_phone: ePhone, p_product_id: editLead.product_id,
+      p_status: eStatus, p_current_caller_id: eCallerId === "NONE" ? null : eCallerId,
+      p_remarks: eRemarks,
+    });
     if (error) {
       toast({ title: "Failed to update lead. Please try again.", variant: "destructive" });
     } else {
-      setLeads((prev) => prev.map((l) =>
-        l.id === editLead.id ? { ...l, name: eName, phone: ePhone, status: eStatus, platform: ePlatform || null, city: eCity || null, remarks: eRemarks } : l
-      ));
+      setLeads((prev) => prev.map((l) => l.id === editLead.id ? {
+        ...l, name: eName, phone: ePhone, status: eStatus,
+        current_caller_id: eCallerId === "NONE" ? null : eCallerId,
+        current_caller: eCallerId !== "NONE" ? { full_name: employees.find((emp) => emp.id === eCallerId)?.full_name || "" } : null,
+        platform: ePlatform || null, city: eCity || null, remarks: eRemarks,
+      } : l));
       toast({ title: "Lead updated" });
       setEditLead(null);
+      loadStats();
     }
     setSaving(false);
   };
 
+  // ===== Delete =====
   const handleDelete = async () => {
     if (!deleteLead) return;
-    const { error } = await supabase.from("leads").update({ is_active: false }).eq("id", deleteLead.id);
+    const { error } = await supabase.rpc("admin_soft_delete_lead", { p_lead_id: deleteLead.id });
     if (error) {
       toast({ title: "Failed to delete lead. Please try again.", variant: "destructive" });
     } else {
       setLeads((prev) => prev.filter((l) => l.id !== deleteLead.id));
       toast({ title: "Lead deleted" });
       setDeleteLead(null);
+      loadStats();
     }
   };
 
-  if (loading && leads.length === 0) {
-    return (
-      <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-sm">Loading leads...</span>
-      </div>
-    );
-  }
+  // ===== Status Update =====
+  const openStatus = (lead: LeadWithCaller) => {
+    setStatusLead(lead);
+    setNewStatus(lead.status === "NEW" ? "RINGING" : lead.status);
+    setStatusRemarks("");
+  };
 
-  const activeCities = cities.filter((c) => c.is_active);
+  const handleStatusUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statusLead) return;
+    setUpdatingStatus(true);
+    const { error } = await supabase.rpc("update_lead_status", {
+      p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks,
+    });
+    if (error) {
+      toast({ title: "Failed to update status. Please try again.", variant: "destructive" });
+    } else {
+      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: newStatus } : l));
+      toast({ title: "Status updated" });
+      setStatusLead(null);
+      loadStats();
+    }
+    setUpdatingStatus(false);
+  };
+
+  // ===== Assign =====
+  const openAssign = (lead: LeadWithCaller) => {
+    setAssignLead(lead);
+    setAssignCallerId(lead.current_caller_id || "");
+  };
+
+  const handleAssignSave = async () => {
+    if (!assignLead || !assignCallerId) return;
+    setAssignSaving(true);
+    const { error } = await supabase.rpc("admin_reassign_lead", {
+      p_lead_id: assignLead.id, p_new_caller_id: assignCallerId,
+      p_new_status: assignLead.status, p_remarks: "Manual assignment",
+    });
+    if (error) {
+      toast({ title: "Failed to assign lead. Please try again.", variant: "destructive" });
+    } else {
+      setLeads((prev) => prev.map((l) => l.id === assignLead.id ? {
+        ...l, current_caller_id: assignCallerId,
+        current_caller: { full_name: employees.find((emp) => emp.id === assignCallerId)?.full_name || "" },
+      } : l));
+      toast({ title: "Lead assigned" });
+      setAssignLead(null);
+      loadStats();
+    }
+    setAssignSaving(false);
+  };
+
+  // ===== Detail =====
+  const openDetail = async (lead: LeadWithCaller) => {
+    setDetailLead(lead);
+    setDetailLoading(true);
+    const { data: calls } = await supabase
+      .from("call_history")
+      .select("call_status, direction, call_timestamp, duration_seconds")
+      .eq("lead_id", lead.id)
+      .order("call_timestamp", { ascending: false })
+      .limit(10);
+    setDetailCalls((calls as { call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]) || []);
+    setDetailLoading(false);
+  };
+
+  // ===== History =====
+  const openHistory = async (lead: LeadWithCaller) => {
+    setHistoryLead(lead);
+    setHistoryLoading(true);
+    const [a, h] = await Promise.all([
+      supabase.from("lead_assignments")
+        .select("*, new_caller:profiles!new_caller_id(full_name), previous_caller:profiles!previous_caller_id(full_name)")
+        .eq("lead_id", lead.id).order("created_at", { ascending: false }),
+      supabase.from("lead_status_history")
+        .select("*").eq("lead_id", lead.id).order("created_at", { ascending: false }),
+    ]);
+    setAssignments((a.data as LeadAssignment[]) || []);
+    setHistory((h.data as LeadStatusHistory[]) || []);
+    setHistoryLoading(false);
+  };
+
+  // ===== Bulk Selection =====
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => prev.size === leads.length ? new Set() : new Set(leads.map((l) => l.id)));
+  };
+  const allSelected = leads.length > 0 && selectedIds.size === leads.length;
+
+  const handleBulkAssign = async () => {
+    if (!bulkCallerId || selectedIds.size === 0) return;
+    setBulkSaving(true);
+    const ids = Array.from(selectedIds);
+    const { data, error } = await supabase.rpc("admin_bulk_assign_leads", {
+      p_lead_ids: ids, p_new_caller_id: bulkCallerId,
+    });
+    if (error) {
+      toast({ title: "Bulk assignment failed. Please try again.", variant: "destructive" });
+    } else {
+      const result = data as { assigned_count: number };
+      const callerName = employees.find((e) => e.id === bulkCallerId)?.full_name || "";
+      setLeads((prev) => prev.map((l) => selectedIds.has(l.id) ? {
+        ...l, current_caller_id: bulkCallerId, current_caller: { full_name: callerName },
+      } : l));
+      toast({ title: `${result.assigned_count} leads assigned` });
+      setBulkAssignOpen(false); setBulkCallerId(""); setSelectedIds(new Set());
+      loadStats();
+    }
+    setBulkSaving(false);
+  };
+
+  // ===== Call =====
+  const handleCall = async (lead: LeadWithCaller) => {
+    await supabase.from("call_history").insert({
+      lead_id: lead.id, product_id: product.id, phone_number: lead.phone,
+      normalized_phone: lead.phone.replace(/[^0-9]/g, ""),
+      direction: "OUTGOING", call_status: "INITIATED", is_simulated: true,
+      caller_id: profile?.id || null,
+    });
+    window.location.href = `tel:${lead.phone}`;
+  };
+
+  const startIdx = page * pageSize + 1;
+  const endIdx = Math.min((page + 1) * pageSize, total);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h2 className="text-lg font-bold tracking-tight">{product.name} Leads</h2>
+        <p className="text-sm text-muted-foreground">Manage and track leads for {product.name}</p>
+      </div>
+
+      {/* Summary Cards */}
+      {!statsLoading && stats.total > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          <StatCard label="Total" value={stats.total} icon={Users} tone="default" />
+          <StatCard label="Active" value={stats.active} icon={Users} tone="success" />
+          <StatCard label="Follow-ups" value={stats.followups} icon={Calendar} tone="info" />
+          <StatCard label="Unassigned" value={stats.unassigned} icon={UserPlus} tone="warning" />
+          <StatCard label="Interested" value={stats.interested} icon={Users} tone="primary" />
+          <StatCard label="Callback" value={stats.callback} icon={PhoneCall} tone="default" />
+          <StatCard label="Ringing" value={stats.ringing} icon={Phone} tone="warning" />
+          <StatCard label="Admin Review" value={stats.adminReview} icon={Eye} tone="danger" />
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by name or phone..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="pl-9"
-          />
+          <Input placeholder="Search name or phone..." value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -214,63 +457,123 @@ export function ProductLeadsTab({ product }: { product: Product }) {
             </SelectContent>
           </Select>
         )}
-        {(isAdmin || isManager) && (
+        {canManage && (
           <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setPage(0); }}>
-            <SelectTrigger className="w-[150px]"><SelectValue placeholder="Employee" /></SelectTrigger>
+            <SelectTrigger className="w-[150px]"><SelectValue placeholder="Caller" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">All Employees</SelectItem>
-              {employees.filter((e) => e.is_active).map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+              <SelectItem value="ALL">All Callers</SelectItem>
+              {eligibleCallers.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
+        <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(0); }} className="w-[140px]" />
+        <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(0); }} className="w-[140px]" />
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X className="mr-1 h-3.5 w-3.5" /> Clear
+          </Button>
+        )}
       </div>
 
+      {/* Bulk action toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium text-primary">
+            {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setBulkAssignOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" /> Assign
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
-      {leads.length === 0 && !loading ? (
-        <EmptyState icon={Users} title="No leads found" description="Adjust your filters or import leads to get started." />
+      {loading && leads.length === 0 ? (
+        <LeadsSkeleton />
+      ) : leads.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={hasActiveFilters ? "No leads match your filters" : `No ${product.name} leads found`}
+          description={hasActiveFilters ? "Try adjusting or clearing your filters." : "Adjust your filters or import leads for this product."}
+        />
       ) : (
         <div className="rounded-xl border border-border/60 bg-card overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                {canManage && (
+                  <TableHead className="w-10">
+                    <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+                  </TableHead>
+                )}
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
-                <TableHead>Platform</TableHead>
                 <TableHead>City</TableHead>
+                <TableHead>Platform</TableHead>
                 <TableHead>Status</TableHead>
-                {(isAdmin || isManager) && <TableHead>Caller</TableHead>}
+                {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Created</TableHead>
-                {(isAdmin || isManager) && <TableHead>Actions</TableHead>}
+                <TableHead>Follow-up</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {leads.map((lead) => (
-                <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.name}</TableCell>
-                  <TableCell>{lead.phone}</TableCell>
-                  <TableCell>{lead.platform || "—"}</TableCell>
-                  <TableCell>{lead.city || "—"}</TableCell>
-                  <TableCell><StatusBadge status={lead.status} /></TableCell>
-                  {(isAdmin || isManager) && (
-                    <TableCell>{(lead as Lead & { current_caller?: { full_name: string } | null }).current_caller?.full_name || "—"}</TableCell>
-                  )}
-                  <TableCell className="text-xs text-muted-foreground">
-                    {format(new Date(lead.created_at), "dd MMM yyyy")}
-                  </TableCell>
-                  {(isAdmin || isManager) && (
+                <TableRow key={lead.id} className={selectedIds.has(lead.id) ? "bg-primary/5" : undefined}>
+                  {canManage && (
                     <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(lead)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        {isAdmin && (
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeleteLead(lead)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
+                      <Checkbox checked={selectedIds.has(lead.id)} onCheckedChange={() => toggleSelect(lead.id)} aria-label={`Select ${lead.name}`} />
                     </TableCell>
                   )}
+                  <TableCell className="font-medium cursor-pointer hover:text-primary" onClick={() => openDetail(lead)}>
+                    {lead.name}
+                    {!lead.is_active && <span className="ml-2 text-xs text-destructive">(deleted)</span>}
+                  </TableCell>
+                  <TableCell className="text-sm">{lead.phone}</TableCell>
+                  <TableCell className="text-sm">{lead.city || "—"}</TableCell>
+                  <TableCell className="text-sm">{lead.platform || "—"}</TableCell>
+                  <TableCell><StatusBadge status={lead.status} /></TableCell>
+                  {canManage && (
+                    <TableCell className="text-sm">{lead.current_caller?.full_name || "Unassigned"}</TableCell>
+                  )}
+                  <TableCell className="text-xs text-muted-foreground">{format(new Date(lead.created_at), "dd MMM yyyy")}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {lead.next_followup_at ? format(new Date(lead.next_followup_at), "dd MMM, HH:mm") : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(lead)} title="View">
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCall(lead)} title="Call">
+                        <PhoneCall className="h-3.5 w-3.5" />
+                      </Button>
+                      {canManage && (
+                        <>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Status">
+                            <Phone className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssign(lead)} title="Assign">
+                            <UserPlus className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(lead)} title="Edit">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openHistory(lead)} title="History">
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                          {isAdmin && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteLead(lead)} title="Delete">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -280,41 +583,87 @@ export function ProductLeadsTab({ product }: { product: Product }) {
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            {total} leads {total > PAGE_SIZE && `· Page ${page + 1} of ${totalPages}`}
-          </p>
-          {total > PAGE_SIZE && (
-            <div className="flex gap-2">
-              <Button size="icon" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                <ChevronLeft className="h-4 w-4" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              Showing {startIdx}–{endIdx} of {total}
+            </p>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
+              <SelectTrigger className="h-8 w-[70px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((s) => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {total > pageSize && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="mr-1 h-4 w-4" /> Prev
               </Button>
-              <Button size="icon" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
-                <ChevronRight className="h-4 w-4" />
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</span>
+              <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
+                Next <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
           )}
         </div>
       )}
 
-      {/* Edit Dialog */}
+      {/* ===== Detail Drawer ===== */}
+      <Sheet open={!!detailLead} onOpenChange={(v) => !v && setDetailLead(null)}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Lead Details</SheetTitle>
+          </SheetHeader>
+          {detailLead && (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <DetailRow label="Name" value={detailLead.name} />
+                <DetailRow label="Phone" value={detailLead.phone} />
+                <DetailRow label="Product" value={product.name} />
+                <DetailRow label="Platform" value={detailLead.platform || "—"} />
+                <DetailRow label="City" value={detailLead.city || "—"} />
+                <DetailRow label="Status" value={<StatusBadge status={detailLead.status} />} />
+                <DetailRow label="Caller" value={detailLead.current_caller?.full_name || "Unassigned"} />
+                <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
+                <DetailRow label="Updated" value={format(new Date(detailLead.updated_at), "dd MMM yyyy, HH:mm")} />
+                <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"} />
+                <DetailRow label="Remarks" value={detailLead.remarks || "—"} />
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Call History</h4>
+                {detailLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+                ) : detailCalls.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No calls recorded</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {detailCalls.map((c, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs">
+                        <span className="font-medium">{c.direction}</span>
+                        <span>{c.call_status}</span>
+                        <span className="text-muted-foreground">{format(new Date(c.call_timestamp), "dd MMM, HH:mm")}</span>
+                        {c.duration_seconds && <span className="text-muted-foreground">{c.duration_seconds}s</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ===== Edit Dialog ===== */}
       <Dialog open={!!editLead} onOpenChange={(v) => !v && setEditLead(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Lead</DialogTitle>
-            <DialogDescription>Update lead information</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit Lead</DialogTitle><DialogDescription>Update lead information</DialogDescription></DialogHeader>
           <form onSubmit={handleEditSave} className="space-y-3">
+            <div><Label>Name</Label><Input value={eName} onChange={(e) => setEName(e.target.value)} required /></div>
+            <div><Label>Phone</Label><Input value={ePhone} onChange={(e) => setEPhone(e.target.value)} required /></div>
             <div>
-              <label className="text-sm font-medium">Name</label>
-              <Input value={eName} onChange={(e) => setEName(e.target.value)} required />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Phone</label>
-              <Input value={ePhone} onChange={(e) => setEPhone(e.target.value)} required />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Status</label>
+              <Label>Status</Label>
               <Select value={eStatus} onValueChange={(v) => setEStatus(v as LeadStatus)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -323,7 +672,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium">Platform</label>
+              <Label>Platform</Label>
               <Select value={ePlatform} onValueChange={setEPlatform}>
                 <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
                 <SelectContent>
@@ -336,7 +685,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
             </div>
             {activeCities.length > 0 && (
               <div>
-                <label className="text-sm font-medium">City</label>
+                <Label>City</Label>
                 <Select value={eCity} onValueChange={setECity}>
                   <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
                   <SelectContent>
@@ -347,9 +696,16 @@ export function ProductLeadsTab({ product }: { product: Product }) {
               </div>
             )}
             <div>
-              <label className="text-sm font-medium">Remarks</label>
-              <Input value={eRemarks} onChange={(e) => setERemarks(e.target.value)} />
+              <Label>Caller</Label>
+              <Select value={eCallerId} onValueChange={setECallerId}>
+                <SelectTrigger><SelectValue placeholder="Assign caller" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">Unassigned</SelectItem>
+                  {eligibleCallers.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+            <div><Label>Remarks</Label><Input value={eRemarks} onChange={(e) => setERemarks(e.target.value)} /></div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditLead(null)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
@@ -358,21 +714,168 @@ export function ProductLeadsTab({ product }: { product: Product }) {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
+      {/* ===== Status Dialog ===== */}
+      <Dialog open={!!statusLead} onOpenChange={(v) => !v && setStatusLead(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Update Status</DialogTitle><DialogDescription>Change status for {statusLead?.name}</DialogDescription></DialogHeader>
+          <form onSubmit={handleStatusUpdate} className="space-y-3">
+            <div>
+              <Label>New Status</Label>
+              <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label>Remarks</Label><Input value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Optional" /></div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setStatusLead(null)}>Cancel</Button>
+              <Button type="submit" disabled={updatingStatus}>{updatingStatus ? "Updating..." : "Update"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Assign Dialog ===== */}
+      <Dialog open={!!assignLead} onOpenChange={(v) => !v && setAssignLead(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Assign Lead</DialogTitle><DialogDescription>Assign {assignLead?.name} to a caller</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Caller</Label>
+              <Select value={assignCallerId} onValueChange={setAssignCallerId}>
+                <SelectTrigger><SelectValue placeholder="Select caller" /></SelectTrigger>
+                <SelectContent>
+                  {eligibleCallers.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAssignLead(null)}>Cancel</Button>
+              <Button onClick={handleAssignSave} disabled={assignSaving || !assignCallerId}>
+                {assignSaving ? "Assigning..." : "Assign"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Delete Dialog ===== */}
       <Dialog open={!!deleteLead} onOpenChange={(v) => !v && setDeleteLead(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete Lead?</DialogTitle>
-            <DialogDescription>
-              This will deactivate the lead "{deleteLead?.name}". You can restore it later.
-            </DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Delete Lead?</DialogTitle><DialogDescription>This will deactivate the lead "{deleteLead?.name}". You can restore it later.</DialogDescription></DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteLead(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ===== Bulk Assign Dialog ===== */}
+      <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Bulk Assign</DialogTitle><DialogDescription>Assign {selectedIds.size} leads to a caller</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Caller</Label>
+              <Select value={bulkCallerId} onValueChange={setBulkCallerId}>
+                <SelectTrigger><SelectValue placeholder="Select caller" /></SelectTrigger>
+                <SelectContent>
+                  {eligibleCallers.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBulkAssignOpen(false)}>Cancel</Button>
+              <Button onClick={handleBulkAssign} disabled={bulkSaving || !bulkCallerId}>
+                {bulkSaving ? "Assigning..." : `Assign ${selectedIds.size} Leads`}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== History Drawer ===== */}
+      <Sheet open={!!historyLead} onOpenChange={(v) => !v && setHistoryLead(null)}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Lead History</SheetTitle></SheetHeader>
+          {historyLoading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Status History</h4>
+                {history.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No status changes recorded</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {history.map((h) => (
+                      <div key={h.id} className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{h.previous_status || "NEW"} → {h.new_status}</span>
+                          <span className="text-muted-foreground">{format(new Date(h.created_at), "dd MMM, HH:mm")}</span>
+                        </div>
+                        {h.remarks && <p className="mt-1 text-muted-foreground">{h.remarks}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Assignment History</h4>
+                {assignments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No assignments recorded</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {assignments.map((a) => (
+                      <div key={a.id} className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {a.previous_caller?.full_name || "Unassigned"} → {a.new_caller?.full_name || "Unassigned"}
+                          </span>
+                          <span className="text-muted-foreground">{format(new Date(a.created_at), "dd MMM, HH:mm")}</span>
+                        </div>
+                        {a.remarks && <p className="mt-1 text-muted-foreground">{a.remarks}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
+function LeadsSkeleton() {
+  return (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      <div className="space-y-0">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 border-b border-border/40 p-3 last:border-0">
+            <div className="h-4 w-4 rounded bg-muted" />
+            <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-16 rounded bg-muted animate-pulse" />
+            <div className="h-5 w-20 rounded-full bg-muted animate-pulse" />
+            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
