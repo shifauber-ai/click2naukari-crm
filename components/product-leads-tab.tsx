@@ -29,15 +29,18 @@ import { useAuth } from "@/lib/auth-context";
 import {
   Phone, Search, ChevronLeft, ChevronRight, Loader2,
   Pencil, Trash2, Users, UserPlus, History, Eye, PhoneCall,
-  Calendar, Filter, X,
+  Calendar, Filter, X, Wallet, MessageCircle, ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
+import { PaymentModal } from "@/components/payment-modal";
 
 const PAGE_SIZES = [25, 50, 100];
+const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
 interface ProductCityRow { id: string; city_name: string; is_active: boolean; }
 interface LeadWithCaller extends Omit<Lead, "current_caller"> {
   current_caller?: { full_name: string } | null;
+  source?: string | null;
 }
 
 interface LeadStats {
@@ -69,6 +72,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const [platformFilter, setPlatformFilter] = useState("ALL");
   const [cityFilter, setCityFilter] = useState("ALL");
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
+  const [sourceFilter, setSourceFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
@@ -81,6 +85,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const [assignLead, setAssignLead] = useState<LeadWithCaller | null>(null);
   const [statusLead, setStatusLead] = useState<LeadWithCaller | null>(null);
   const [detailLead, setDetailLead] = useState<LeadWithCaller | null>(null);
+  const [paymentLead, setPaymentLead] = useState<LeadWithCaller | null>(null);
   const [historyLead, setHistoryLead] = useState<LeadWithCaller | null>(null);
   const [saving, setSaving] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -115,6 +120,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
 
   // Detail data
   const [detailCalls, setDetailCalls] = useState<{ call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]>([]);
+  const [detailPayments, setDetailPayments] = useState<{ id: string; amount: number; service_description: string; payment_mode: string; payment_status: string; qr_id: string | null; qr_name?: string | null; collected_by_name?: string | null; created_at: string }[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const isAdmin = profile?.role === "ADMIN";
@@ -190,6 +196,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
     if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
+    if (sourceFilter !== "ALL") { cq = cq.eq("source", sourceFilter); q = q.eq("source", sourceFilter); }
     if (dateFrom) { cq = cq.gte("created_at", dateFrom); q = q.gte("created_at", dateFrom); }
     if (dateTo) {
       const end = new Date(dateTo); end.setDate(end.getDate() + 1);
@@ -209,7 +216,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       setLeads((dr.data as LeadWithCaller[]) || []);
     }
     setLoading(false);
-  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, dateFrom, dateTo, search, toast]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -220,15 +227,15 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, platformFilter, cityFilter, employeeFilter, dateFrom, dateTo, search, page, pageSize]);
+  }, [statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, page, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activeCities = cities.filter((c) => c.is_active);
-  const hasActiveFilters = statusFilter !== "ALL" || platformFilter !== "ALL" || cityFilter !== "ALL" || employeeFilter !== "ALL" || dateFrom || dateTo || search;
+  const hasActiveFilters = statusFilter !== "ALL" || platformFilter !== "ALL" || cityFilter !== "ALL" || employeeFilter !== "ALL" || sourceFilter !== "ALL" || dateFrom || dateTo || search;
 
   const clearFilters = () => {
     setStatusFilter("ALL"); setPlatformFilter("ALL"); setCityFilter("ALL");
-    setEmployeeFilter("ALL"); setDateFrom(""); setDateTo(""); setSearch("");
+    setEmployeeFilter("ALL"); setSourceFilter("ALL"); setDateFrom(""); setDateTo(""); setSearch("");
     setPage(0);
   };
 
@@ -336,13 +343,32 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const openDetail = async (lead: LeadWithCaller) => {
     setDetailLead(lead);
     setDetailLoading(true);
-    const { data: calls } = await supabase
-      .from("call_history")
-      .select("call_status, direction, call_timestamp, duration_seconds")
-      .eq("lead_id", lead.id)
-      .order("call_timestamp", { ascending: false })
-      .limit(10);
-    setDetailCalls((calls as { call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]) || []);
+    const [callsRes, paymentsRes] = await Promise.all([
+      supabase
+        .from("call_history")
+        .select("call_status, direction, call_timestamp, duration_seconds")
+        .eq("lead_id", lead.id)
+        .order("call_timestamp", { ascending: false })
+        .limit(10),
+      supabase
+        .from("payment_records")
+        .select("id, amount, service_description, payment_mode, payment_status, qr_id, qr:car_qr_codes!qr_id(qr_name), collected_by:profiles!collected_by(full_name), created_at")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+    setDetailCalls((callsRes.data as { call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]) || []);
+    const payData = (paymentsRes.data as Record<string, unknown>[] | null) || [];
+    setDetailPayments(payData.map((p) => ({
+      id: String(p.id || ""), amount: Number(p.amount || 0),
+      service_description: String(p.service_description || ""),
+      payment_mode: String(p.payment_mode || ""),
+      payment_status: String(p.payment_status || ""),
+      qr_id: (p.qr_id as string) || null,
+      qr_name: (p.qr as { qr_name?: string } | null)?.qr_name || null,
+      collected_by_name: (p.collected_by as { full_name?: string } | null)?.full_name || null,
+      created_at: String(p.created_at || ""),
+    })));
     setDetailLoading(false);
   };
 
@@ -402,6 +428,14 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       caller_id: profile?.id || null,
     });
     window.location.href = `tel:${lead.phone}`;
+  };
+
+  // ===== WhatsApp =====
+  const handleWhatsApp = (lead: LeadWithCaller) => {
+    if (!lead.phone) return;
+    const cleanPhone = lead.phone.replace(/[^0-9]/g, "");
+    const msg = encodeURIComponent(`Hello ${lead.name},`);
+    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
   };
 
   const startIdx = page * pageSize + 1;
@@ -468,6 +502,13 @@ export function ProductLeadsTab({ product }: { product: Product }) {
             </SelectContent>
           </Select>
         )}
+        <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v); setPage(0); }}>
+          <SelectTrigger className="w-[140px]"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Sources</SelectItem>
+            {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(0); }} className="w-[140px]" />
         <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(0); }} className="w-[140px]" />
         {hasActiveFilters && (
@@ -515,6 +556,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                 <TableHead>Phone</TableHead>
                 <TableHead>City</TableHead>
                 <TableHead>Platform</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Created</TableHead>
@@ -537,6 +579,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                   <TableCell className="text-sm">{lead.phone}</TableCell>
                   <TableCell className="text-sm">{lead.city || "—"}</TableCell>
                   <TableCell className="text-sm">{lead.platform || "—"}</TableCell>
+                  <TableCell className="text-sm">{lead.source || "—"}</TableCell>
                   <TableCell><StatusBadge status={lead.status} /></TableCell>
                   {canManage && (
                     <TableCell className="text-sm">{lead.current_caller?.full_name || "Unassigned"}</TableCell>
@@ -550,8 +593,14 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(lead)} title="View">
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCall(lead)} title="Call">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCall(lead)} disabled={!lead.phone} title={lead.phone ? "Call" : "No phone"}>
                         <PhoneCall className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleWhatsApp(lead)} disabled={!lead.phone} title={lead.phone ? "WhatsApp" : "No phone"}>
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPaymentLead(lead)} title="Payment">
+                        <Wallet className="h-3.5 w-3.5" />
                       </Button>
                       {canManage && (
                         <>
@@ -611,30 +660,48 @@ export function ProductLeadsTab({ product }: { product: Product }) {
         </div>
       )}
 
-      {/* ===== Detail Drawer ===== */}
-      <Sheet open={!!detailLead} onOpenChange={(v) => !v && setDetailLead(null)}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Lead Details</SheetTitle>
-          </SheetHeader>
+      {/* ===== Premium Lead View Dialog ===== */}
+      <Dialog open={!!detailLead} onOpenChange={(v) => !v && setDetailLead(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Lead Details</DialogTitle>
+            <DialogDescription className="flex items-center gap-2">
+              <span className="font-medium text-foreground">{detailLead?.name}</span>
+              {detailLead && <StatusBadge status={detailLead.status} />}
+              <span className="text-muted-foreground">{product.name}</span>
+            </DialogDescription>
+          </DialogHeader>
           {detailLead && (
-            <div className="mt-4 space-y-4">
-              <div className="space-y-2">
-                <DetailRow label="Name" value={detailLead.name} />
-                <DetailRow label="Phone" value={detailLead.phone} />
-                <DetailRow label="Product" value={product.name} />
-                <DetailRow label="Platform" value={detailLead.platform || "—"} />
-                <DetailRow label="City" value={detailLead.city || "—"} />
-                <DetailRow label="Status" value={<StatusBadge status={detailLead.status} />} />
-                <DetailRow label="Caller" value={detailLead.current_caller?.full_name || "Unassigned"} />
-                <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
-                <DetailRow label="Updated" value={format(new Date(detailLead.updated_at), "dd MMM yyyy, HH:mm")} />
-                <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"} />
-                <DetailRow label="Remarks" value={detailLead.remarks || "—"} />
+            <div className="space-y-4">
+              {/* Contact Details */}
+              <div className="rounded-xl border border-border/60 bg-card p-4">
+                <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Contact Details</h3>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <DetailRow label="Driver Name" value={detailLead.name} />
+                  <DetailRow label="Phone" value={detailLead.phone} />
+                  <DetailRow label="City" value={detailLead.city || "—"} />
+                  <DetailRow label="Platform" value={detailLead.platform || "—"} />
+                  <DetailRow label="Source" value={detailLead.source || "—"} />
+                </div>
               </div>
 
-              <div>
-                <h4 className="mb-2 text-sm font-semibold">Call History</h4>
+              {/* Lead Information */}
+              <div className="rounded-xl border border-border/60 bg-card p-4">
+                <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Lead Information</h3>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <DetailRow label="Product" value={product.name} />
+                  <DetailRow label="Status" value={<StatusBadge status={detailLead.status} />} />
+                  <DetailRow label="Caller" value={detailLead.current_caller?.full_name || "Unassigned"} />
+                  <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
+                  <DetailRow label="Updated" value={format(new Date(detailLead.updated_at), "dd MMM yyyy, HH:mm")} />
+                  <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"} />
+                  {detailLead.remarks && <DetailRow label="Remarks" value={detailLead.remarks} />}
+                </div>
+              </div>
+
+              {/* Call History */}
+              <div className="rounded-xl border border-border/60 bg-card p-4">
+                <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Call History</h3>
                 {detailLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
                 ) : detailCalls.length === 0 ? (
@@ -646,16 +713,56 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                         <span className="font-medium">{c.direction}</span>
                         <span>{c.call_status}</span>
                         <span className="text-muted-foreground">{format(new Date(c.call_timestamp), "dd MMM, HH:mm")}</span>
-                        {c.duration_seconds && <span className="text-muted-foreground">{c.duration_seconds}s</span>}
+                        {c.duration_seconds != null && <span className="text-muted-foreground">{c.duration_seconds}s</span>}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* Payment History */}
+              <div className="rounded-xl border border-border/60 bg-card p-4">
+                <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Payment History</h3>
+                {detailLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+                ) : detailPayments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No payments recorded</p>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      {detailPayments.map((p) => (
+                        <div key={p.id} className="flex flex-wrap items-center justify-between rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs gap-2">
+                          <span className="font-bold">₹{Number(p.amount).toLocaleString()}</span>
+                          <span className="text-muted-foreground">{p.service_description || "—"}</span>
+                          <span className="font-medium">{p.payment_mode}</span>
+                          <span className="text-muted-foreground">{p.payment_mode === "UPI" ? (p.qr_name || "UPI") : "—"}</span>
+                          <span className={p.payment_status === "PAID" || p.payment_status === "SUCCESS" ? "text-success-foreground" : "text-warning-foreground"}>{p.payment_status}</span>
+                          <span className="text-muted-foreground">{p.collected_by_name || "—"}</span>
+                          <span className="text-muted-foreground">{format(new Date(p.created_at), "dd MMM, HH:mm")}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2">
+                      <span className="text-sm font-semibold">Total Collected</span>
+                      <span className="text-lg font-bold">₹{detailPayments.filter((p) => p.payment_status === "PAID" || p.payment_status === "SUCCESS").reduce((s, p) => s + Number(p.amount), 0).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => handleCall(detailLead)} disabled={!detailLead.phone}><PhoneCall className="mr-2 h-4 w-4" /> Call</Button>
+                <Button variant="outline" onClick={() => handleWhatsApp(detailLead)} disabled={!detailLead.phone}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp</Button>
+                <Button variant="outline" onClick={() => { setPaymentLead(detailLead); }}><Wallet className="mr-2 h-4 w-4" /> Payment</Button>
+                <Button variant="ghost" onClick={() => setDetailLead(null)}>Close</Button>
+              </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
+
+      <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
 
       {/* ===== Edit Dialog ===== */}
       <Dialog open={!!editLead} onOpenChange={(v) => !v && setEditLead(null)}>

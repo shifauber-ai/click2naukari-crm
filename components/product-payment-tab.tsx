@@ -38,6 +38,9 @@ interface PaymentRecord {
   amount: number;
   payment_status: string;
   payment_method: string | null;
+  payment_mode: string | null;
+  service_description: string | null;
+  qr_id: string | null;
   transaction_id: string | null;
   remarks: string | null;
   payment_date: string | null;
@@ -45,6 +48,7 @@ interface PaymentRecord {
   updated_at: string;
   employee: { full_name: string } | null;
   lead: { name: string; phone: string; platform: string | null } | null;
+  qr: { qr_name: string } | null;
 }
 
 interface CityRow { id: string; city_name: string; is_active: boolean; }
@@ -64,16 +68,19 @@ export function ProductPaymentTab({ product }: { product: Product }) {
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
   const [platformFilter, setPlatformFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [modeFilter, setModeFilter] = useState("ALL");
+  const [qrFilter, setQrFilter] = useState("ALL");
   const [range, setRange] = useState<RangeKey>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
-  const [stats, setStats] = useState({ total: 0, successful: 0, failed: 0, pending: 0 });
+  const [stats, setStats] = useState({ total: 0, upi: 0, cash: 0, pending: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
   const [employeeSummary, setEmployeeSummary] = useState<{ name: string; transactions: number; successful: number; failed: number; pending: number; total: number }[]>([]);
 
   const [employees, setEmployees] = useState<{ id: string; full_name: string }[]>([]);
   const [productPlatforms, setProductPlatforms] = useState<{ id: string; name: string }[]>([]);
+  const [qrCodes, setQrCodes] = useState<{ id: string; qr_name: string }[]>([]);
 
   const [editPayment, setEditPayment] = useState<PaymentRecord | null>(null);
   const [detailPayment, setDetailPayment] = useState<PaymentRecord | null>(null);
@@ -97,13 +104,15 @@ export function ProductPaymentTab({ product }: { product: Product }) {
 
   useEffect(() => {
     (async () => {
-      const [{ data: e }, { data: pp }] = await Promise.all([
+      const [{ data: e }, { data: pp }, { data: qr }] = await Promise.all([
         supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name"),
         supabase.from("product_platforms").select("platform:platforms!platform_id(id, name)").eq("product_id", product.id).eq("is_active", true),
+        supabase.from("car_qr_codes").select("id, qr_name").eq("product_id", product.id).eq("is_active", true).order("qr_name"),
       ]);
       setEmployees((e as { id: string; full_name: string }[]) || []);
       const ppRows = (pp as PlatformRow[] | null) || [];
       setProductPlatforms(ppRows.map((r) => r.platform).filter(Boolean) as { id: string; name: string }[]);
+      setQrCodes((qr as { id: string; qr_name: string }[]) || []);
     })();
   }, [product.id]);
 
@@ -124,17 +133,18 @@ export function ProductPaymentTab({ product }: { product: Product }) {
     const fromIso = from.toISOString();
     const toIso = to.toISOString();
 
-    let q = supabase.from("payment_records").select("amount, payment_status, employee_id, employee:profiles!employee_id(full_name)")
+    let q = supabase.from("payment_records").select("amount, payment_status, payment_mode, employee_id, employee:profiles!employee_id(full_name)")
       .eq("product_id", product.id).gte("created_at", fromIso).lte("created_at", toIso);
     if (employeeFilter !== "ALL") q = q.eq("employee_id", employeeFilter);
+    if (modeFilter !== "ALL") q = q.eq("payment_mode", modeFilter);
     const { data, error } = await q;
     if (error) { setStatsLoading(false); return; }
     const records = (data as Record<string, unknown>[]) || [];
-    const totalAmt = records.reduce((s, r) => s + Number(r.amount || 0), 0);
-    const successAmt = records.filter((r) => r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL" || r.payment_status === "PAID").reduce((s, r) => s + Number(r.amount || 0), 0);
-    const failedAmt = records.filter((r) => r.payment_status === "FAILED").reduce((s, r) => s + Number(r.amount || 0), 0);
+    const totalAmt = records.filter((r) => r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL").reduce((s, r) => s + Number(r.amount || 0), 0);
+    const upiAmt = records.filter((r) => (r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL") && (r.payment_mode === "UPI")).reduce((s, r) => s + Number(r.amount || 0), 0);
+    const cashAmt = records.filter((r) => (r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL") && (r.payment_mode === "CASH")).reduce((s, r) => s + Number(r.amount || 0), 0);
     const pendingAmt = records.filter((r) => r.payment_status === "PENDING").reduce((s, r) => s + Number(r.amount || 0), 0);
-    setStats({ total: totalAmt, successful: successAmt, failed: failedAmt, pending: pendingAmt });
+    setStats({ total: totalAmt, upi: upiAmt, cash: cashAmt, pending: pendingAmt });
 
     // Employee summary
     const eMap: Record<string, { name: string; transactions: number; successful: number; failed: number; pending: number; total: number }> = {};
@@ -151,7 +161,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
     });
     setEmployeeSummary(Object.values(eMap).sort((a, b) => b.total - a.total));
     setStatsLoading(false);
-  }, [product.id, getDateRange, employeeFilter]);
+  }, [product.id, getDateRange, employeeFilter, modeFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,13 +172,15 @@ export function ProductPaymentTab({ product }: { product: Product }) {
     let cq = supabase.from("payment_records").select("*", { count: "exact", head: true })
       .eq("product_id", product.id).gte("created_at", fromIso).lte("created_at", toIso);
     let q = supabase.from("payment_records")
-      .select("*, employee:profiles!employee_id(full_name), lead:leads(name, phone, platform)")
+      .select("*, employee:profiles!employee_id(full_name), lead:leads(name, phone, platform), qr:car_qr_codes!qr_id(qr_name)")
       .eq("product_id", product.id).gte("created_at", fromIso).lte("created_at", toIso)
       .order("created_at", { ascending: false })
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (employeeFilter !== "ALL") { cq = cq.eq("employee_id", employeeFilter); q = q.eq("employee_id", employeeFilter); }
     if (statusFilter !== "ALL") { cq = cq.eq("payment_status", statusFilter); q = q.eq("payment_status", statusFilter); }
+    if (modeFilter !== "ALL") { cq = cq.eq("payment_mode", modeFilter); q = q.eq("payment_mode", modeFilter); }
+    if (qrFilter !== "ALL") { cq = cq.eq("qr_id", qrFilter); q = q.eq("qr_id", qrFilter); }
     if (search) {
       cq = cq.or(`candidate_name.ilike.%${search}%,transaction_id.ilike.%${search}%`);
       q = q.or(`candidate_name.ilike.%${search}%,transaction_id.ilike.%${search}%`);
@@ -182,17 +194,17 @@ export function ProductPaymentTab({ product }: { product: Product }) {
       setPayments((dr.data as PaymentRecord[]) || []);
     }
     setLoading(false);
-  }, [product.id, getDateRange, page, pageSize, employeeFilter, statusFilter, search, toast]);
+  }, [product.id, getDateRange, page, pageSize, employeeFilter, statusFilter, modeFilter, qrFilter, search, toast]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
-  useEffect(() => { setSelectedIds(new Set()); }, [employeeFilter, statusFilter, search, page, pageSize, range]);
+  useEffect(() => { setSelectedIds(new Set()); }, [employeeFilter, statusFilter, modeFilter, qrFilter, search, page, pageSize, range]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const hasActiveFilters = search || employeeFilter !== "ALL" || statusFilter !== "ALL" || range !== "month";
+  const hasActiveFilters = search || employeeFilter !== "ALL" || statusFilter !== "ALL" || modeFilter !== "ALL" || qrFilter !== "ALL" || range !== "month";
 
   const openCreate = () => {
     setCName(""); setCAmount(""); setCStatus("PENDING"); setCMethod("Cash");
@@ -361,8 +373,8 @@ export function ProductPaymentTab({ product }: { product: Product }) {
       {!statsLoading && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label="Total Collection" value={`₹${stats.total.toLocaleString()}`} icon={Wallet} tone="default" />
-          <StatCard label="Successful" value={`₹${stats.successful.toLocaleString()}`} icon={CheckCircle2} tone="success" />
-          <StatCard label="Failed" value={`₹${stats.failed.toLocaleString()}`} icon={XCircle} tone="danger" />
+          <StatCard label="UPI Collection" value={`₹${stats.upi.toLocaleString()}`} icon={CheckCircle2} tone="success" />
+          <StatCard label="Cash Collection" value={`₹${stats.cash.toLocaleString()}`} icon={CheckCircle2} tone="primary" />
           <StatCard label="Pending" value={`₹${stats.pending.toLocaleString()}`} icon={AlertCircle} tone="warning" />
         </div>
       )}
@@ -400,13 +412,30 @@ export function ProductPaymentTab({ product }: { product: Product }) {
             <SelectItem value="FAILED">Failed</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={modeFilter} onValueChange={(v) => { setModeFilter(v); setPage(0); }}>
+          <SelectTrigger className="w-[110px]"><SelectValue placeholder="Mode" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Modes</SelectItem>
+            <SelectItem value="CASH">Cash</SelectItem>
+            <SelectItem value="UPI">UPI</SelectItem>
+          </SelectContent>
+        </Select>
+        {qrCodes.length > 0 && (
+          <Select value={qrFilter} onValueChange={(v) => { setQrFilter(v); setPage(0); }}>
+            <SelectTrigger className="w-[130px]"><SelectValue placeholder="QR" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All QR</SelectItem>
+              {qrCodes.map((q) => <SelectItem key={q.id} value={q.id}>{q.qr_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search name or transaction ID..." value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-9" />
         </div>
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setEmployeeFilter("ALL"); setStatusFilter("ALL"); setRange("month"); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setEmployeeFilter("ALL"); setStatusFilter("ALL"); setModeFilter("ALL"); setQrFilter("ALL"); setRange("month"); }}>
             <X className="mr-1 h-3.5 w-3.5" /> Clear
           </Button>
         )}
@@ -440,12 +469,13 @@ export function ProductPaymentTab({ product }: { product: Product }) {
                 {canManage && <TableHead className="w-10"><div className="flex items-center"><Switch checked={allSelected} onCheckedChange={toggleSelectAll} /></div></TableHead>}
                 <TableHead>Employee</TableHead>
                 <TableHead>Lead/Driver</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Platform</TableHead>
+                <TableHead>Service</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead>QR Name</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Collected By</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Reference</TableHead>
                 {canManage && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -457,12 +487,13 @@ export function ProductPaymentTab({ product }: { product: Product }) {
                   )}
                   <TableCell className="text-sm">{p.employee?.full_name || "—"}</TableCell>
                   <TableCell className="font-medium">{p.candidate_name || p.lead?.name || "—"}</TableCell>
-                  <TableCell className="text-sm">{p.lead?.phone || "—"}</TableCell>
-                  <TableCell className="text-sm">{p.lead?.platform || "—"}</TableCell>
+                  <TableCell className="text-sm">{p.service_description || "—"}</TableCell>
                   <TableCell className="font-medium">₹{Number(p.amount).toLocaleString()}</TableCell>
+                  <TableCell className="text-sm">{p.payment_mode || p.payment_method || "—"}</TableCell>
+                  <TableCell className="text-sm">{p.qr?.qr_name || (p.payment_mode === "CASH" || p.payment_mode === "Cash" ? "—" : "—")}</TableCell>
                   <TableCell>{statusBadge(p.payment_status)}</TableCell>
+                  <TableCell className="text-sm">{p.employee?.full_name || "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{p.payment_date ? format(new Date(p.payment_date), "dd MMM yyyy") : "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.transaction_id || "—"}</TableCell>
                   {canManage && (
                     <TableCell>
                       <div className="flex items-center justify-end gap-0.5">
@@ -562,7 +593,9 @@ export function ProductPaymentTab({ product }: { product: Product }) {
               <div className="flex justify-between"><span className="text-muted-foreground">Platform:</span><span>{detailPayment.lead?.platform || "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span><span className="font-bold">₹{Number(detailPayment.amount).toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Status:</span>{statusBadge(detailPayment.payment_status)}</div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Method:</span><span>{detailPayment.payment_method || "—"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Method:</span><span>{detailPayment.payment_mode || detailPayment.payment_method || "—"}</span></div>
+              {detailPayment.qr?.qr_name && <div className="flex justify-between"><span className="text-muted-foreground">QR Name:</span><span>{detailPayment.qr.qr_name}</span></div>}
+              {detailPayment.service_description && <div className="flex justify-between"><span className="text-muted-foreground">Service:</span><span>{detailPayment.service_description}</span></div>}
               <div className="flex justify-between"><span className="text-muted-foreground">Date:</span><span>{detailPayment.payment_date ? format(new Date(detailPayment.payment_date), "dd MMM yyyy") : "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Reference:</span><span>{detailPayment.transaction_id || "—"}</span></div>
               {detailPayment.remarks && <div className="flex justify-between"><span className="text-muted-foreground">Remarks:</span><span>{detailPayment.remarks}</span></div>}

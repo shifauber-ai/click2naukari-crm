@@ -25,13 +25,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
   PhoneCall, Search, Plus, Eye, Trash2, ArrowUp, ArrowDown,
-  Loader2, Users, UserCheck, UserX, ListOrdered, X, Pencil,
+  Loader2, Users, UserCheck, UserX, ListOrdered, X, Pencil, MapPin,
 } from "lucide-react";
 import { format } from "date-fns";
 
 interface QueueRow extends CallerQueue {
   employee?: Profile;
+  city_name?: string | null;
 }
+
+interface CityRow { id: string; city_name: string; is_active: boolean; }
 
 interface WorkloadStats {
   activeLeads: number;
@@ -48,6 +51,8 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
 
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [productCities, setProductCities] = useState<CityRow[]>([]);
+  const [cityFilter, setCityFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -72,6 +77,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   // Add form
   const [addEmpId, setAddEmpId] = useState("");
   const [addPriority, setAddPriority] = useState("100");
+  const [addCityId, setAddCityId] = useState("");
 
   // Edit form
   const [editPriority, setEditPriority] = useState("100");
@@ -87,13 +93,17 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
 
-  // Load all products for assignment display
+  // Load all products + product cities
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("products").select("*").eq("is_active", true).order("name");
-      setAllProducts((data as Product[]) || []);
+      const [{ data: prods }, { data: cities }] = await Promise.all([
+        supabase.from("products").select("*").eq("is_active", true).order("name"),
+        supabase.from("product_cities").select("id, city_name, is_active").eq("product_id", product.id).order("city_name"),
+      ]);
+      setAllProducts((prods as Product[]) || []);
+      setProductCities(((cities as CityRow[]) || []).filter((c) => c.is_active));
     })();
-  }, []);
+  }, [product.id]);
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -114,7 +124,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     setLoading(true);
     let q = supabase
       .from("caller_queues")
-      .select("*, employee:profiles(*)")
+      .select("*, employee:profiles(*), city:product_cities!city_id(city_name)")
       .eq("product_id", product.id)
       .order("priority", { ascending: true })
       .order("created_at", { ascending: true });
@@ -123,8 +133,10 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     if (error) {
       toast({ title: "Unable to load caller queue. Please try again.", variant: "destructive" });
     } else {
-      let rows = (data as QueueRow[]) || [];
-      // Apply client-side filters (dataset is small — product queue only)
+      let rows = ((data as (QueueRow & { city?: { city_name: string } | null })[]) || []).map((r) => ({
+        ...r,
+        city_name: r.city?.city_name || null,
+      }));
       if (search) {
         rows = rows.filter((r) =>
           r.employee?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -138,10 +150,14 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       if (priorityFilter === "HIGH") rows = rows.filter((r) => r.priority < 50);
       if (priorityFilter === "MEDIUM") rows = rows.filter((r) => r.priority >= 50 && r.priority <= 100);
       if (priorityFilter === "LOW") rows = rows.filter((r) => r.priority > 100);
+      if (cityFilter !== "ALL") {
+        if (cityFilter === "ALL_CITIES") rows = rows.filter((r) => !r.city_id);
+        else rows = rows.filter((r) => r.city_id === cityFilter);
+      }
       setQueue(rows);
     }
     setLoading(false);
-  }, [product.id, search, statusFilter, queueFilter, priorityFilter, toast]);
+  }, [product.id, search, statusFilter, queueFilter, priorityFilter, cityFilter, toast]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -149,9 +165,9 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     return () => clearTimeout(t);
   }, [load]);
 
-  const hasActiveFilters = search || statusFilter !== "ALL" || queueFilter !== "ALL" || priorityFilter !== "ALL";
+  const hasActiveFilters = search || statusFilter !== "ALL" || queueFilter !== "ALL" || priorityFilter !== "ALL" || cityFilter !== "ALL";
   const clearFilters = () => {
-    setSearch(""); setStatusFilter("ALL"); setQueueFilter("ALL"); setPriorityFilter("ALL");
+    setSearch(""); setStatusFilter("ALL"); setQueueFilter("ALL"); setPriorityFilter("ALL"); setCityFilter("ALL");
   };
 
   // Get active employees not already in queue
@@ -172,15 +188,17 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     e.preventDefault();
     if (!addEmpId) return;
     setSaving(true);
-    // Check for duplicate
-    const { data: existing } = await supabase
+    // Check for duplicate (same product + employee + city)
+    let dupQuery = supabase
       .from("caller_queues")
       .select("id")
       .eq("product_id", product.id)
-      .eq("employee_id", addEmpId)
-      .maybeSingle();
+      .eq("employee_id", addEmpId);
+    if (addCityId) dupQuery = dupQuery.eq("city_id", addCityId);
+    else dupQuery = dupQuery.is("city_id", null);
+    const { data: existing } = await dupQuery.maybeSingle();
     if (existing) {
-      toast({ title: "Caller is already assigned to this product.", variant: "destructive" });
+      toast({ title: "Caller is already assigned to this product/city queue.", variant: "destructive" });
       setSaving(false);
       return;
     }
@@ -191,17 +209,20 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         employee_id: addEmpId,
         priority: parseInt(addPriority, 10) || 100,
         is_active: true,
+        city_id: addCityId || null,
       })
-      .select("*, employee:profiles(*)")
+      .select("*, employee:profiles(*), city:product_cities!city_id(city_name)")
       .single();
     if (error) {
       toast({ title: "Caller could not be added. Please try again.", variant: "destructive" });
     } else {
-      setQueue((prev) => [...prev, data as QueueRow].sort((a, b) => a.priority - b.priority));
+      const newRow = data as QueueRow & { city?: { city_name: string } | null };
+      setQueue((prev) => [...prev, { ...newRow, city_name: newRow.city?.city_name || null }].sort((a, b) => a.priority - b.priority));
       toast({ title: "Caller added to queue" });
       setAddOpen(false);
       setAddEmpId("");
       setAddPriority("100");
+      setAddCityId("");
       loadStats();
     }
     setSaving(false);
@@ -409,6 +430,16 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
             <SelectItem value="LOW">Low</SelectItem>
           </SelectContent>
         </Select>
+        {productCities.length > 0 && (
+          <Select value={cityFilter} onValueChange={setCityFilter}>
+            <SelectTrigger className="w-[140px]"><SelectValue placeholder="City" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Cities</SelectItem>
+              <SelectItem value="ALL_CITIES">Product-wide</SelectItem>
+              {productCities.map((c) => <SelectItem key={c.id} value={c.id}>{c.city_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-3.5 w-3.5" /> Clear
@@ -433,6 +464,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Caller</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>City</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Queue</TableHead>
                 <TableHead>Priority</TableHead>
@@ -450,6 +482,11 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                     {!row.employee?.is_active && <span className="ml-2 text-xs text-warning-foreground">(emp inactive)</span>}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{row.employee?.email || "—"}</TableCell>
+                  <TableCell className="text-sm">
+                    {row.city_name ? (
+                      <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary"><MapPin className="h-3 w-3" />{row.city_name}</span>
+                    ) : <span className="text-muted-foreground text-xs">Product-wide</span>}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {canManage ? (
@@ -530,6 +567,17 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                   {availableEmployees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>City (optional — leave blank for product-wide)</Label>
+              <Select value={addCityId} onValueChange={setAddCityId}>
+                <SelectTrigger><SelectValue placeholder="Product-wide" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Product-wide</SelectItem>
+                  {productCities.map((c) => <SelectItem key={c.id} value={c.id}>{c.city_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">Same caller can be added to multiple city queues separately.</p>
             </div>
             <div>
               <Label>Priority (lower = higher priority)</Label>

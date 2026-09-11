@@ -78,6 +78,7 @@ export interface CallerQueue {
   updated_at: string;
   product?: Product;
   employee?: Profile;
+  city_id?: string | null;
 }
 
 export interface Lead {
@@ -99,6 +100,7 @@ export interface Lead {
   updated_at: string;
   platform?: string | null;
   city?: string | null;
+  source?: string | null;
   vehicle_no?: string | null;
   dl_no?: string | null;
   total_trips?: number | null;
@@ -352,6 +354,10 @@ export interface PaymentRecord {
   payment_method: string;
   transaction_id: string;
   remarks: string;
+  service_description?: string;
+  payment_mode?: string;
+  qr_id?: string | null;
+  collected_by?: string | null;
   payment_date: string;
   payment_time: string;
   created_at: string;

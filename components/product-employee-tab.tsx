@@ -22,15 +22,17 @@ import { EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye,
+  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, MapPin,
 } from "lucide-react";
 import { format } from "date-fns";
+
+interface CityRow { id: string; city_name: string; is_active: boolean; }
 
 export function ProductEmployeeTab({ product }: { product: Product }) {
   const { profile } = useAuth();
   const { toast } = useToast();
 
-  const [employees, setEmployees] = useState<(Profile & { assigned_products?: string[] })[]>([]);
+  const [employees, setEmployees] = useState<(Profile & { assigned_cities?: string[] })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
@@ -38,7 +40,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [detailEmployee, setDetailEmployee] = useState<(Profile & { assigned_products?: string[] }) | null>(null);
+  const [detailEmployee, setDetailEmployee] = useState<(Profile & { assigned_cities?: string[] }) | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<Profile | null>(null);
   const [saving, setSaving] = useState(false);
@@ -51,17 +53,25 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [isActive, setIsActive] = useState(true);
   const [newPassword, setNewPassword] = useState("");
 
+  const [productCities, setProductCities] = useState<CityRow[]>([]);
+  const [selectedCityIds, setSelectedCityIds] = useState<Set<string>>(new Set());
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [assignedProductIds, setAssignedProductIds] = useState<Set<string>>(new Set());
+
+  const [editTargetId, setEditTargetId] = useState<string>("");
 
   const isAdmin = profile?.role === "ADMIN";
-  const isManager = profile?.role === "MANAGER";
 
   useEffect(() => {
-    supabase.from("products").select("*").order("name").then(({ data }) => {
-      setAllProducts((data as Product[]) || []);
-    });
-  }, []);
+    (async () => {
+      const [{ data: pc }, { data: ap }] = await Promise.all([
+        supabase.from("product_cities").select("id, city_name, is_active").eq("product_id", product.id).order("city_name"),
+        supabase.from("products").select("*").order("name"),
+      ]);
+      setProductCities(((pc as CityRow[]) || []).filter((c) => c.is_active));
+      setAllProducts((ap as Product[]) || []);
+    })();
+  }, [product.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,17 +85,20 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       toast({ title: "Failed to load employees", variant: "destructive" });
     } else {
       const profiles = (data as Profile[]) || [];
-      // Load manager assignments
-      const { data: assignments } = await supabase.from("manager_product_assignments").select("manager_id, product_id, product:products(name)");
-      const assignMap: Record<string, string[]> = {};
-      (assignments as { manager_id: string; product_id: string; product: { name: string } }[] | null)?.forEach((a) => {
-        if (!assignMap[a.manager_id]) assignMap[a.manager_id] = [];
-        assignMap[a.manager_id].push(a.product?.name || a.product_id);
+      // Load city assignments for this product
+      const { data: cityAssigns } = await supabase
+        .from("employee_product_cities")
+        .select("employee_id, city_id, city:product_cities!city_id(city_name)")
+        .eq("product_id", product.id);
+      const cityMap: Record<string, string[]> = {};
+      (cityAssigns as { employee_id: string; city_id: string; city: { city_name: string } }[] | null)?.forEach((a) => {
+        if (!cityMap[a.employee_id]) cityMap[a.employee_id] = [];
+        if (a.city?.city_name) cityMap[a.employee_id].push(a.city.city_name);
       });
-      setEmployees(profiles.map((p) => ({ ...p, assigned_products: assignMap[p.id] || [] })));
+      setEmployees(profiles.map((p) => ({ ...p, assigned_cities: cityMap[p.id] || [] })));
     }
     setLoading(false);
-  }, [search, roleFilter, statusFilter, toast]);
+  }, [search, roleFilter, statusFilter, product.id, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -95,21 +108,34 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const openCreate = () => {
     setFullName(""); setEmail(""); setPassword(""); setPhone("");
     setRole("EMPLOYEE"); setIsActive(true);
-    setAssignedProductIds(new Set());
+    setSelectedCityIds(new Set());
+    setSelectedProductIds(new Set([product.id]));
     setCreateOpen(true);
   };
 
-  const openEdit = (p: Profile & { assigned_products?: string[] }) => {
-    setDetailEmployee(null);
-    setEditOpen(true);
+  const openEditFromRow = (p: Profile & { assigned_cities?: string[] }) => {
+    setEditTargetId(p.id);
     setFullName(p.full_name);
     setPhone(p.phone || "");
     setRole(p.role);
     setIsActive(p.is_active);
-    // Load this user's product assignments
     (async () => {
-      const { data } = await supabase.from("manager_product_assignments").select("product_id").eq("manager_id", p.id);
-      setAssignedProductIds(new Set((data as { product_id: string }[] || []).map((a) => a.product_id)));
+      // Load city assignments for this employee in this product
+      const { data: cityAssigns } = await supabase
+        .from("employee_product_cities")
+        .select("city_id")
+        .eq("employee_id", p.id)
+        .eq("product_id", product.id)
+        .eq("is_active", true);
+      setSelectedCityIds(new Set((cityAssigns as { city_id: string }[] || []).map((a) => a.city_id)));
+      // Load product assignments if manager
+      if (p.role === "MANAGER") {
+        const { data: prodAssigns } = await supabase
+          .from("manager_product_assignments")
+          .select("product_id")
+          .eq("manager_id", p.id);
+        setSelectedProductIds(new Set((prodAssigns as { product_id: string }[] || []).map((a) => a.product_id)));
+      }
     })();
     setEditOpen(true);
   };
@@ -117,20 +143,22 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const { ok, error } = await callEdgeFunction("crm-admin-users", {
+    const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
+    const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
       action: "create",
       email, password, full_name: fullName, phone, role,
+      product_ids: productIds,
     });
     if (!ok) {
       toast({ title: error || "Failed to create employee", variant: "destructive" });
     } else {
-      // Assign products if manager
-      if (role === "MANAGER" && assignedProductIds.size > 0) {
-        const { data: newProfile } = await supabase.from("profiles").select("id").eq("email", email).single();
-        if (newProfile) {
-          const inserts = Array.from(assignedProductIds).map((pid) => ({ manager_id: (newProfile as { id: string }).id, product_id: pid }));
-          await supabase.from("manager_product_assignments").insert(inserts);
-        }
+      // Save city assignments for this product
+      const newUserId = (data as { user_id: string })?.user_id;
+      if (newUserId && selectedCityIds.size > 0) {
+        const cityInserts = Array.from(selectedCityIds).map((cid) => ({
+          employee_id: newUserId, product_id: product.id, city_id: cid, is_active: true,
+        }));
+        await supabase.from("employee_product_cities").insert(cityInserts);
       }
       toast({ title: `${role === "ADMIN" ? "Admin" : role === "MANAGER" ? "Manager" : "Employee"} account created` });
       setCreateOpen(false);
@@ -142,21 +170,25 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
     const { ok, error } = await callEdgeFunction("crm-admin-users", {
       action: "update",
-      user_id: detailEmployee?.id || editTargetId,
+      user_id: editTargetId,
       full_name: fullName, phone, role,
+      product_ids: productIds,
     });
     if (!ok) {
       toast({ title: error || "Failed to update", variant: "destructive" });
     } else {
-      // Update product assignments
-      const targetId = detailEmployee?.id || editTargetId;
-      if (targetId && role === "MANAGER") {
-        await supabase.from("manager_product_assignments").delete().eq("manager_id", targetId);
-        if (assignedProductIds.size > 0) {
-          const inserts = Array.from(assignedProductIds).map((pid) => ({ manager_id: targetId, product_id: pid }));
-          await supabase.from("manager_product_assignments").insert(inserts);
+      // Sync city assignments for this product
+      if (editTargetId) {
+        await supabase.from("employee_product_cities")
+          .delete().eq("employee_id", editTargetId).eq("product_id", product.id);
+        if (selectedCityIds.size > 0) {
+          const cityInserts = Array.from(selectedCityIds).map((cid) => ({
+            employee_id: editTargetId, product_id: product.id, city_id: cid, is_active: true,
+          }));
+          await supabase.from("employee_product_cities").insert(cityInserts);
         }
       }
       toast({ title: "Employee updated" });
@@ -164,21 +196,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       load();
     }
     setSaving(false);
-  };
-
-  const [editTargetId, setEditTargetId] = useState<string>("");
-
-  const openEditFromRow = (p: Profile & { assigned_products?: string[] }) => {
-    setEditTargetId(p.id);
-    setFullName(p.full_name);
-    setPhone(p.phone || "");
-    setRole(p.role);
-    setIsActive(p.is_active);
-    (async () => {
-      const { data } = await supabase.from("manager_product_assignments").select("product_id").eq("manager_id", p.id);
-      setAssignedProductIds(new Set((data as { product_id: string }[] || []).map((a) => a.product_id)));
-    })();
-    setEditOpen(true);
   };
 
   const toggleActive = async (p: Profile) => {
@@ -215,8 +232,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     setSaving(false);
   };
 
-  const toggleProductAssignment = (pid: string) => {
-    setAssignedProductIds((prev) => { const n = new Set(prev); n.has(pid) ? n.delete(pid) : n.add(pid); return n; });
+  const toggleCity = (cid: string) => {
+    setSelectedCityIds((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
+  };
+  const toggleProduct = (pid: string) => {
+    setSelectedProductIds((prev) => { const n = new Set(prev); n.has(pid) ? n.delete(pid) : n.add(pid); return n; });
   };
 
   const roleBadge = (r: string) => {
@@ -227,19 +247,69 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
 
   const hasActiveFilters = search || roleFilter !== "ALL" || statusFilter !== "ALL";
 
+  const formFields = () => (
+    <div className="space-y-3">
+      <div><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
+      <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+      <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+      <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+      <div>
+        <Label>Role</Label>
+        <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="EMPLOYEE">Employee</SelectItem>
+            <SelectItem value="MANAGER">Manager</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {/* Product: auto-filled from workspace context */}
+      <div>
+        <Label>Product {role === "MANAGER" ? "(Manager can access multiple)" : ""}</Label>
+        {role === "MANAGER" ? (
+          <div className="space-y-2 mt-2 rounded-lg border border-border/60 p-3">
+            {allProducts.map((p) => (
+              <div key={p.id} className="flex items-center gap-2">
+                <Checkbox checked={selectedProductIds.has(p.id)} onCheckedChange={() => toggleProduct(p.id)} id={`prod-${p.id}`} />
+                <Label htmlFor={`prod-${p.id}`} className="text-sm font-normal cursor-pointer">{p.name}</Label>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm font-medium">{product.name}</div>
+        )}
+      </div>
+      {/* City selection for this product */}
+      <div>
+        <Label>Assigned Cities for {product.name}</Label>
+        {productCities.length > 0 ? (
+          <div className="space-y-2 mt-2 rounded-lg border border-border/60 p-3">
+            {productCities.map((c) => (
+              <div key={c.id} className="flex items-center gap-2">
+                <Checkbox checked={selectedCityIds.has(c.id)} onCheckedChange={() => toggleCity(c.id)} id={`city-${c.id}`} />
+                <Label htmlFor={`city-${c.id}`} className="text-sm font-normal cursor-pointer">{c.city_name}</Label>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-1">No cities configured for {product.name} yet.</p>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold tracking-tight">Employee Management</h2>
-          <p className="text-sm text-muted-foreground">Manage employees, managers, and product assignments</p>
+          <h2 className="text-lg font-bold tracking-tight">Employee Management — {product.name}</h2>
+          <p className="text-sm text-muted-foreground">Manage employees and city assignments for {product.name}</p>
         </div>
         {isAdmin && (
           <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" /> Add Employee</Button>
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -270,7 +340,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         )}
       </div>
 
-      {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Loading employees...</span>
@@ -286,7 +355,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Assigned Products</TableHead>
+                <TableHead>Assigned Cities</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -299,10 +368,16 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
                   <TableCell className="text-sm">{p.email}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.phone || "—"}</TableCell>
                   <TableCell>{roleBadge(p.role)}</TableCell>
-                  <TableCell className="text-sm">
-                    {p.assigned_products && p.assigned_products.length > 0
-                      ? p.assigned_products.join(", ")
-                      : "—"}
+                  <TableCell>
+                    {p.assigned_cities && p.assigned_cities.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {p.assigned_cities.map((c) => (
+                          <span key={c} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                            <MapPin className="h-3 w-3" />{c}
+                          </span>
+                        ))}
+                      </div>
+                    ) : "—"}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -328,35 +403,9 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Add Employee</DialogTitle><DialogDescription>Create a new user account</DialogDescription></DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-3">
-            <div><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
-            <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-            <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
-            <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-            <div>
-              <Label>Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                  <SelectItem value="MANAGER">Manager</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {role === "MANAGER" && allProducts.length > 0 && (
-              <div>
-                <Label>Product Assignments</Label>
-                <div className="space-y-2 mt-2">
-                  {allProducts.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2">
-                      <Checkbox checked={assignedProductIds.has(p.id)} onCheckedChange={() => toggleProductAssignment(p.id)} id={`prod-${p.id}`} />
-                      <Label htmlFor={`prod-${p.id}`} className="text-sm font-normal cursor-pointer">{p.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+          <DialogHeader><DialogTitle>Add Employee — {product.name}</DialogTitle><DialogDescription>Create a new user. Product is automatically set to {product.name}.</DialogDescription></DialogHeader>
+          <form onSubmit={handleCreate}>
+            {formFields()}
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Creating..." : "Create"}</Button>
@@ -368,33 +417,9 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Edit Employee</DialogTitle><DialogDescription>Update user details and product assignments</DialogDescription></DialogHeader>
-          <form onSubmit={handleEdit} className="space-y-3">
-            <div><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
-            <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-            <div>
-              <Label>Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                  <SelectItem value="MANAGER">Manager</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {role === "MANAGER" && allProducts.length > 0 && (
-              <div>
-                <Label>Product Assignments</Label>
-                <div className="space-y-2 mt-2">
-                  {allProducts.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2">
-                      <Checkbox checked={assignedProductIds.has(p.id)} onCheckedChange={() => toggleProductAssignment(p.id)} id={`edit-prod-${p.id}`} />
-                      <Label htmlFor={`edit-prod-${p.id}`} className="text-sm font-normal cursor-pointer">{p.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+          <DialogHeader><DialogTitle>Edit Employee — {product.name}</DialogTitle><DialogDescription>Update user details and city assignments for {product.name}</DialogDescription></DialogHeader>
+          <form onSubmit={handleEdit}>
+            {formFields()}
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
@@ -408,15 +433,25 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Employee Details</DialogTitle></DialogHeader>
           {detailEmployee && (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Name:</span><span className="font-medium">{detailEmployee.full_name}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span>{detailEmployee.email}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Phone:</span><span>{detailEmployee.phone || "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Role:</span>{roleBadge(detailEmployee.role)}</div>
               <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><span>{detailEmployee.is_active ? "Active" : "Inactive"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Product:</span><span className="font-medium">{product.name}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Created:</span><span>{format(new Date(detailEmployee.created_at), "dd MMM yyyy")}</span></div>
-              {detailEmployee.assigned_products && detailEmployee.assigned_products.length > 0 && (
-                <div><span className="text-muted-foreground">Assigned Products:</span><div className="mt-1 flex flex-wrap gap-1">{detailEmployee.assigned_products.map((p) => <span key={p} className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">{p}</span>)}</div></div>
+              {detailEmployee.assigned_cities && detailEmployee.assigned_cities.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Assigned Cities:</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {detailEmployee.assigned_cities.map((c) => (
+                      <span key={c} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                        <MapPin className="h-3 w-3" />{c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}

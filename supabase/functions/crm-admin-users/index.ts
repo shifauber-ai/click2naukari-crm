@@ -17,7 +17,8 @@ interface ActionRequest {
   email?: string;
   password?: string;
   full_name?: string;
-  role?: "ADMIN" | "EMPLOYEE";
+  role?: "ADMIN" | "MANAGER" | "EMPLOYEE";
+  product_ids?: string[];
   user_id?: string;
   is_active?: boolean;
   phone?: string;
@@ -81,7 +82,8 @@ Deno.serve(async (req: Request) => {
       if (!body.email || !body.password || !body.full_name) {
         return json({ error: "Missing required fields" }, 400);
       }
-      const role = body.role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
+      const validRoles = ["ADMIN", "MANAGER", "EMPLOYEE"];
+      const role = validRoles.includes(body.role || "") ? (body.role as string) : "EMPLOYEE";
       const { data, error } = await adminClient.auth.admin.createUser({
         email: body.email,
         password: body.password,
@@ -103,6 +105,15 @@ Deno.serve(async (req: Request) => {
           .update({ phone: body.phone })
           .eq("id", data.user.id);
       }
+      // Assign products if manager
+      if (role === "MANAGER" && body.product_ids && body.product_ids.length > 0) {
+        const inserts = body.product_ids.map((pid) => ({
+          manager_id: data.user.id,
+          product_id: pid,
+        }));
+        await adminClient.from("manager_product_assignments").insert(inserts);
+      }
+      // Also deactivate caller queue entries when deactivating
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
         action: "EMPLOYEE_CREATE",
@@ -127,6 +138,20 @@ Deno.serve(async (req: Request) => {
         .update(updates)
         .eq("id", body.user_id);
       if (error) return json({ error: error.message }, 400);
+      // Sync manager product assignments
+      if (body.role === "MANAGER" && body.product_ids !== undefined) {
+        await adminClient
+          .from("manager_product_assignments")
+          .delete()
+          .eq("manager_id", body.user_id);
+        if (body.product_ids.length > 0) {
+          const inserts = body.product_ids.map((pid) => ({
+            manager_id: body.user_id,
+            product_id: pid,
+          }));
+          await adminClient.from("manager_product_assignments").insert(inserts);
+        }
+      }
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
         action: "EMPLOYEE_UPDATE",
@@ -149,6 +174,11 @@ Deno.serve(async (req: Request) => {
       // Deactivate caller-queue membership too so they get skipped.
       await adminClient
         .from("caller_queues")
+        .update({ is_active: body.is_active })
+        .eq("employee_id", body.user_id);
+      // Also deactivate employee_product_cities assignments
+      await adminClient
+        .from("employee_product_cities")
         .update({ is_active: body.is_active })
         .eq("employee_id", body.user_id);
       await adminClient.from("audit_logs").insert({

@@ -84,10 +84,7 @@ const ADMIN_SECTIONS: NavSection[] = [
   },
   {
     label: "Directory & Data",
-    items: [
-      { href: "/crm/admin/directory", label: "Directory", icon: BookMarked },
-      { href: "/crm/admin/import-export", label: "Import / Export", icon: Upload },
-    ],
+    items: [],
   },
   {
     label: "Call Sync",
@@ -107,10 +104,7 @@ const ADMIN_SECTIONS: NavSection[] = [
     items: [
       { href: "/crm/admin/employees", label: "Users / Employees", icon: Users },
       { href: "/crm/admin/products", label: "Products", icon: Package },
-      { href: "/crm/admin/platforms", label: "Platforms", icon: Smartphone },
-      { href: "/crm/admin/hero-ids", label: "Hero IDs", icon: IdCard },
       { href: "/crm/admin/sims", label: "SIM", icon: CreditCard },
-      { href: "/crm/admin/audit", label: "Audit Logs", icon: Shield },
       { href: "/crm/admin/settings", label: "Settings", icon: Settings },
     ],
   },
