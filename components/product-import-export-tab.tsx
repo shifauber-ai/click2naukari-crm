@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase/client";
 import { Product, ImportBatch, ImportRecord, DuplicateType, LEAD_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { normalizePhone, findInternalDuplicates } from "@/lib/duplicate-utils";
 import {
   Upload, Download, FileUp, CheckCircle2, XCircle, Loader2,
   AlertCircle, ChevronLeft, ChevronRight, History, X, CopyX,
+  ArrowRight, FileSpreadsheet,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -57,10 +59,73 @@ interface PreviewSummary {
 interface CityRow { id: string; city_name: string; is_active: boolean; }
 interface PlatformRow { platform: { id: string; name: string } | null }
 
+// CRM field definitions for mapping
+interface CRMField { key: string; label: string; required: boolean; }
+
+const NORMAL_FIELDS: CRMField[] = [
+  { key: "name", label: "Name", required: true },
+  { key: "phone", label: "Phone", required: true },
+  { key: "platform", label: "Platform", required: false },
+  { key: "city", label: "City", required: false },
+  { key: "status", label: "Status", required: false },
+  { key: "source", label: "Source", required: false },
+];
+
+const HC_FIELDS: CRMField[] = [
+  { key: "name", label: "Driver Name", required: true },
+  { key: "phone", label: "Contact", required: true },
+  { key: "vehicleNo", label: "Vehicle No", required: false },
+  { key: "dlNo", label: "DL No", required: false },
+  { key: "totalTrips", label: "Total Trips", required: false },
+  { key: "licenseNo", label: "License No", required: false },
+  { key: "city", label: "City", required: false },
+];
+
+type Mapping = Record<string, string>; // crmFieldKey -> fileColumnIndex or ""
+
+// Auto-suggest mapping based on header name similarity
+function autoMap(headers: string[], fields: CRMField[]): Mapping {
+  const map: Mapping = {};
+  for (const field of fields) {
+    const fieldKey = field.key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    let best = -1;
+    let bestScore = 0;
+    headers.forEach((h, i) => {
+      const headerNorm = h.toLowerCase().replace(/[^a-z0-9]/g, "");
+      let score = 0;
+      if (headerNorm === fieldKey) score = 100;
+      else if (headerNorm.includes(fieldKey) || fieldKey.includes(headerNorm)) score = 80;
+      else {
+        // Check synonyms
+        const synonyms: Record<string, string[]> = {
+          phone: ["contact", "mobile", "number", "cell"],
+          name: ["driver", "lead", "candidate"],
+          city: ["location", "town"],
+          platform: ["source_platform", "app"],
+          source: ["origin", "channel"],
+        };
+        const syns = synonyms[field.key] || [];
+        for (const syn of syns) {
+          if (headerNorm.includes(syn) || syn.includes(headerNorm)) { score = 70; break; }
+        }
+      }
+      if (score > bestScore) { bestScore = score; best = i; }
+    });
+    map[field.key] = best >= 0 && bestScore >= 70 ? String(best) : "";
+  }
+  return map;
+}
+
 export function ProductImportExportTab({ product, isHC }: { product: Product; isHC: boolean }) {
   const { profile } = useAuth();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [fileHeaders, setFileHeaders] = useState<string[]>([]);
+  const [fileRows, setFileRows] = useState<string[][]>([]);
+  const [fileName, setFileName] = useState("");
+  const [mapping, setMapping] = useState<Mapping>({});
+  const [showMapping, setShowMapping] = useState(false);
 
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [preview, setPreview] = useState<PreviewSummary | null>(null);
@@ -70,8 +135,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   } | null>(null);
 
   // Import config
-  const [impPlatform, setImpPlatform] = useState("ALL");
-  const [impCity, setImpCity] = useState("ALL");
   const [impSource, setImpSource] = useState("Showroom Data");
   const [impStatus, setImpStatus] = useState<string>(isHC ? "TAG_ADDED" : "NEW");
 
@@ -101,6 +164,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [exportPlatform, setExportPlatform] = useState("ALL");
   const [exportCity, setExportCity] = useState("ALL");
   const [exportEmployee, setExportEmployee] = useState("ALL");
+  const [exportSource, setExportSource] = useState("ALL");
   const [exportDateFrom, setExportDateFrom] = useState("");
   const [exportDateTo, setExportDateTo] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -110,6 +174,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const canManage = isAdmin || isManager;
 
   const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
+  const crmFields = isHC ? HC_FIELDS : NORMAL_FIELDS;
 
   // Load reference data
   useEffect(() => {
@@ -182,64 +247,104 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
   const handleFile = (file: File) => {
     setImportResult(null);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      await processFile(text, file.name);
-    };
-    reader.readAsText(file);
+    setPreview(null);
+    setParsedRows([]);
+    setFileName(file.name);
+
+    const isXlsx = file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
+
+    if (isXlsx) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const wb = XLSX.read(data, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false }) as unknown[][];
+          const stringRows = rows.map((r) => (r as unknown[]).map((c) => String(c ?? "").trim()));
+          processHeaders(stringRows);
+        } catch {
+          toast({ title: "Failed to read Excel file. Please check the format.", variant: "destructive" });
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        const rows = parseCSV(text);
+        processHeaders(rows);
+      };
+      reader.readAsText(file);
+    }
   };
 
-  const processFile = useCallback(async (text: string, _filename: string) => {
-    const rows = parseCSV(text);
+  const processHeaders = (rows: string[][]) => {
     if (rows.length === 0) {
       toast({ title: "File is empty", variant: "destructive" });
       return;
     }
-
+    // Detect header row
     const firstRow = rows[0].map((c) => c.toLowerCase());
-    const hasHeader = firstRow.some((c) => c.includes("name") || c.includes("driver") || c.includes("phone") || c.includes("contact"));
-    const dataRows = hasHeader ? rows.slice(1) : rows;
+    const hasHeader = firstRow.some((c) =>
+      c.includes("name") || c.includes("driver") || c.includes("phone") || c.includes("contact") || c.includes("city") || c.includes("platform")
+    );
+    let headers: string[];
+    let dataRows: string[][];
+    if (hasHeader) {
+      headers = rows[0];
+      dataRows = rows.slice(1);
+    } else {
+      headers = crmFields.map((f, i) => `Column ${i + 1}`);
+      dataRows = rows;
+    }
+    setFileHeaders(headers);
+    setFileRows(dataRows);
+    setMapping(autoMap(headers, crmFields));
+    setShowMapping(true);
+  };
 
+  const applyMappingAndValidate = useCallback(async () => {
     const validPlatformNames = new Set(productPlatforms.map((p) => p.name.toUpperCase()));
     const validCityNames = new Set(activeCities.map((c) => c.city_name.toLowerCase()));
 
-    let parsed: ParsedRow[] = [];
-    if (isHC) {
-      parsed = dataRows.map((cells, idx) => {
-        const rowNum = idx + (hasHeader ? 2 : 1);
-        const name = cells[0] || "";
-        const phone = cells[1] || "";
-        const vehicleNo = cells[2] || "";
-        const dlNo = cells[3] || "";
-        const totalTrips = cells[4] || "";
-        const licenseNo = cells[5] || "";
-        const city = cells[6] || "";
-        if (!name && !phone) return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "INVALID", error: "Both name and phone empty" };
-        if (!name) return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "INVALID", error: "Driver name missing" };
-        if (!phone) return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "INVALID", error: "Contact number is missing" };
-        if (normalizePhone(phone).length < 6) return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "INVALID", error: "Contact number is too short" };
-        if (totalTrips && isNaN(Number(totalTrips))) return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "INVALID", error: "Total Trips must be numeric" };
-        if (city && !validCityNames.has(city.toLowerCase())) return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "INVALID", error: `City "${city}" is not active for HC` };
-        return { rowIndex: rowNum, name, phone, platform: "UBER", city, source: "ANFT", status: "TAG_ADDED", vehicleNo, dlNo, totalTrips, licenseNo, rowStatus: "OK", error: "" };
-      });
-    } else {
-      parsed = dataRows.map((cells, idx) => {
-        const rowNum = idx + (hasHeader ? 2 : 1);
-        const name = cells[0] || "";
-        const phone = cells[1] || "";
-        const platform = (cells[2] || "").toUpperCase();
-        const city = cells[3] || "";
-        const status = cells[4] || impStatus;
-        if (!name && !phone) return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "INVALID", error: "Both name and phone empty" };
-        if (!name) return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "INVALID", error: "Name missing" };
-        if (!phone) return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "INVALID", error: "Phone missing" };
-        if (normalizePhone(phone).length < 6) return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "INVALID", error: "Phone too short" };
-        if (platform && !validPlatformNames.has(platform)) return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "INVALID", error: `Platform "${platform}" is not active for ${product.name}` };
-        if (city && !validCityNames.has(city.toLowerCase())) return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "INVALID", error: `City "${city}" is not active for ${product.name}` };
-        return { rowIndex: rowNum, name, phone, platform, city, source: impSource, status, rowStatus: "OK", error: "" };
-      });
-    }
+    const getCol = (row: string[], colIdx: string): string => {
+      const idx = parseInt(colIdx, 10);
+      if (isNaN(idx) || idx < 0 || idx >= row.length) return "";
+      return row[idx];
+    };
+
+    let parsed: ParsedRow[] = fileRows.map((cells, idx) => {
+      const rowNum = idx + 2;
+      const name = getCol(cells, mapping.name || "");
+      const phone = getCol(cells, mapping.phone || "");
+      const platform = isHC ? "UBER" : (mapping.platform ? getCol(cells, mapping.platform).toUpperCase() : "");
+      const city = mapping.city ? getCol(cells, mapping.city) : "";
+      const status = isHC ? "TAG_ADDED" : (mapping.status ? getCol(cells, mapping.status) : impStatus);
+      const source = mapping.source ? getCol(cells, mapping.source) : impSource;
+
+      if (!name && !phone) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Both name and phone empty" };
+      if (!name) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Name missing" };
+      if (!phone) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Phone missing" };
+      if (normalizePhone(phone).length < 6) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Phone too short" };
+
+      if (!isHC) {
+        if (platform && !validPlatformNames.has(platform)) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: `Platform "${platform}" is not active for ${product.name}` };
+      }
+      if (city && !validCityNames.has(city.toLowerCase())) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: `City "${city}" is not active for ${product.name}` };
+
+      const parsedRow: ParsedRow = { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "OK", error: "" };
+
+      if (isHC) {
+        parsedRow.vehicleNo = mapping.vehicleNo ? getCol(cells, mapping.vehicleNo) : "";
+        parsedRow.dlNo = mapping.dlNo ? getCol(cells, mapping.dlNo) : "";
+        parsedRow.totalTrips = mapping.totalTrips ? getCol(cells, mapping.totalTrips) : "";
+        parsedRow.licenseNo = mapping.licenseNo ? getCol(cells, mapping.licenseNo) : "";
+        if (parsedRow.totalTrips && isNaN(Number(parsedRow.totalTrips)))
+          return { ...parsedRow, rowStatus: "INVALID", error: "Total Trips must be numeric" };
+      }
+      return parsedRow;
+    });
 
     // Internal duplicate detection
     const internalDupMap = findInternalDuplicates(parsed, product.id);
@@ -281,7 +386,8 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       existingLeadDuplicates: parsed.filter((r) => r.rowStatus === "EXISTING_LEAD_DUPLICATE").length,
       willImport: parsed.filter((r) => r.rowStatus === "OK" || r.rowStatus === "EXISTING_LEAD_DUPLICATE").length,
     });
-  }, [isHC, product.id, productPlatforms, activeCities, impSource, impStatus, toast]);
+    setShowMapping(false);
+  }, [fileRows, mapping, isHC, impStatus, impSource, product.name, product.id, productPlatforms, activeCities]);
 
   const runImport = async () => {
     setImporting(true);
@@ -293,8 +399,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
     const { data: batch, error: batchErr } = await supabase
       .from("import_batches").insert({
-        filename: fileRef.current?.files?.[0]?.name || "import",
-        total_rows: parsedRows.length, imported: 0,
+        filename: fileName, total_rows: parsedRows.length, imported: 0,
         duplicate: internalDup, failed: invalid, invalid,
         missing_fields: invalid, status: "PROCESSING",
         product_id: product.id, platform: isHC ? "UBER" : null,
@@ -378,13 +483,20 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     loadDupRecords();
   };
 
-  const downloadCSV = (rows: string[][], filename: string) => {
-    const csv = rows.map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const downloadCSV = (rows: (string | number)[][], filename: string) => {
+    const csv = rows.map((r) => r.map((c) => `"${String(c || "").replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadXLSX = (rows: (string | number)[][], sheetName: string, filename: string) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, filename);
   };
 
   const downloadErrorCSV = () => {
@@ -393,11 +505,17 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     const header = ["Row", "Name", "Phone", "Error"];
     const rows = errorRows.map((r) => [String(r.rowIndex), r.name, r.phone, r.error]);
     downloadCSV([header, ...rows], `import-errors-${product.code}-${format(new Date(), "yyyy-MM-dd")}.csv`);
-    toast({ title: `Downloaded ${errorRows.length} error rows` });
   };
 
-  const handleExport = async () => {
-    setExporting(true);
+  const downloadErrorXLSX = () => {
+    const errorRows = parsedRows.filter((r) => r.rowStatus === "INVALID");
+    if (errorRows.length === 0) return;
+    const header = ["Row", "Name", "Phone", "Error"];
+    const rows = errorRows.map((r) => [r.rowIndex, r.name, r.phone, r.error]);
+    downloadXLSX([header, ...rows], "Errors", `import-errors-${product.code}-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  };
+
+  const buildExportData = async () => {
     let query = supabase
       .from("leads")
       .select("id, name, phone, platform, city, status, remarks, created_at, updated_at, next_followup_at, product:products(name), current_caller:profiles!current_caller_id(full_name)")
@@ -414,14 +532,11 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       query = query.lt("created_at", end.toISOString().split("T")[0]);
     }
     const { data, error } = await query;
-    if (error) {
-      toast({ title: "Export failed. Please try again.", variant: "destructive" });
-      setExporting(false); return;
-    }
+    if (error) { toast({ title: "Export failed. Please try again.", variant: "destructive" }); return null; }
     const header = isHC
       ? ["Lead ID", "Driver Name", "Phone", "Vehicle No", "DL No", "Total Trips", "License No", "City", "Platform", "Status", "Created", "Updated"]
       : ["Lead ID", "Name", "Phone", "Product", "Platform", "City", "Status", "Assigned Employee", "Created", "Updated", "Follow-up", "Remarks"];
-    const rows = (data as Record<string, unknown>[] | null || []).map((r): string[] => {
+    const rows = (data as Record<string, unknown>[] | null || []).map((r): (string | number)[] => {
       const created = r.created_at ? format(new Date(r.created_at as string), "yyyy-MM-dd HH:mm") : "";
       const updated = r.updated_at ? format(new Date(r.updated_at as string), "yyyy-MM-dd HH:mm") : "";
       const followup = r.next_followup_at ? format(new Date(r.next_followup_at as string), "yyyy-MM-dd HH:mm") : "";
@@ -431,8 +546,26 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         ? [String(r.id || ""), String(r.name || ""), String(r.phone || ""), "", "", "", "", String(r.city || ""), String(r.platform || ""), String(r.status || ""), created, updated]
         : [String(r.id || ""), String(r.name || ""), String(r.phone || ""), prodName, String(r.platform || ""), String(r.city || ""), String(r.status || ""), caller, created, updated, followup, String(r.remarks || "")];
     });
-    downloadCSV([header, ...rows], `${product.code}-leads-export-${format(new Date(), "yyyy-MM-dd")}.csv`);
-    toast({ title: `Exported ${rows.length} leads` });
+    return { header, rows };
+  };
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    const data = await buildExportData();
+    if (data) {
+      downloadCSV([data.header, ...data.rows], `${product.code}-leads-export-${format(new Date(), "yyyy-MM-dd")}.csv`);
+      toast({ title: `Exported ${data.rows.length} leads to CSV` });
+    }
+    setExporting(false);
+  };
+
+  const handleExportXLSX = async () => {
+    setExporting(true);
+    const data = await buildExportData();
+    if (data) {
+      downloadXLSX([data.header, ...data.rows], "Leads", `${product.code}-leads-export-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+      toast({ title: `Exported ${data.rows.length} leads to Excel` });
+    }
     setExporting(false);
   };
 
@@ -447,12 +580,26 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     setBatchRecordsLoading(false);
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = (format: "csv" | "xlsx") => {
     if (isHC) {
-      downloadCSV([["Driver Name", "Contact", "Vehicle No", "DL No", "Total Trips", "License No", "City"]], "hc-import-template.csv");
+      const header = ["Driver Name", "Contact", "Vehicle No", "DL No", "Total Trips", "License No", "City"];
+      if (format === "csv") downloadCSV([header], "hc-import-template.csv");
+      else downloadXLSX([header], "Template", "hc-import-template.xlsx");
     } else {
-      downloadCSV([["Name", "Phone", "Platform", "City", "Status"]], `${product.code}-import-template.csv`);
+      const header = ["Name", "Phone", "Platform", "City", "Status"];
+      if (format === "csv") downloadCSV([header], `${product.code}-import-template.csv`);
+      else downloadXLSX([header], "Template", `${product.code}-import-template.xlsx`);
     }
+  };
+
+  const resetUpload = () => {
+    setShowMapping(false);
+    setPreview(null);
+    setParsedRows([]);
+    setImportResult(null);
+    setFileHeaders([]);
+    setFileRows([]);
+    setMapping({});
   };
 
   const batchesTotalPages = Math.max(1, Math.ceil(batchesTotal / batchesPageSize));
@@ -475,7 +622,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
         {/* ===== IMPORT ===== */}
         <TabsContent value="import" className="space-y-4">
-          {!preview && !importResult && (
+          {!showMapping && !preview && !importResult && (
             <Card>
               <CardHeader><CardTitle className="text-base">Import Data for {product.name}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -484,32 +631,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     <p className="text-sm text-info-foreground">HC import: Platform is automatically set to Uber. Required: Driver Name, Contact. Optional: Vehicle No, DL No, Total Trips, License No, City.</p>
                   </div>
                 )}
-                {/* Import configuration */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {!isHC && productPlatforms.length > 0 && (
-                    <div>
-                      <Label className="text-xs">Default Platform</Label>
-                      <Select value={impPlatform} onValueChange={setImpPlatform}>
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">From File</SelectItem>
-                          {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  {activeCities.length > 0 && (
-                    <div>
-                      <Label className="text-xs">Default City</Label>
-                      <Select value={impCity} onValueChange={setImpCity}>
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">From File</SelectItem>
-                          {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label className="text-xs">Source</Label>
                     <Select value={impSource} onValueChange={setImpSource}>
@@ -532,14 +654,49 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={downloadTemplate}><FileUp className="mr-1 h-4 w-4" /> Download Template</Button>
+                  <Button variant="outline" onClick={() => downloadTemplate("csv")}><FileUp className="mr-1 h-4 w-4" /> CSV Template</Button>
+                  <Button variant="outline" onClick={() => downloadTemplate("xlsx")}><FileSpreadsheet className="mr-1 h-4 w-4" /> Excel Template</Button>
                   {canManage && (
-                    <Button onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" /> Select CSV File</Button>
+                    <Button onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" /> Upload File</Button>
                   )}
-                  <input ref={fileRef} type="file" accept=".csv" className="hidden"
+                  <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
                 </div>
-                <p className="text-sm text-muted-foreground">Upload a CSV file to validate and import leads. Field mapping is automatic: Name, Phone, Platform, City, Status (HC: Driver Name, Contact, Vehicle No, DL No, Total Trips, License No, City).</p>
+                <p className="text-sm text-muted-foreground">Upload a CSV or Excel file. After upload, you'll map columns to CRM fields before importing.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Field Mapping UI */}
+          {showMapping && !preview && !importResult && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Field Mapping — {fileName}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Map each CRM field to a column from your file. Auto-suggested mappings can be adjusted manually.</p>
+                <div className="space-y-2">
+                  {crmFields.map((field) => (
+                    <div key={field.key} className="flex items-center gap-3">
+                      <div className="w-40 shrink-0">
+                        <span className="text-sm font-medium">{field.label}</span>
+                        {field.required && <span className="ml-1 text-xs text-destructive">*</span>}
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <Select value={mapping[field.key] || ""} onValueChange={(v) => setMapping((prev) => ({ ...prev, [field.key]: v }))}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Ignore this column" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Ignore this column</SelectItem>
+                          {fileHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={applyMappingAndValidate}><CheckCircle2 className="mr-1 h-4 w-4" /> Validate & Preview</Button>
+                  <Button variant="outline" onClick={resetUpload}>Cancel</Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -561,9 +718,13 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     <Button onClick={runImport} disabled={importing}>
                       {importing ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Importing...</> : <><CheckCircle2 className="mr-1 h-4 w-4" /> Continue Import</>}
                     </Button>
-                    <Button variant="outline" onClick={() => { setPreview(null); setParsedRows([]); }} disabled={importing}>Cancel</Button>
+                    <Button variant="outline" onClick={() => setShowMapping(true)}>Back to Mapping</Button>
+                    <Button variant="outline" onClick={resetUpload}>Cancel</Button>
                     {preview.invalid > 0 && (
-                      <Button variant="outline" onClick={downloadErrorCSV}><Download className="mr-1 h-4 w-4" /> Download Error CSV</Button>
+                      <>
+                        <Button variant="outline" onClick={downloadErrorCSV}><Download className="mr-1 h-4 w-4" /> Error CSV</Button>
+                        <Button variant="outline" onClick={downloadErrorXLSX}><FileSpreadsheet className="mr-1 h-4 w-4" /> Error Excel</Button>
+                      </>
                     )}
                   </div>
                 </CardContent>
@@ -601,7 +762,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Button variant="outline" onClick={() => { loadBatches(); loadDupRecords(); }}>View History</Button>
-                  <Button variant="outline" onClick={() => { setImportResult(null); setPreview(null); setParsedRows([]); }}>New Import</Button>
+                  <Button variant="outline" onClick={resetUpload}>New Import</Button>
                 </div>
               </CardContent>
             </Card>
@@ -613,7 +774,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
           <Card>
             <CardHeader><CardTitle className="text-base">Export {product.name} Leads</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">Export leads data using custom filters. Exports from the leads table with all applied filters.</p>
+              <p className="text-sm text-muted-foreground">Export leads data using custom filters. Both CSV and Excel formats export the same filtered dataset.</p>
               <div className="flex flex-wrap gap-2">
                 {!isHC && (
                   <Select value={exportStatus} onValueChange={setExportStatus}>
@@ -651,13 +812,23 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     </SelectContent>
                   </Select>
                 )}
+                <Select value={exportSource} onValueChange={setExportSource}>
+                  <SelectTrigger className="w-[130px]"><SelectValue placeholder="Source" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Sources</SelectItem>
+                    {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <Input type="date" value={exportDateFrom} onChange={(e) => setExportDateFrom(e.target.value)} className="w-[140px]" />
                 <Input type="date" value={exportDateTo} onChange={(e) => setExportDateTo(e.target.value)} className="w-[140px]" />
-                <Button onClick={handleExport} disabled={exporting}>
-                  {exporting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Exporting...</> : <><Download className="mr-1 h-4 w-4" /> Export CSV</>}
+                <Button onClick={handleExportCSV} disabled={exporting}>
+                  {exporting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Exporting...</> : <><Download className="mr-1 h-4 w-4" /> CSV</>}
+                </Button>
+                <Button variant="outline" onClick={handleExportXLSX} disabled={exporting}>
+                  {exporting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Exporting...</> : <><FileSpreadsheet className="mr-1 h-4 w-4" /> Excel</>}
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">Maximum 10,000 records per export. Filters apply to leads created within the selected range.</p>
+              <p className="text-sm text-muted-foreground">Maximum 10,000 records per export. All selected filters apply to both formats.</p>
             </CardContent>
           </Card>
         </TabsContent>

@@ -55,6 +55,8 @@ export function ProductReportsTab({ product }: { product: Product }) {
   const [cityPerf, setCityPerf] = useState<{ name: string; total: number; idDone: number; interested: number; callback: number; notInterested: number }[]>([]);
   const [statusDist, setStatusDist] = useState<{ name: string; value: number }[]>([]);
   const [dailyData, setDailyData] = useState<{ date: string; leads: number; calls: number; interested: number; callback: number; idDone: number; otherHero: number; notInterested: number }[]>([]);
+  const [weeklyData, setWeeklyData] = useState<{ week: string; leads: number; calls: number; idDone: number; interested: number; callback: number }[]>([]);
+  const [monthlyData, setMonthlyData] = useState<{ month: string; leads: number; calls: number; idDone: number; interested: number; callback: number }[]>([]);
 
   // Car payment
   const [paymentStats, setPaymentStats] = useState({ total: 0, successful: 0, failed: 0, pending: 0 });
@@ -200,6 +202,46 @@ export function ProductReportsTab({ product }: { product: Product }) {
       dMap[d].calls++;
     });
     setDailyData(Object.values(dMap).sort((a, b) => a.date.localeCompare(b.date)));
+
+    // Weekly aggregation
+    const wMap: Record<string, { week: string; leads: number; calls: number; idDone: number; interested: number; callback: number }> = {};
+    leads.forEach((l) => {
+      const d = new Date(l.created_at as string);
+      const weekStart = startOfWeek(d, { weekStartsOn: 1 });
+      const wk = format(weekStart, "dd MMM");
+      if (!wMap[wk]) wMap[wk] = { week: wk, leads: 0, calls: 0, idDone: 0, interested: 0, callback: 0 };
+      wMap[wk].leads++;
+      if (l.status === "ID_DONE") wMap[wk].idDone++;
+      if (l.status === "INTERESTED") wMap[wk].interested++;
+      if (l.status === "CALLBACK") wMap[wk].callback++;
+    });
+    calls.forEach((c) => {
+      const d = new Date(c.call_timestamp as string);
+      const weekStart = startOfWeek(d, { weekStartsOn: 1 });
+      const wk = format(weekStart, "dd MMM");
+      if (!wMap[wk]) wMap[wk] = { week: wk, leads: 0, calls: 0, idDone: 0, interested: 0, callback: 0 };
+      wMap[wk].calls++;
+    });
+    setWeeklyData(Object.values(wMap).sort((a, b) => a.week.localeCompare(b.week)));
+
+    // Monthly aggregation
+    const mMap: Record<string, { month: string; leads: number; calls: number; idDone: number; interested: number; callback: number }> = {};
+    leads.forEach((l) => {
+      const d = new Date(l.created_at as string);
+      const mo = format(d, "MMM yyyy");
+      if (!mMap[mo]) mMap[mo] = { month: mo, leads: 0, calls: 0, idDone: 0, interested: 0, callback: 0 };
+      mMap[mo].leads++;
+      if (l.status === "ID_DONE") mMap[mo].idDone++;
+      if (l.status === "INTERESTED") mMap[mo].interested++;
+      if (l.status === "CALLBACK") mMap[mo].callback++;
+    });
+    calls.forEach((c) => {
+      const d = new Date(c.call_timestamp as string);
+      const mo = format(d, "MMM yyyy");
+      if (!mMap[mo]) mMap[mo] = { month: mo, leads: 0, calls: 0, idDone: 0, interested: 0, callback: 0 };
+      mMap[mo].calls++;
+    });
+    setMonthlyData(Object.values(mMap).sort((a, b) => a.month.localeCompare(b.month)));
 
     // Car payment report
     if (isCar) {
@@ -436,6 +478,40 @@ export function ProductReportsTab({ product }: { product: Product }) {
                   </TableBody>
                 </Table>
               ) : <p className="py-8 text-center text-sm text-muted-foreground">No daily data</p>}
+            </CardContent>
+          </Card>
+
+          {/* Weekly Report */}
+          <Card className="border-border/60">
+            <CardHeader><CardTitle className="text-base">Weekly Report</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto">
+              {weeklyData.length > 0 ? (
+                <Table>
+                  <TableHeader><TableRow><TableHead>Week Starting</TableHead><TableHead>Leads</TableHead><TableHead>Calls</TableHead><TableHead>ID Done</TableHead><TableHead>Interested</TableHead><TableHead>Callback</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {weeklyData.map((w, i) => (
+                      <TableRow key={i}><TableCell className="font-medium">{w.week}</TableCell><TableCell>{w.leads}</TableCell><TableCell>{w.calls}</TableCell><TableCell className="text-success-foreground">{w.idDone}</TableCell><TableCell className="text-success-foreground">{w.interested}</TableCell><TableCell className="text-warning-foreground">{w.callback}</TableCell></TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : <p className="py-8 text-center text-sm text-muted-foreground">No weekly data</p>}
+            </CardContent>
+          </Card>
+
+          {/* Monthly Report */}
+          <Card className="border-border/60">
+            <CardHeader><CardTitle className="text-base">Monthly Report</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto">
+              {monthlyData.length > 0 ? (
+                <Table>
+                  <TableHeader><TableRow><TableHead>Month</TableHead><TableHead>Leads</TableHead><TableHead>Calls</TableHead><TableHead>ID Done</TableHead><TableHead>Interested</TableHead><TableHead>Callback</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {monthlyData.map((m, i) => (
+                      <TableRow key={i}><TableCell className="font-medium">{m.month}</TableCell><TableCell>{m.leads}</TableCell><TableCell>{m.calls}</TableCell><TableCell className="text-success-foreground">{m.idDone}</TableCell><TableCell className="text-success-foreground">{m.interested}</TableCell><TableCell className="text-warning-foreground">{m.callback}</TableCell></TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : <p className="py-8 text-center text-sm text-muted-foreground">No monthly data</p>}
             </CardContent>
           </Card>
 

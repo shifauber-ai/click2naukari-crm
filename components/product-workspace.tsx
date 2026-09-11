@@ -10,6 +10,8 @@ import { ProductCityTab } from "@/components/product-city-tab";
 import { ProductReportsTab } from "@/components/product-reports-tab";
 import { ProductDirectoryTab } from "@/components/product-directory-tab";
 import { ProductImportExportTab } from "@/components/product-import-export-tab";
+import { ProductPaymentTab } from "@/components/product-payment-tab";
+import { ProductEmployeeTab } from "@/components/product-employee-tab";
 import { HCLeadsTab } from "@/components/hc-leads-tab";
 import { HCCityTab } from "@/components/hc-city-tab";
 import { PageHeader, EmptyState } from "@/components/page-parts";
@@ -75,16 +77,14 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
       </div>
 
       {activeTab === "leads" && <ProductLeadsTab product={product} />}
-      {activeTab === "payment" && showPayment && <ProductDashboard product={product} showPayment={showPayment} />}
+      {activeTab === "payment" && showPayment && <ProductPaymentTab product={product} />}
       {activeTab === "directory" && <ProductDirectoryTab product={product} />}
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={false} />}
       {activeTab === "callers-queue" && <ProductCallerQueueTab product={product} />}
       {activeTab === "platforms" && <ProductPlatformsTab product={product} />}
       {activeTab === "city" && <ProductCityTab product={product} />}
       {activeTab === "reports" && <ProductReportsTab product={product} />}
-      {(activeTab === "employee") && (
-        <TabPlaceholder tab={activeTab} productName={product.name} />
-      )}
+      {activeTab === "employee" && <ProductEmployeeTab product={product} />}
     </div>
   );
 }
