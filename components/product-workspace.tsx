@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Product } from "@/lib/types";
 import { ProductDashboard } from "@/components/product-dashboard";
 import { ProductLeadsTab } from "@/components/product-leads-tab";
+import { ProductCallerQueueTab } from "@/components/product-caller-queue-tab";
 import { ProductDirectoryTab } from "@/components/product-directory-tab";
 import { ProductImportExportTab } from "@/components/product-import-export-tab";
 import { HCLeadsTab } from "@/components/hc-leads-tab";
@@ -74,7 +75,8 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
       {activeTab === "payment" && showPayment && <ProductDashboard product={product} showPayment={showPayment} />}
       {activeTab === "directory" && <ProductDirectoryTab product={product} />}
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={false} />}
-      {(activeTab === "callers-queue" || activeTab === "platforms" || activeTab === "reports" || activeTab === "city" || activeTab === "employee") && (
+      {activeTab === "callers-queue" && <ProductCallerQueueTab product={product} />}
+      {(activeTab === "platforms" || activeTab === "reports" || activeTab === "city" || activeTab === "employee") && (
         <TabPlaceholder tab={activeTab} productName={product.name} />
       )}
     </div>
