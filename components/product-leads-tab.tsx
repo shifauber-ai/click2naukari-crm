@@ -59,6 +59,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const [cities, setCities] = useState<ProductCityRow[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [callerQueues, setCallerQueues] = useState<CallerQueue[]>([]);
+  const [productPlatforms, setProductPlatforms] = useState<{ id: string; name: string }[]>([]);
   const [stats, setStats] = useState<LeadStats>({ total: 0, active: 0, followups: 0, unassigned: 0, interested: 0, callback: 0, ringing: 0, adminReview: 0 });
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -123,14 +124,17 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   // Load reference data
   useEffect(() => {
     (async () => {
-      const [{ data: c }, { data: e }, { data: cq }] = await Promise.all([
+      const [{ data: c }, { data: e }, { data: cq }, { data: pp }] = await Promise.all([
         supabase.from("product_cities").select("id, city_name, is_active").eq("product_id", product.id).order("city_name"),
         supabase.from("profiles").select("*").order("full_name"),
         supabase.from("caller_queues").select("*").eq("product_id", product.id),
+        supabase.from("product_platforms").select("platform:platforms!platform_id(id, name)").eq("product_id", product.id).eq("is_active", true),
       ]);
       setCities((c as ProductCityRow[]) || []);
       setEmployees((e as Profile[]) || []);
       setCallerQueues((cq as CallerQueue[]) || []);
+      const ppRows = (pp as { platform: { id: string; name: string } }[] | null) || [];
+      setProductPlatforms(ppRows.map((r) => r.platform).filter(Boolean));
     })();
   }, [product.id]);
 
@@ -443,9 +447,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
           <SelectTrigger className="w-[130px]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Platforms</SelectItem>
-            <SelectItem value="UBER">Uber</SelectItem>
-            <SelectItem value="OLA">Ola</SelectItem>
-            <SelectItem value="RAPIDO">Rapido</SelectItem>
+            {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
         {activeCities.length > 0 && (
@@ -677,9 +679,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                 <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">None</SelectItem>
-                  <SelectItem value="UBER">Uber</SelectItem>
-                  <SelectItem value="OLA">Ola</SelectItem>
-                  <SelectItem value="RAPIDO">Rapido</SelectItem>
+                  {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
