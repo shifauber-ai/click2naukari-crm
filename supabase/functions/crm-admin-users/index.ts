@@ -13,7 +13,7 @@ const corsHeaders = {
 };
 
 interface ActionRequest {
-  action: "create" | "update" | "reset_password" | "set_active" | "delete_user";
+  action: "create" | "update" | "reset_password" | "set_active";
   email?: string;
   password?: string;
   full_name?: string;
@@ -206,37 +206,6 @@ Deno.serve(async (req: Request) => {
         entity: "profile",
         entity_id: body.user_id,
         metadata: {},
-      });
-      return json({ ok: true });
-    }
-
-    if (action === "delete_user") {
-      if (!body.user_id) return json({ error: "user_id required" }, 400);
-      const { data: profData } = await adminClient
-        .from("profiles")
-        .select("role")
-        .eq("id", body.user_id)
-        .maybeSingle();
-      if (!profData) return json({ error: "User not found" }, 404);
-      if (profData.role === "ADMIN") return json({ error: "Cannot delete admin users" }, 400);
-      const { error: rpcError } = await adminClient.rpc("delete_employee", { p_user_id: body.user_id });
-      if (rpcError) return json({ error: rpcError.message }, 400 );
-      const { error: authError } = await adminClient.auth.admin.deleteUser(body.user_id);
-      if (authError) {
-        await adminClient.from("audit_logs").insert({
-          actor_id: callerId,
-          action: "EMPLOYEE_DELETE_AUTH_FAILED",
-          entity: "profile",
-          entity_id: body.user_id,
-          metadata: { error: authError.message },
-        });
-      }
-      await adminClient.from("audit_logs").insert({
-        actor_id: callerId,
-        action: "EMPLOYEE_DELETE",
-        entity: "profile",
-        entity_id: body.user_id,
-        metadata: { role: profData.role },
       });
       return json({ ok: true });
     }

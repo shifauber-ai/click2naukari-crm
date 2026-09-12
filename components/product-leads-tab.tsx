@@ -29,13 +29,13 @@ import { useAuth } from "@/lib/auth-context";
 import {
   Phone, Search, ChevronLeft, ChevronRight, Loader2,
   Pencil, Trash2, Users, UserPlus, History, Eye, PhoneCall,
-  Calendar, Filter, X, Wallet, MessageCircle, ExternalLink, ClipboardEdit,
+  Calendar, Filter, X, Wallet, MessageCircle, ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
 import { PaymentModal } from "@/components/payment-modal";
 
 const PAGE_SIZES = [25, 50, 100];
-const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Leads", "Porter", "Other"];
+const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
 interface ProductCityRow { id: string; city_name: string; is_active: boolean; }
 interface LeadWithCaller extends Omit<Lead, "current_caller"> {
@@ -276,35 +276,15 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   // ===== Delete =====
   const handleDelete = async () => {
     if (!deleteLead) return;
-    const { error } = await supabase.rpc("delete_lead", { p_lead_id: deleteLead.id });
+    const { error } = await supabase.rpc("admin_soft_delete_lead", { p_lead_id: deleteLead.id });
     if (error) {
-      toast({ title: error.message || "Failed to delete lead.", variant: "destructive" });
+      toast({ title: "Failed to delete lead. Please try again.", variant: "destructive" });
     } else {
       setLeads((prev) => prev.filter((l) => l.id !== deleteLead.id));
-      toast({ title: "Lead permanently deleted" });
+      toast({ title: "Lead deleted" });
       setDeleteLead(null);
       loadStats();
     }
-  };
-
-  // ===== Bulk Delete =====
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    setBulkDeleting(true);
-    const { data, error } = await supabase.rpc("bulk_delete_leads", { p_lead_ids: Array.from(selectedIds) });
-    if (error) {
-      toast({ title: error.message || "Bulk delete failed.", variant: "destructive" });
-    } else {
-      const count = (data as number) || 0;
-      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
-      toast({ title: `${count} leads permanently deleted` });
-      setSelectedIds(new Set());
-      setBulkDeleteOpen(false);
-      loadStats();
-    }
-    setBulkDeleting(false);
   };
 
   // ===== Status Update =====
@@ -548,11 +528,6 @@ export function ProductLeadsTab({ product }: { product: Product }) {
             <Button size="sm" variant="outline" onClick={() => setBulkAssignOpen(true)}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign
             </Button>
-            {isAdmin && (
-              <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete ({selectedIds.size})
-              </Button>
-            )}
             <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
           </div>
         </div>
@@ -629,8 +604,8 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                       </Button>
                       {canManage && (
                         <>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Update Status">
-                            <ClipboardEdit className="h-3.5 w-3.5" />
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Status">
+                            <Phone className="h-3.5 w-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssign(lead)} title="Assign">
                             <UserPlus className="h-3.5 w-3.5" />
@@ -896,21 +871,10 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       {/* ===== Delete Dialog ===== */}
       <Dialog open={!!deleteLead} onOpenChange={(v) => !v && setDeleteLead(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Lead?</DialogTitle><DialogDescription>This will permanently delete "{deleteLead?.name}" and all related records (assignments, status history, call history, payments). This cannot be undone.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Delete Lead?</DialogTitle><DialogDescription>This will deactivate the lead "{deleteLead?.name}". You can restore it later.</DialogDescription></DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteLead(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete Permanently</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ===== Bulk Delete Dialog ===== */}
-      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete {selectedIds.size} Leads?</DialogTitle><DialogDescription>This will permanently delete {selectedIds.size} leads and all related records. This cannot be undone.</DialogDescription></DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>{bulkDeleting ? "Deleting..." : "Delete Permanently"}</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
