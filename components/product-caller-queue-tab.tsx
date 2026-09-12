@@ -77,7 +77,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   // Add form
   const [addEmpId, setAddEmpId] = useState("");
   const [addPriority, setAddPriority] = useState("100");
-  const [addCityId, setAddCityId] = useState("");
+  const [addCityId, setAddCityId] = useState("__none__");
 
   // Edit form
   const [editPriority, setEditPriority] = useState("100");
@@ -194,7 +194,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       .select("id")
       .eq("product_id", product.id)
       .eq("employee_id", addEmpId);
-    if (addCityId) dupQuery = dupQuery.eq("city_id", addCityId);
+    if (addCityId && addCityId !== "__none__") dupQuery = dupQuery.eq("city_id", addCityId);
     else dupQuery = dupQuery.is("city_id", null);
     const { data: existing } = await dupQuery.maybeSingle();
     if (existing) {
@@ -209,7 +209,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         employee_id: addEmpId,
         priority: parseInt(addPriority, 10) || 100,
         is_active: true,
-        city_id: addCityId || null,
+        city_id: addCityId && addCityId !== "__none__" ? addCityId : null,
       })
       .select("*, employee:profiles(*), city:product_cities!city_id(city_name)")
       .single();
@@ -222,7 +222,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       setAddOpen(false);
       setAddEmpId("");
       setAddPriority("100");
-      setAddCityId("");
+      setAddCityId("__none__");
       loadStats();
     }
     setSaving(false);
@@ -573,7 +573,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
               <Select value={addCityId} onValueChange={setAddCityId}>
                 <SelectTrigger><SelectValue placeholder="Product-wide" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Product-wide</SelectItem>
+                  <SelectItem value="__none__">Product-wide</SelectItem>
                   {productCities.map((c) => <SelectItem key={c.id} value={c.id}>{c.city_name}</SelectItem>)}
                 </SelectContent>
               </Select>

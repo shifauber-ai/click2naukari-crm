@@ -745,10 +745,10 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                         {field.required && <span className="ml-1 text-xs text-destructive">*</span>}
                       </div>
                       <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <Select value={mapping[field.key] || ""} onValueChange={(v) => setMapping((prev) => ({ ...prev, [field.key]: v }))}>
+                      <Select value={mapping[field.key] || "__ignore__"} onValueChange={(v) => setMapping((prev) => { const next = { ...prev }; if (v === "__ignore__") delete next[field.key]; else next[field.key] = v; return next; })}>
                         <SelectTrigger className="flex-1"><SelectValue placeholder="Ignore this column" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Ignore this column</SelectItem>
+                          <SelectItem value="__ignore__">Ignore this column</SelectItem>
                           {fileHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -908,10 +908,10 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                 </Select>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value="" onValueChange={(v) => { if (!v) return; const r = QUICK_DATE_RANGES.find((r) => r.value === v); if (r) { setExportDateFrom(r.getFrom()); setExportDateTo(r.getTo()); } }}>
+                <Select value="__none__" onValueChange={(v) => { if (v === "__none__") return; const r = QUICK_DATE_RANGES.find((r) => r.value === v); if (r) { setExportDateFrom(r.getFrom()); setExportDateTo(r.getTo()); } }}>
                   <SelectTrigger className="w-[130px]"><SelectValue placeholder="Date Range" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_none">Select Date Range</SelectItem>
+                    <SelectItem value="__none__">Select Date Range</SelectItem>
                     {QUICK_DATE_RANGES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                   </SelectContent>
                 </Select>

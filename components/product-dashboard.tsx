@@ -171,7 +171,7 @@ function ProductLeadsSection({ product }: { product: Product }) {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editStatus, setEditStatus] = useState<LeadStatus>("NEW");
-  const [editCity, setEditCity] = useState("");
+  const [editCity, setEditCity] = useState("__none__");
   const [editCallerId, setEditCallerId] = useState("NONE");
   const [editRemarks, setEditRemarks] = useState("");
   const [editSaving, setEditSaving] = useState(false);
@@ -265,7 +265,7 @@ function ProductLeadsSection({ product }: { product: Product }) {
     setEditName(lead.name);
     setEditPhone(lead.phone);
     setEditStatus(lead.status);
-    setEditCity(lead.city || "");
+    setEditCity(lead.city || "__none__");
     setEditCallerId(lead.current_caller_id || "NONE");
     setEditRemarks(lead.remarks);
   };
@@ -286,10 +286,11 @@ function ProductLeadsSection({ product }: { product: Product }) {
     if (error) {
       toast({ title: error.message, variant: "destructive" });
     } else {
-      if (editCity !== (editLead.city || "")) {
+      if (editCity !== (editLead.city || "__none__")) {
+      const cityVal = editCity === "__none__" ? null : editCity;
         await supabase
           .from("leads")
-          .update({ city: editCity || null })
+          .update({ city: cityVal || null })
           .eq("id", editLead.id);
       }
       toast({ title: "Lead updated" });
@@ -726,7 +727,7 @@ function ProductLeadsSection({ product }: { product: Product }) {
                   <SelectValue placeholder="Select city" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No city</SelectItem>
+                  <SelectItem value="__none__">No city</SelectItem>
                   {activeCities.map((c) => (
                     <SelectItem key={c.id} value={c.city_name}>
                       {c.city_name}
@@ -967,7 +968,7 @@ function ProductPaymentSection({ product }: { product: Product }) {
   const [addOpen, setAddOpen] = useState(false);
   const { toast } = useToast();
 
-  const [pEmpId, setPEmpId] = useState("");
+  const [pEmpId, setPEmpId] = useState("__none__");
   const [pLeadName, setPLeadName] = useState("");
   const [pAmount, setPAmount] = useState("");
   const [pStatus, setPStatus] = useState("COMPLETED");
@@ -1030,7 +1031,7 @@ function ProductPaymentSection({ product }: { product: Product }) {
     e.preventDefault();
     setPSaving(true);
     const { error } = await supabase.from("payment_records").insert({
-      employee_id: pEmpId || null,
+      employee_id: pEmpId && pEmpId !== "__none__" ? pEmpId : null,
       product_id: product.id,
       candidate_name: pLeadName,
       amount: parseFloat(pAmount) || 0,
@@ -1259,7 +1260,7 @@ function ProductPaymentSection({ product }: { product: Product }) {
               <Select value={pEmpId} onValueChange={setPEmpId}>
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {employees.filter((e) => e.is_active).map((e) => (
                     <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
                   ))}
