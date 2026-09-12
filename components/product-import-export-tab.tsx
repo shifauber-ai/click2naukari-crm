@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase/client";
 import { Product, ImportBatch, ImportRecord, DuplicateType, LEAD_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/types";
+import { PlatformBadge } from "@/components/platform-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +29,7 @@ import { format } from "date-fns";
 
 const PAGE_SIZES = [25, 50, 100];
 
-type RowStatus = "OK" | "INVALID" | "INTERNAL_DUPLICATE" | "EXISTING_LEAD_DUPLICATE";
+type RowStatus = "OK" | "INVALID" | "INTERNAL_DUPLICATE" | "EXISTING_LEAD_DUPLICATE" | "PLATFORM_MISSING";
 
 interface ParsedRow {
   rowIndex: number;
@@ -53,8 +54,32 @@ interface PreviewSummary {
   invalid: number;
   internalDuplicates: number;
   existingLeadDuplicates: number;
+  platformMissing: number;
+  uber: number;
+  ola: number;
+  rapido: number;
   willImport: number;
 }
+
+const GLOBAL_PLATFORMS: Record<string, string> = {
+  UBER: "UBER",
+  OLA: "OLA",
+  RAPIDO: "RAPIDO",
+};
+
+function normalizePlatform(raw: string): string | null {
+  const upper = raw.trim().toUpperCase();
+  if (!upper) return null;
+  if (GLOBAL_PLATFORMS[upper]) return GLOBAL_PLATFORMS[upper];
+  return "__INVALID__";
+}
+
+const QUICK_DATE_RANGES: { label: string; value: string; getFrom: () => string; getTo: () => string }[] = [
+  { label: "Today", value: "today", getFrom: () => new Date().toISOString().split("T")[0], getTo: () => new Date().toISOString().split("T")[0] },
+  { label: "Yesterday", value: "yesterday", getFrom: () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split("T")[0]; }, getTo: () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split("T")[0]; } },
+  { label: "This Week", value: "week", getFrom: () => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split("T")[0]; }, getTo: () => new Date().toISOString().split("T")[0] },
+  { label: "This Month", value: "month", getFrom: () => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split("T")[0]; }, getTo: () => new Date().toISOString().split("T")[0] },
+];
 
 interface CityRow { id: string; city_name: string; is_active: boolean; }
 interface PlatformRow { platform: { id: string; name: string } | null }
@@ -168,6 +193,8 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [exportDateFrom, setExportDateFrom] = useState("");
   const [exportDateTo, setExportDateTo] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [exportProduct, setExportProduct] = useState<string>(product.id);
+  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
 
   const isAdmin = profile?.role === "ADMIN";
   const isManager = profile?.role === "MANAGER";
@@ -179,15 +206,17 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   // Load reference data
   useEffect(() => {
     (async () => {
-      const [{ data: pp }, { data: c }, { data: e }] = await Promise.all([
+      const [{ data: pp }, { data: c }, { data: e }, { data: prods }] = await Promise.all([
         supabase.from("product_platforms").select("platform:platforms!platform_id(id, name)").eq("product_id", product.id).eq("is_active", true),
         supabase.from("product_cities").select("id, city_name, is_active").eq("product_id", product.id).order("city_name"),
         supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name"),
+        supabase.from("products").select("id, name").eq("is_active", true).order("name"),
       ]);
       const ppRows = (pp as PlatformRow[] | null) || [];
       setProductPlatforms(ppRows.map((r) => r.platform).filter(Boolean) as { id: string; name: string }[]);
       setActiveCities(((c as CityRow[]) || []).filter((ci) => ci.is_active));
       setEmployees((e as { id: string; full_name: string }[]) || []);
+      setProducts((prods as { id: string; name: string }[]) || []);
     })();
   }, [product.id]);
 
@@ -318,7 +347,9 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const rowNum = idx + 2;
       const name = getCol(cells, mapping.name || "");
       const phone = getCol(cells, mapping.phone || "");
-      const platform = isHC ? "UBER" : (mapping.platform ? getCol(cells, mapping.platform).toUpperCase() : "");
+      const rawPlatform = isHC ? "UBER" : (mapping.platform ? getCol(cells, mapping.platform) : "");
+      const normalizedPlatform = isHC ? "UBER" : normalizePlatform(rawPlatform);
+      const platform = normalizedPlatform === "__INVALID__" ? rawPlatform.trim() : (normalizedPlatform || "");
       const city = mapping.city ? getCol(cells, mapping.city) : "";
       const status = isHC ? "TAG_ADDED" : (mapping.status ? getCol(cells, mapping.status) : impStatus);
       const source = mapping.source ? getCol(cells, mapping.source) : impSource;
@@ -329,7 +360,15 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       if (normalizePhone(phone).length < 6) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Phone too short" };
 
       if (!isHC) {
-        if (platform && !validPlatformNames.has(platform)) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: `Platform "${platform}" is not active for ${product.name}` };
+        if (normalizedPlatform === "__INVALID__") {
+          return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: `Invalid Platform: ${rawPlatform.trim()}. Allowed values are Uber, Ola, Rapido.` };
+        }
+        if (!platform) {
+          return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "PLATFORM_MISSING", error: "Platform missing" };
+        }
+        if (!validPlatformNames.has(platform)) {
+          return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: `Platform "${platform}" is not active for ${product.name}` };
+        }
       }
       if (city && !validCityNames.has(city.toLowerCase())) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: `City "${city}" is not active for ${product.name}` };
 
@@ -378,12 +417,17 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     }
 
     setParsedRows(parsed);
+    const platformMissing = parsed.filter((r) => r.rowStatus === "PLATFORM_MISSING");
     setPreview({
       total: parsed.length,
       valid: parsed.filter((r) => r.rowStatus === "OK").length,
       invalid: parsed.filter((r) => r.rowStatus === "INVALID").length,
       internalDuplicates: parsed.filter((r) => r.rowStatus === "INTERNAL_DUPLICATE").length,
       existingLeadDuplicates: parsed.filter((r) => r.rowStatus === "EXISTING_LEAD_DUPLICATE").length,
+      platformMissing: platformMissing.length,
+      uber: parsed.filter((r) => r.platform === "UBER" && r.rowStatus === "OK").length,
+      ola: parsed.filter((r) => r.platform === "OLA" && r.rowStatus === "OK").length,
+      rapido: parsed.filter((r) => r.platform === "RAPIDO" && r.rowStatus === "OK").length,
       willImport: parsed.filter((r) => r.rowStatus === "OK" || r.rowStatus === "EXISTING_LEAD_DUPLICATE").length,
     });
     setShowMapping(false);
@@ -395,17 +439,18 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     const internalDup = parsedRows.filter((r) => r.rowStatus === "INTERNAL_DUPLICATE").length;
     const invalid = parsedRows.filter((r) => r.rowStatus === "INVALID").length;
     const existingDup = parsedRows.filter((r) => r.rowStatus === "EXISTING_LEAD_DUPLICATE").length;
+    const platformMissingCount = parsedRows.filter((r) => r.rowStatus === "PLATFORM_MISSING").length;
     const rowsToImport = parsedRows.filter((r) => r.rowStatus === "OK" || r.rowStatus === "EXISTING_LEAD_DUPLICATE");
 
     const { data: batch, error: batchErr } = await supabase
       .from("import_batches").insert({
         filename: fileName, total_rows: parsedRows.length, imported: 0,
         duplicate: internalDup, failed: invalid, invalid,
-        missing_fields: invalid, status: "PROCESSING",
+        missing_fields: invalid + platformMissingCount, status: "PROCESSING",
         product_id: product.id, platform: isHC ? "UBER" : null,
         uploaded_by: profile?.id || null,
         existing_lead_duplicates: existingDup, internal_duplicates: internalDup,
-        skipped: internalDup,
+        skipped: internalDup + platformMissingCount,
       }).select("id").single();
 
     if (batchErr || !batch) {
@@ -464,6 +509,14 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         duplicate_type: "NONE", existing_lead_id: null, validation_error: row.error,
       });
     }
+    for (const row of parsedRows.filter((r) => r.rowStatus === "PLATFORM_MISSING")) {
+      importRecordInserts.push({
+        batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
+        product_id: product.id, platform: null, city: row.city || null,
+        label: row.source || null, status: "PLATFORM_MISSING",
+        duplicate_type: "NONE", existing_lead_id: null, validation_error: row.error,
+      });
+    }
 
     if (leadInserts.length > 0) {
       const { error: leadErr } = await supabase.from("leads").insert(leadInserts);
@@ -477,7 +530,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     await supabase.from("import_batches").update({ imported, status: "COMPLETED" }).eq("id", batchId);
 
     setImportResult({ imported, internalDup, existingDup, invalid, batchId });
-    toast({ title: `Import complete: ${imported} imported, ${internalDup} internal duplicates, ${existingDup} existing lead duplicates, ${invalid} invalid` });
+    toast({ title: `Import complete: ${imported} imported, ${internalDup} internal duplicates, ${existingDup} existing lead duplicates, ${invalid} invalid, ${platformMissingCount} platform missing` });
     setImporting(false);
     loadBatches();
     loadDupRecords();
@@ -515,17 +568,19 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     downloadXLSX([header, ...rows], "Errors", `import-errors-${product.code}-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
-  const buildExportData = async () => {
+  const buildExportData = async (platformOverride?: string) => {
+    const effPlatform = platformOverride !== undefined ? platformOverride : exportPlatform;
     let query = supabase
       .from("leads")
-      .select("id, name, phone, platform, city, status, remarks, created_at, updated_at, next_followup_at, product:products(name), current_caller:profiles!current_caller_id(full_name)")
+      .select("id, name, phone, platform, city, source, status, remarks, created_at, updated_at, next_followup_at, assigned_at, last_contact_at, product:products(name), current_caller:profiles!current_caller_id(full_name), product_id")
       .eq("product_id", product.id)
       .order("created_at", { ascending: false })
       .limit(10000);
     if (exportStatus !== "ALL") query = query.eq("status", exportStatus);
-    if (exportPlatform !== "ALL") query = query.eq("platform", exportPlatform);
+    if (effPlatform !== "ALL") query = query.eq("platform", effPlatform);
     if (exportCity !== "ALL") query = query.eq("city", exportCity);
     if (exportEmployee !== "ALL") query = query.eq("current_caller_id", exportEmployee);
+    if (exportSource !== "ALL") query = query.eq("source", exportSource);
     if (exportDateFrom) query = query.gte("created_at", exportDateFrom);
     if (exportDateTo) {
       const end = new Date(exportDateTo); end.setDate(end.getDate() + 1);
@@ -535,7 +590,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     if (error) { toast({ title: "Export failed. Please try again.", variant: "destructive" }); return null; }
     const header = isHC
       ? ["Lead ID", "Driver Name", "Phone", "Vehicle No", "DL No", "Total Trips", "License No", "City", "Platform", "Status", "Created", "Updated"]
-      : ["Lead ID", "Name", "Phone", "Product", "Platform", "City", "Status", "Assigned Employee", "Created", "Updated", "Follow-up", "Remarks"];
+      : ["Lead ID", "Name", "Mobile Number", "Platform", "City", "Product", "Source", "Assigned Caller", "Status", "Sub Status", "Call Count", "Last Call Date", "Next Follow-up Date", "ID Created Date", "Created Date", "Updated Date"];
     const rows = (data as Record<string, unknown>[] | null || []).map((r): (string | number)[] => {
       const created = r.created_at ? format(new Date(r.created_at as string), "yyyy-MM-dd HH:mm") : "";
       const updated = r.updated_at ? format(new Date(r.updated_at as string), "yyyy-MM-dd HH:mm") : "";
@@ -544,29 +599,36 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const caller = (r.current_caller as { full_name: string } | null)?.full_name || "";
       return isHC
         ? [String(r.id || ""), String(r.name || ""), String(r.phone || ""), "", "", "", "", String(r.city || ""), String(r.platform || ""), String(r.status || ""), created, updated]
-        : [String(r.id || ""), String(r.name || ""), String(r.phone || ""), prodName, String(r.platform || ""), String(r.city || ""), String(r.status || ""), caller, created, updated, followup, String(r.remarks || "")];
+        : [String(r.id || ""), String(r.name || ""), String(r.phone || ""), String(r.platform || ""), String(r.city || ""), prodName, String(r.source || ""), caller, String(r.status || ""), String(r.remarks || ""), "", "", followup, "", created, updated];
     });
     return { header, rows };
   };
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (platformOverride?: string) => {
     setExporting(true);
-    const data = await buildExportData();
+    const data = await buildExportData(platformOverride);
     if (data) {
-      downloadCSV([data.header, ...data.rows], `${product.code}-leads-export-${format(new Date(), "yyyy-MM-dd")}.csv`);
+      const suffix = platformOverride && platformOverride !== "ALL" ? `-${platformOverride.toLowerCase()}` : "";
+      downloadCSV([data.header, ...data.rows], `${product.code}-leads-export${suffix}-${format(new Date(), "yyyy-MM-dd")}.csv`);
       toast({ title: `Exported ${data.rows.length} leads to CSV` });
     }
     setExporting(false);
   };
 
-  const handleExportXLSX = async () => {
+  const handleExportXLSX = async (platformOverride?: string) => {
     setExporting(true);
-    const data = await buildExportData();
+    const data = await buildExportData(platformOverride);
     if (data) {
-      downloadXLSX([data.header, ...data.rows], "Leads", `${product.code}-leads-export-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+      const suffix = platformOverride && platformOverride !== "ALL" ? `-${platformOverride.toLowerCase()}` : "";
+      downloadXLSX([data.header, ...data.rows], "Leads", `${product.code}-leads-export${suffix}-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
       toast({ title: `Exported ${data.rows.length} leads to Excel` });
     }
     setExporting(false);
+  };
+
+  const handleQuickExport = async (platform: string, fmt: "csv" | "xlsx") => {
+    if (fmt === "csv") await handleExportCSV(platform);
+    else await handleExportXLSX(platform);
   };
 
   const loadBatchRecords = async (batch: ImportBatch) => {
@@ -710,10 +772,18 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     <StatCard label="Total" value={preview.total} icon={Upload} tone="default" />
                     <StatCard label="Valid" value={preview.valid} icon={CheckCircle2} tone="success" />
                     <StatCard label="Invalid" value={preview.invalid} icon={XCircle} tone="danger" />
+                    <StatCard label="Platform Missing" value={preview.platformMissing} icon={AlertCircle} tone="warning" />
                     <StatCard label="Internal Dup" value={preview.internalDuplicates} icon={CopyX} tone="warning" />
                     <StatCard label="Existing Lead Dup" value={preview.existingLeadDuplicates} icon={AlertCircle} tone="primary" />
-                    <StatCard label="Will Import" value={preview.willImport} icon={CheckCircle2} tone="success" />
                   </div>
+                  {!isHC && (
+                    <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+                      <StatCard label="Uber" value={preview.uber} icon={CheckCircle2} tone="success" />
+                      <StatCard label="Ola" value={preview.ola} icon={CheckCircle2} tone="primary" />
+                      <StatCard label="Rapido" value={preview.rapido} icon={CheckCircle2} tone="default" />
+                      <StatCard label="Will Import" value={preview.willImport} icon={CheckCircle2} tone="success" />
+                    </div>
+                  )}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button onClick={runImport} disabled={importing}>
                       {importing ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Importing...</> : <><CheckCircle2 className="mr-1 h-4 w-4" /> Continue Import</>}
@@ -731,13 +801,14 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
               </Card>
               <div className="rounded-xl border border-border/60 bg-card overflow-x-auto">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Name</TableHead><TableHead>Phone</TableHead>{isHC && <TableHead>Vehicle No</TableHead>}<TableHead>Status</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Name</TableHead><TableHead>Phone</TableHead>{!isHC && <TableHead>Platform</TableHead>}{isHC && <TableHead>Vehicle No</TableHead>}<TableHead>Status</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {parsedRows.slice(0, 100).map((row) => (
                       <TableRow key={row.rowIndex}>
                         <TableCell>{row.rowIndex}</TableCell>
                         <TableCell>{row.name}</TableCell>
                         <TableCell>{row.phone}</TableCell>
+                        {!isHC && <TableCell><PlatformBadge platform={row.platform} size="xs" /></TableCell>}
                         {isHC && <TableCell>{row.vehicleNo || "—"}</TableCell>}
                         <TableCell><RowStatusBadge status={row.rowStatus} /></TableCell>
                         <TableCell className="text-xs text-muted-foreground">{row.error || "OK"}</TableCell>
@@ -771,6 +842,20 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
         {/* ===== EXPORT ===== */}
         <TabsContent value="export" className="space-y-4">
+          {!isHC && productPlatforms.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Platform-wise Quick Export</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">Quickly export leads by platform using current filters (excluding platform filter). Both CSV and Excel provided per option.</p>
+                <div className="flex flex-wrap gap-3">
+                  <QuickExportButton label="Export All" platform="ALL" onExport={handleQuickExport} exporting={exporting} />
+                  <QuickExportButton label="Uber" platform="UBER" onExport={handleQuickExport} exporting={exporting} />
+                  <QuickExportButton label="Ola" platform="OLA" onExport={handleQuickExport} exporting={exporting} />
+                  <QuickExportButton label="Rapido" platform="RAPIDO" onExport={handleQuickExport} exporting={exporting} />
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader><CardTitle className="text-base">Export {product.name} Leads</CardTitle></CardHeader>
             <CardContent className="space-y-3">
@@ -790,7 +875,9 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     <SelectTrigger className="w-[130px]"><SelectValue placeholder="Platform" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">All Platforms</SelectItem>
-                      {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
+                      <SelectItem value="UBER">Uber</SelectItem>
+                      <SelectItem value="OLA">Ola</SelectItem>
+                      <SelectItem value="RAPIDO">Rapido</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
@@ -819,12 +906,21 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value="" onValueChange={(v) => { if (!v) return; const r = QUICK_DATE_RANGES.find((r) => r.value === v); if (r) { setExportDateFrom(r.getFrom()); setExportDateTo(r.getTo()); } }}>
+                  <SelectTrigger className="w-[130px]"><SelectValue placeholder="Date Range" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Select Date Range</SelectItem>
+                    {QUICK_DATE_RANGES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <Input type="date" value={exportDateFrom} onChange={(e) => setExportDateFrom(e.target.value)} className="w-[140px]" />
                 <Input type="date" value={exportDateTo} onChange={(e) => setExportDateTo(e.target.value)} className="w-[140px]" />
-                <Button onClick={handleExportCSV} disabled={exporting}>
+                <Button onClick={() => handleExportCSV()} disabled={exporting}>
                   {exporting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Exporting...</> : <><Download className="mr-1 h-4 w-4" /> CSV</>}
                 </Button>
-                <Button variant="outline" onClick={handleExportXLSX} disabled={exporting}>
+                <Button variant="outline" onClick={() => handleExportXLSX()} disabled={exporting}>
                   {exporting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Exporting...</> : <><FileSpreadsheet className="mr-1 h-4 w-4" /> Excel</>}
                 </Button>
               </div>
@@ -967,7 +1063,25 @@ function RowStatusBadge({ status }: { status: RowStatus }) {
     INVALID: { label: "Invalid", className: "text-destructive bg-destructive/10" },
     INTERNAL_DUPLICATE: { label: "Internal Dup", className: "text-warning-foreground bg-warning/20" },
     EXISTING_LEAD_DUPLICATE: { label: "Existing Lead", className: "text-primary bg-primary/10" },
+    PLATFORM_MISSING: { label: "Platform Missing", className: "text-warning-foreground bg-warning/20" },
   };
   const info = map[status];
   return <span className={`text-xs font-medium px-2 py-0.5 rounded ${info.className}`}>{info.label}</span>;
+}
+
+function QuickExportButton({ label, platform, onExport, exporting }: { label: string; platform: string; onExport: (platform: string, fmt: "csv" | "xlsx") => void; exporting: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <Button variant="outline" disabled={exporting} onClick={() => setOpen((v) => !v)}>
+        <Download className="mr-1 h-4 w-4" /> {label}
+      </Button>
+      {open && (
+        <div className="absolute top-full left-0 z-10 mt-1 flex gap-1 rounded-lg border border-border bg-card p-1 shadow-md">
+          <Button size="sm" variant="ghost" onClick={() => { onExport(platform, "csv"); setOpen(false); }}>CSV</Button>
+          <Button size="sm" variant="ghost" onClick={() => { onExport(platform, "xlsx"); setOpen(false); }}>Excel</Button>
+        </div>
+      )}
+    </div>
+  );
 }

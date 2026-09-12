@@ -38,6 +38,15 @@ import {
   Calendar,
 } from "lucide-react";
 import { format, subDays, startOfDay } from "date-fns";
+import { PlatformBadge } from "@/components/platform-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: "hsl(200 70% 60%)",
@@ -76,6 +85,8 @@ export default function AdminDashboard() {
   const [dailyData, setDailyData] = useState<{ date: string; leads: number }[]>([]);
   const [statusData, setStatusData] = useState<{ name: string; value: number }[]>([]);
   const [productData, setProductData] = useState<{ name: string; leads: number }[]>([]);
+  const [platformStats, setPlatformStats] = useState<Record<string, Record<string, number>>>({});
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
 
   const getDateRange = () => {
     const now = new Date();
@@ -99,6 +110,8 @@ export default function AdminDashboard() {
     setLoading(true);
     const { from, to } = getDateRange();
 
+    const platformFilterFn = (q: any) => platformFilter !== "ALL" ? q.eq("platform", platformFilter) : q;
+
     const [
       totalLeads,
       activeLeads,
@@ -116,18 +129,18 @@ export default function AdminDashboard() {
       activeHeroIds,
       activeSims,
     ] = await Promise.all([
-      supabase.from("leads").select("*", { count: "exact", head: true }).gte("created_at", from.toISOString()).lte("created_at", to.toISOString()),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_active", true).not("status", "in", ["ID_DONE", "ID_BLOCK", "OTHER_HERO", "ADMIN_REVIEW"]),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "RINGING"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "INTERESTED"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "CALLBACK"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_DONE"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_BLOCK"),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).gte("created_at", from.toISOString()).lte("created_at", to.toISOString())),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_active", true).not("status", "in", ["ID_DONE", "ID_BLOCK", "OTHER_HERO", "ADMIN_REVIEW"])),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "RINGING")),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "INTERESTED")),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "CALLBACK")),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_DONE")),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_BLOCK")),
       supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "DOCUMENT_ISSUE"),
       supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "VEHICLE_ISSUE"),
-      supabase.from("other_hero_leads").select("*", { count: "exact", head: true }),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("in_admin_review", true),
-      supabase.from("leads").select("*", { count: "exact", head: true }).not("next_followup_at", "is", null).lt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
+      platformFilterFn(supabase.from("other_hero_leads").select("*", { count: "exact", head: true })),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("in_admin_review", true)),
+      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).not("next_followup_at", "is", null).lt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"])),
       supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_active", true).eq("role", "EMPLOYEE"),
       supabase.from("hero_ids").select("*", { count: "exact", head: true }).eq("status", "ACTIVE"),
       supabase.from("sims").select("*", { count: "exact", head: true }).eq("status", "IN_USE"),
@@ -206,7 +219,33 @@ export default function AdminDashboard() {
     );
 
     setLoading(false);
-  }, [range]);
+
+    // Platform-wise breakdown
+    const { data: platformRows } = await supabase
+      .from("leads")
+      .select("platform, status, current_caller_id")
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString());
+    const platforms = ["UBER", "OLA", "RAPIDO"];
+    const pStats: Record<string, Record<string, number>> = {};
+    platforms.forEach((p) => {
+      pStats[p] = { total: 0, assigned: 0, connected: 0, notConnected: 0, ringing: 0, interested: 0, notInterested: 0, idCreated: 0, adminReview: 0 };
+    });
+    (platformRows as { platform: string; status: string; current_caller_id: string | null }[] | null)?.forEach((r) => {
+      const p = (r.platform || "").toUpperCase();
+      if (!pStats[p]) return;
+      pStats[p].total++;
+      if (r.current_caller_id) pStats[p].assigned++;
+      if (r.status === "ID_DONE") pStats[p].idCreated++;
+      if (r.status === "ADMIN_REVIEW") pStats[p].adminReview++;
+      if (r.status === "RINGING") pStats[p].ringing++;
+      if (r.status === "INTERESTED") pStats[p].interested++;
+      if (["ID_BLOCK", "DOC_ISSUE", "VEHICLE_ISSUE", "OTHER_ISSUE"].includes(r.status)) pStats[p].notInterested++;
+      if (["NEW", "CALLBACK"].includes(r.status)) pStats[p].notConnected++;
+      if (["ID_DONE", "INTERESTED"].includes(r.status)) pStats[p].connected++;
+    });
+    setPlatformStats(pStats);
+  }, [range, platformFilter]);
 
   useEffect(() => {
     load();
@@ -219,18 +258,31 @@ export default function AdminDashboard() {
         description="Overview of your CRM activity"
         icon={LayoutDashboard}
         actions={
-          <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="yesterday">Yesterday</SelectItem>
-              <SelectItem value="7d">Last 7 Days</SelectItem>
-              <SelectItem value="30d">Last 30 Days</SelectItem>
-              <SelectItem value="all">All Time</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select value={platformFilter} onValueChange={setPlatformFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="All Platforms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Platforms</SelectItem>
+                <SelectItem value="UBER">Uber</SelectItem>
+                <SelectItem value="OLA">Ola</SelectItem>
+                <SelectItem value="RAPIDO">Rapido</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         }
       />
 
@@ -256,6 +308,94 @@ export default function AdminDashboard() {
             <StatCard label="Active Hero IDs" value={stats.activeHeroIds} icon={IdCard} />
             <StatCard label="Active SIMs" value={stats.activeSims} icon={CreditCard} />
           </div>
+
+          {/* Platform-wise summary cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Card className="border-border/60">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <PlatformBadge platform="UBER" size="xs" />
+                    <span className="text-xs text-muted-foreground">Leads</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold">{platformStats["UBER"]?.total || 0}</p>
+                </div>
+                <Phone className="h-8 w-8 text-muted-foreground/30" />
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <PlatformBadge platform="OLA" size="xs" />
+                    <span className="text-xs text-muted-foreground">Leads</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold">{platformStats["OLA"]?.total || 0}</p>
+                </div>
+                <Phone className="h-8 w-8 text-muted-foreground/30" />
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <PlatformBadge platform="RAPIDO" size="xs" />
+                    <span className="text-xs text-muted-foreground">Leads</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold">{platformStats["RAPIDO"]?.total || 0}</p>
+                </div>
+                <Phone className="h-8 w-8 text-muted-foreground/30" />
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <span className="text-xs text-muted-foreground">Total Leads</span>
+                  <p className="mt-1 text-2xl font-bold">{stats.total}</p>
+                </div>
+                <Phone className="h-8 w-8 text-muted-foreground/30" />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Platform-wise breakdown table */}
+          <Card className="border-border/60">
+            <CardHeader><CardTitle className="text-base">Platform-wise Breakdown</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto scrollbar-thin">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Assigned</TableHead>
+                    <TableHead>Connected</TableHead>
+                    <TableHead>Not Connected</TableHead>
+                    <TableHead>Ringing</TableHead>
+                    <TableHead>Interested</TableHead>
+                    <TableHead>Not Interested</TableHead>
+                    <TableHead>ID Created</TableHead>
+                    <TableHead>Admin Review</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(["UBER", "OLA", "RAPIDO"] as const).map((p) => (
+                    <TableRow key={p}>
+                      <TableCell><PlatformBadge platform={p} size="xs" /></TableCell>
+                      <TableCell className="font-medium">{platformStats[p]?.total || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.assigned || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.connected || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.notConnected || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.ringing || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.interested || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.notInterested || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.idCreated || 0}</TableCell>
+                      <TableCell>{platformStats[p]?.adminReview || 0}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
           {/* Charts */}
           <div className="grid gap-4 lg:grid-cols-2">

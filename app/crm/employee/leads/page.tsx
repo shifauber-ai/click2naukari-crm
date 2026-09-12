@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/sheet";
 import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { StatusBadge } from "@/components/status-badge";
+import { PlatformBadge } from "@/components/platform-badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Phone,
@@ -81,6 +82,7 @@ export default function EmployeeLeadsPage() {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [platformFilter, setPlatformFilter] = useState("ALL");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [statusLead, setStatusLead] = useState<Lead | null>(null);
@@ -118,6 +120,10 @@ export default function EmployeeLeadsPage() {
       countQuery = countQuery.eq("status", statusFilter);
       query = query.eq("status", statusFilter);
     }
+    if (platformFilter !== "ALL") {
+      countQuery = countQuery.eq("platform", platformFilter);
+      query = query.eq("platform", platformFilter);
+    }
     if (search) {
       countQuery = countQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
       query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
@@ -130,7 +136,7 @@ export default function EmployeeLeadsPage() {
       setLeads((d.data as Lead[]) || []);
     }
     setLoading(false);
-  }, [profile, page, productFilter, statusFilter, search, toast]);
+  }, [profile, page, productFilter, statusFilter, platformFilter, search, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -211,6 +217,15 @@ export default function EmployeeLeadsPage() {
             {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
+          <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="All platforms" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Platforms</SelectItem>
+            <SelectItem value="UBER">Uber</SelectItem>
+            <SelectItem value="OLA">Ola</SelectItem>
+            <SelectItem value="RAPIDO">Rapido</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {loading ? (
@@ -225,6 +240,7 @@ export default function EmployeeLeadsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
+                  <TableHead>Platform</TableHead>
                   <TableHead>Product</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Next Follow-up</TableHead>
@@ -237,6 +253,7 @@ export default function EmployeeLeadsPage() {
                   <TableRow key={lead.id}>
                     <TableCell className="font-medium">{lead.name}</TableCell>
                     <TableCell className="text-sm">{lead.phone}</TableCell>
+                    <TableCell><PlatformBadge platform={lead.platform} size="xs" /></TableCell>
                     <TableCell className="text-sm">{productMap.get(lead.product_id)?.name || "—"}</TableCell>
                     <TableCell><StatusBadge status={lead.status} /></TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -289,7 +306,7 @@ export default function EmployeeLeadsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Update Status</DialogTitle>
-            <DialogDescription>{statusLead?.name} ({statusLead?.phone})</DialogDescription>
+            <DialogDescription className="flex items-center gap-2">{statusLead?.name} ({statusLead?.phone}) {statusLead?.platform && <PlatformBadge platform={statusLead.platform} size="xs" />}</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleStatusUpdate} className="space-y-4">
             <div className="space-y-2">
@@ -335,6 +352,7 @@ export default function EmployeeLeadsPage() {
                   <div>
                     <p className="font-medium">{historyLead.name}</p>
                     <p className="text-sm text-muted-foreground">{historyLead.phone}</p>
+                    <div className="mt-1"><PlatformBadge platform={historyLead.platform} size="xs" /></div>
                   </div>
                   <StatusBadge status={historyLead.status} />
                 </div>

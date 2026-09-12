@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard, EmptyState } from "@/components/page-parts";
+import { PlatformBadge } from "@/components/platform-badge";
 import { useAuth } from "@/lib/auth-context";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -440,7 +441,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
                     <TableHeader><TableRow><TableHead>Platform</TableHead><TableHead>Total</TableHead><TableHead>Interested</TableHead><TableHead>Callback</TableHead><TableHead>ID Done</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {platformPerf.map((p, i) => (
-                        <TableRow key={i}><TableCell className="font-medium">{p.name}</TableCell><TableCell>{p.total}</TableCell><TableCell className="text-success-foreground">{p.interested}</TableCell><TableCell className="text-warning-foreground">{p.callback}</TableCell><TableCell className="text-success-foreground">{p.idDone}</TableCell></TableRow>
+                        <TableRow key={i}><TableCell><PlatformBadge platform={p.name} size="xs" /></TableCell><TableCell>{p.total}</TableCell><TableCell className="text-success-foreground">{p.interested}</TableCell><TableCell className="text-warning-foreground">{p.callback}</TableCell><TableCell className="text-success-foreground">{p.idDone}</TableCell></TableRow>
                       ))}
                     </TableBody>
                   </Table>

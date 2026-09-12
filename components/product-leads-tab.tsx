@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sheet";
 import { EmptyState, StatCard } from "@/components/page-parts";
 import { StatusBadge } from "@/components/status-badge";
+import { PlatformBadge } from "@/components/platform-badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -578,7 +579,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                   </TableCell>
                   <TableCell className="text-sm">{lead.phone}</TableCell>
                   <TableCell className="text-sm">{lead.city || "—"}</TableCell>
-                  <TableCell className="text-sm">{lead.platform || "—"}</TableCell>
+                  <TableCell className="text-sm"><PlatformBadge platform={lead.platform} size="xs" /></TableCell>
                   <TableCell className="text-sm">{lead.source || "—"}</TableCell>
                   <TableCell><StatusBadge status={lead.status} /></TableCell>
                   {canManage && (
@@ -680,7 +681,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                   <DetailRow label="Driver Name" value={detailLead.name} />
                   <DetailRow label="Phone" value={detailLead.phone} />
                   <DetailRow label="City" value={detailLead.city || "—"} />
-                  <DetailRow label="Platform" value={detailLead.platform || "—"} />
+                  <DetailRow label="Platform" value={<PlatformBadge platform={detailLead.platform} />} />
                   <DetailRow label="Source" value={detailLead.source || "—"} />
                 </div>
               </div>
