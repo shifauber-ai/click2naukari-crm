@@ -70,10 +70,10 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
   // Create/edit form
   const [cName, setCName] = useState("");
   const [cPhone, setCPhone] = useState("");
-  const [cPlatform, setCPlatform] = useState("");
-  const [cCity, setCCity] = useState("");
+  const [cPlatform, setCPlatform] = useState("NONE");
+  const [cCity, setCCity] = useState("NONE");
   const [cStatus, setCStatus] = useState("ACTIVE");
-  const [cLabel, setCLabel] = useState("");
+  const [cLabel, setCLabel] = useState("NONE");
   const [cRemarks, setCRemarks] = useState("");
 
   const isAdmin = profile?.role === "ADMIN";
@@ -163,8 +163,8 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
   };
 
   const openCreate = () => {
-    setCName(""); setCPhone(""); setCPlatform(""); setCCity("");
-    setCStatus("ACTIVE"); setCLabel(""); setCRemarks("");
+    setCName(""); setCPhone(""); setCPlatform("NONE"); setCCity("NONE");
+    setCStatus("ACTIVE"); setCLabel("NONE"); setCRemarks("");
     setCreateOpen(true);
   };
 
@@ -175,9 +175,9 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .from("directory_entries")
       .insert({
         candidate_name: cName, phone_number: cPhone,
-        product_id: product.id, platform: cPlatform || null,
-        city: cCity || null, status: cStatus,
-        label_id: cLabel || null, remarks: cRemarks,
+        product_id: product.id, platform: cPlatform === "NONE" ? null : cPlatform,
+        city: cCity === "NONE" ? null : cCity, status: cStatus,
+        label_id: cLabel === "NONE" ? null : cLabel, remarks: cRemarks,
       })
       .select("*, label:directory_labels(*)")
       .single();
@@ -196,10 +196,10 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     setEditEntry(entry);
     setCName(entry.candidate_name);
     setCPhone(entry.phone_number);
-    setCPlatform(entry.platform || "");
-    setCCity(entry.city || "");
+    setCPlatform(entry.platform || "NONE");
+    setCCity(entry.city || "NONE");
     setCStatus(entry.status);
-    setCLabel(entry.label_id || "");
+    setCLabel(entry.label_id || "NONE");
     setCRemarks(entry.remarks);
   };
 
@@ -211,8 +211,8 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .from("directory_entries")
       .update({
         candidate_name: cName, phone_number: cPhone,
-        platform: cPlatform || null, city: cCity || null,
-        status: cStatus, label_id: cLabel || null, remarks: cRemarks,
+        platform: cPlatform === "NONE" ? null : cPlatform, city: cCity === "NONE" ? null : cCity,
+        status: cStatus, label_id: cLabel === "NONE" ? null : cLabel, remarks: cRemarks,
         updated_at: new Date().toISOString(),
       })
       .eq("id", editEntry.id);
@@ -221,8 +221,8 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     } else {
       setEntries((prev) => prev.map((e) => e.id === editEntry.id ? {
         ...e, candidate_name: cName, phone_number: cPhone,
-        platform: cPlatform || null, city: cCity || null,
-        status: cStatus, label_id: cLabel || null, remarks: cRemarks,
+        platform: cPlatform === "NONE" ? null : cPlatform, city: cCity === "NONE" ? null : cCity,
+        status: cStatus, label_id: cLabel === "NONE" ? null : cLabel, remarks: cRemarks,
       } : e));
       toast({ title: "Entry updated" });
       setEditEntry(null);
@@ -356,7 +356,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
           <Select value={cPlatform} onValueChange={setCPlatform}>
             <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="NONE">None</SelectItem>
               {platformOpts.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -367,7 +367,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
             <Select value={cCity} onValueChange={setCCity}>
               <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="NONE">None</SelectItem>
                 {(isEdit ? editCityOptions : activeCities).map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -389,7 +389,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
             <Select value={cLabel} onValueChange={setCLabel}>
               <SelectTrigger><SelectValue placeholder="Select label" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="NONE">None</SelectItem>
                 {labels.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
               </SelectContent>
             </Select>

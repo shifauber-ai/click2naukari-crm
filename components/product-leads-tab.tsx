@@ -95,8 +95,8 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const [eName, setEName] = useState("");
   const [ePhone, setEPhone] = useState("");
   const [eStatus, setEStatus] = useState<LeadStatus>("NEW");
-  const [ePlatform, setEPlatform] = useState("");
-  const [eCity, setECity] = useState("");
+  const [ePlatform, setEPlatform] = useState("NONE");
+  const [eCity, setECity] = useState("NONE");
   const [eRemarks, setERemarks] = useState("");
   const [eCallerId, setECallerId] = useState<string>("NONE");
 
@@ -243,7 +243,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const openEdit = (lead: LeadWithCaller) => {
     setEditLead(lead);
     setEName(lead.name); setEPhone(lead.phone); setEStatus(lead.status);
-    setEPlatform(lead.platform || ""); setECity(lead.city || "");
+    setEPlatform(lead.platform || "NONE"); setECity(lead.city || "NONE");
     setERemarks(lead.remarks); setECallerId(lead.current_caller_id || "NONE");
   };
 
@@ -256,8 +256,8 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_name: eName, p_phone: ePhone, p_product_id: editLead.product_id,
       p_status: eStatus, p_current_caller_id: eCallerId === "NONE" ? null : eCallerId,
       p_remarks: eRemarks,
-      p_platform: ePlatform || "",
-      p_city: eCity || "",
+      p_platform: ePlatform === "NONE" ? "" : ePlatform,
+      p_city: eCity === "NONE" ? "" : eCity,
       p_source: editLead.source || "",
     });
     if (error) {
@@ -267,7 +267,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
         ...l, name: eName, phone: ePhone, status: eStatus,
         current_caller_id: eCallerId === "NONE" ? null : eCallerId,
         current_caller: eCallerId !== "NONE" ? { full_name: employees.find((emp) => emp.id === eCallerId)?.full_name || "" } : null,
-        platform: ePlatform || null, city: eCity || null, remarks: eRemarks,
+        platform: ePlatform === "NONE" ? null : ePlatform, city: eCity === "NONE" ? null : eCity, remarks: eRemarks,
       } : l));
       toast({ title: "Lead updated" });
       setEditLead(null);
@@ -813,7 +813,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
               <Select value={ePlatform} onValueChange={setEPlatform}>
                 <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="NONE">None</SelectItem>
                   {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -824,7 +824,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                 <Select value={eCity} onValueChange={setECity}>
                   <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                  <SelectItem value="NONE">None</SelectItem>
                     {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
