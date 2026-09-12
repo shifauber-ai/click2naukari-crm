@@ -95,7 +95,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
   const [cAmount, setCAmount] = useState("");
   const [cStatus, setCStatus] = useState("PENDING");
   const [cMethod, setCMethod] = useState("Cash");
-  const [cEmployee, setCEmployee] = useState("NONE");
+  const [cEmployee, setCEmployee] = useState("");
   const [cRemarks, setCRemarks] = useState("");
 
   const isAdmin = profile?.role === "ADMIN";
@@ -208,7 +208,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
 
   const openCreate = () => {
     setCName(""); setCAmount(""); setCStatus("PENDING"); setCMethod("Cash");
-    setCEmployee("NONE"); setCRemarks("");
+    setCEmployee(""); setCRemarks("");
     setCreateOpen(true);
   };
 
@@ -219,12 +219,11 @@ export function ProductPaymentTab({ product }: { product: Product }) {
       .from("payment_records").insert({
         candidate_name: cName, amount: parseFloat(cAmount) || 0,
         payment_status: cStatus, payment_method: cMethod,
-        employee_id: cEmployee === "NONE" ? null : cEmployee, product_id: product.id,
+        employee_id: cEmployee || null, product_id: product.id,
         remarks: cRemarks, payment_date: new Date().toISOString().split("T")[0],
-        transaction_id: "", service_description: "",
       }).select("*, employee:profiles!employee_id(full_name), lead:leads(name, phone, platform)").single();
     if (error) {
-      toast({ title: "Failed to create payment record: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to create payment record.", variant: "destructive" });
     } else {
       setPayments((prev) => [data as PaymentRecord, ...prev]);
       toast({ title: "Payment record created" });
@@ -240,7 +239,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
     setCAmount(String(p.amount));
     setCStatus(p.payment_status);
     setCMethod(p.payment_method || "Cash");
-    setCEmployee(p.employee_id || "NONE");
+    setCEmployee(p.employee_id || "");
     setCRemarks(p.remarks || "");
   };
 
@@ -252,16 +251,16 @@ export function ProductPaymentTab({ product }: { product: Product }) {
       .from("payment_records").update({
         candidate_name: cName, amount: parseFloat(cAmount) || 0,
         payment_status: cStatus, payment_method: cMethod,
-        employee_id: cEmployee === "NONE" ? null : cEmployee, remarks: cRemarks,
+        employee_id: cEmployee || null, remarks: cRemarks,
         updated_at: new Date().toISOString(),
       }).eq("id", editPayment.id);
     if (error) {
-      toast({ title: "Failed to update payment: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to update payment.", variant: "destructive" });
     } else {
       setPayments((prev) => prev.map((p) => p.id === editPayment.id ? {
         ...p, candidate_name: cName, amount: parseFloat(cAmount) || 0,
         payment_status: cStatus, payment_method: cMethod,
-        employee_id: cEmployee === "NONE" ? null : cEmployee, remarks: cRemarks,
+        employee_id: cEmployee || null, remarks: cRemarks,
       } : p));
       toast({ title: "Payment updated" });
       setEditPayment(null);
@@ -278,7 +277,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
       payment_status: newStatus, updated_at: new Date().toISOString(),
     }).in("id", ids);
     if (error) {
-      toast({ title: "Bulk update failed: " + error.message, variant: "destructive" });
+      toast({ title: "Bulk update failed.", variant: "destructive" });
     } else {
       setPayments((prev) => prev.map((p) => selectedIds.has(p.id) ? { ...p, payment_status: newStatus } : p));
       toast({ title: `${selectedIds.size} payments marked as ${newStatus}` });
@@ -346,7 +345,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
         <Select value={cEmployee} onValueChange={setCEmployee}>
           <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="NONE">None</SelectItem>
+            <SelectItem value="">None</SelectItem>
             {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
           </SelectContent>
         </Select>

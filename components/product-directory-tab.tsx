@@ -70,10 +70,10 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
   // Create/edit form
   const [cName, setCName] = useState("");
   const [cPhone, setCPhone] = useState("");
-  const [cPlatform, setCPlatform] = useState("NONE");
-  const [cCity, setCCity] = useState("NONE");
+  const [cPlatform, setCPlatform] = useState("");
+  const [cCity, setCCity] = useState("");
   const [cStatus, setCStatus] = useState("ACTIVE");
-  const [cLabel, setCLabel] = useState("NONE");
+  const [cLabel, setCLabel] = useState("");
   const [cRemarks, setCRemarks] = useState("");
 
   const isAdmin = profile?.role === "ADMIN";
@@ -163,8 +163,8 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
   };
 
   const openCreate = () => {
-    setCName(""); setCPhone(""); setCPlatform("NONE"); setCCity("NONE");
-    setCStatus("ACTIVE"); setCLabel("NONE"); setCRemarks("");
+    setCName(""); setCPhone(""); setCPlatform(""); setCCity("");
+    setCStatus("ACTIVE"); setCLabel(""); setCRemarks("");
     setCreateOpen(true);
   };
 
@@ -175,14 +175,14 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .from("directory_entries")
       .insert({
         candidate_name: cName, phone_number: cPhone,
-        product_id: product.id, platform: cPlatform === "NONE" ? null : cPlatform,
-        city: cCity === "NONE" ? null : cCity, status: cStatus,
-        label_id: cLabel === "NONE" ? null : cLabel, remarks: cRemarks,
+        product_id: product.id, platform: cPlatform || null,
+        city: cCity || null, status: cStatus,
+        label_id: cLabel || null, remarks: cRemarks,
       })
       .select("*, label:directory_labels(*)")
       .single();
     if (error) {
-      toast({ title: "Failed to create entry: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to create entry. Please try again.", variant: "destructive" });
     } else {
       setEntries((prev) => [data as DirectoryEntry, ...prev]);
       toast({ title: "Directory entry created" });
@@ -196,10 +196,10 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     setEditEntry(entry);
     setCName(entry.candidate_name);
     setCPhone(entry.phone_number);
-    setCPlatform(entry.platform || "NONE");
-    setCCity(entry.city || "NONE");
+    setCPlatform(entry.platform || "");
+    setCCity(entry.city || "");
     setCStatus(entry.status);
-    setCLabel(entry.label_id || "NONE");
+    setCLabel(entry.label_id || "");
     setCRemarks(entry.remarks);
   };
 
@@ -211,18 +211,18 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .from("directory_entries")
       .update({
         candidate_name: cName, phone_number: cPhone,
-        platform: cPlatform === "NONE" ? null : cPlatform, city: cCity === "NONE" ? null : cCity,
-        status: cStatus, label_id: cLabel === "NONE" ? null : cLabel, remarks: cRemarks,
+        platform: cPlatform || null, city: cCity || null,
+        status: cStatus, label_id: cLabel || null, remarks: cRemarks,
         updated_at: new Date().toISOString(),
       })
       .eq("id", editEntry.id);
     if (error) {
-      toast({ title: "Failed to update entry: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to update entry.", variant: "destructive" });
     } else {
       setEntries((prev) => prev.map((e) => e.id === editEntry.id ? {
         ...e, candidate_name: cName, phone_number: cPhone,
-        platform: cPlatform === "NONE" ? null : cPlatform, city: cCity === "NONE" ? null : cCity,
-        status: cStatus, label_id: cLabel === "NONE" ? null : cLabel, remarks: cRemarks,
+        platform: cPlatform || null, city: cCity || null,
+        status: cStatus, label_id: cLabel || null, remarks: cRemarks,
       } : e));
       toast({ title: "Entry updated" });
       setEditEntry(null);
@@ -235,7 +235,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     if (!deleteEntry) return;
     const { error } = await supabase.from("directory_entries").delete().eq("id", deleteEntry.id);
     if (error) {
-      toast({ title: "Failed to delete entry: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to delete entry.", variant: "destructive" });
     } else {
       setEntries((prev) => prev.filter((e) => e.id !== deleteEntry.id));
       toast({ title: "Entry deleted" });
@@ -287,7 +287,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .in("id", ids);
     if (error) {
-      toast({ title: "Bulk update failed: " + error.message, variant: "destructive" });
+      toast({ title: "Bulk update failed.", variant: "destructive" });
     } else {
       setEntries((prev) => prev.map((e) => selectedIds.has(e.id) ? { ...e, status: newStatus } : e));
       toast({ title: `${selectedIds.size} entries ${newStatus === "ACTIVE" ? "activated" : "deactivated"}` });
@@ -303,7 +303,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     const ids = Array.from(selectedIds);
     const { error } = await supabase.from("directory_entries").delete().in("id", ids);
     if (error) {
-      toast({ title: "Bulk delete failed: " + error.message, variant: "destructive" });
+      toast({ title: "Bulk delete failed.", variant: "destructive" });
     } else {
       setEntries((prev) => prev.filter((e) => !selectedIds.has(e.id)));
       toast({ title: `${selectedIds.size} entries deleted` });
@@ -356,7 +356,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
           <Select value={cPlatform} onValueChange={setCPlatform}>
             <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="NONE">None</SelectItem>
+              <SelectItem value="">None</SelectItem>
               {platformOpts.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -367,7 +367,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
             <Select value={cCity} onValueChange={setCCity}>
               <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="NONE">None</SelectItem>
+                <SelectItem value="">None</SelectItem>
                 {(isEdit ? editCityOptions : activeCities).map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -389,7 +389,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
             <Select value={cLabel} onValueChange={setCLabel}>
               <SelectTrigger><SelectValue placeholder="Select label" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="NONE">None</SelectItem>
+                <SelectItem value="">None</SelectItem>
                 {labels.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
               </SelectContent>
             </Select>

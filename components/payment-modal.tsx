@@ -85,7 +85,7 @@ export function PaymentModal({
       product_id: product.id,
       candidate_name: lead.name,
       amount: parseFloat(amount) || 0,
-      payment_status: qr ? "PENDING" : "SUCCESS",
+      payment_status: qr ? "PENDING" : "PAID",
       payment_method: qr ? "UPI" : "CASH",
       payment_mode: qr ? "UPI" : "CASH",
       service_description: serviceDesc.trim(),
@@ -97,8 +97,6 @@ export function PaymentModal({
     });
     if (error) {
       toast({ title: "Payment failed: " + error.message, variant: "destructive" });
-      setSaving(false);
-      return;
     } else {
       toast({ title: qr ? "Payment saved as Pending. Confirm when UPI is received." : "Cash payment saved successfully" });
       onOpenChange(false);

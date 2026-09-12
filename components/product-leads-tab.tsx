@@ -95,8 +95,8 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const [eName, setEName] = useState("");
   const [ePhone, setEPhone] = useState("");
   const [eStatus, setEStatus] = useState<LeadStatus>("NEW");
-  const [ePlatform, setEPlatform] = useState("NONE");
-  const [eCity, setECity] = useState("NONE");
+  const [ePlatform, setEPlatform] = useState("");
+  const [eCity, setECity] = useState("");
   const [eRemarks, setERemarks] = useState("");
   const [eCallerId, setECallerId] = useState<string>("NONE");
 
@@ -243,7 +243,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const openEdit = (lead: LeadWithCaller) => {
     setEditLead(lead);
     setEName(lead.name); setEPhone(lead.phone); setEStatus(lead.status);
-    setEPlatform(lead.platform || "NONE"); setECity(lead.city || "NONE");
+    setEPlatform(lead.platform || ""); setECity(lead.city || "");
     setERemarks(lead.remarks); setECallerId(lead.current_caller_id || "NONE");
   };
 
@@ -256,18 +256,15 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_name: eName, p_phone: ePhone, p_product_id: editLead.product_id,
       p_status: eStatus, p_current_caller_id: eCallerId === "NONE" ? null : eCallerId,
       p_remarks: eRemarks,
-      p_platform: ePlatform === "NONE" ? "" : ePlatform,
-      p_city: eCity === "NONE" ? "" : eCity,
-      p_source: editLead.source || "",
     });
     if (error) {
-      toast({ title: "Failed to update lead: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to update lead. Please try again.", variant: "destructive" });
     } else {
       setLeads((prev) => prev.map((l) => l.id === editLead.id ? {
         ...l, name: eName, phone: ePhone, status: eStatus,
         current_caller_id: eCallerId === "NONE" ? null : eCallerId,
         current_caller: eCallerId !== "NONE" ? { full_name: employees.find((emp) => emp.id === eCallerId)?.full_name || "" } : null,
-        platform: ePlatform === "NONE" ? null : ePlatform, city: eCity === "NONE" ? null : eCity, remarks: eRemarks,
+        platform: ePlatform || null, city: eCity || null, remarks: eRemarks,
       } : l));
       toast({ title: "Lead updated" });
       setEditLead(null);
@@ -325,7 +322,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks,
     });
     if (error) {
-      toast({ title: "Failed to update status: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to update status. Please try again.", variant: "destructive" });
     } else {
       setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: newStatus } : l));
       toast({ title: "Status updated" });
@@ -349,7 +346,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_new_status: assignLead.status, p_remarks: "Manual assignment",
     });
     if (error) {
-      toast({ title: "Failed to assign lead: " + error.message, variant: "destructive" });
+      toast({ title: "Failed to assign lead. Please try again.", variant: "destructive" });
     } else {
       setLeads((prev) => prev.map((l) => l.id === assignLead.id ? {
         ...l, current_caller_id: assignCallerId,
@@ -428,7 +425,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_lead_ids: ids, p_new_caller_id: bulkCallerId,
     });
     if (error) {
-      toast({ title: "Bulk assignment failed: " + error.message, variant: "destructive" });
+      toast({ title: "Bulk assignment failed. Please try again.", variant: "destructive" });
     } else {
       const result = data as { assigned_count: number };
       const callerName = employees.find((e) => e.id === bulkCallerId)?.full_name || "";
@@ -813,7 +810,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
               <Select value={ePlatform} onValueChange={setEPlatform}>
                 <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NONE">None</SelectItem>
+                  <SelectItem value="">None</SelectItem>
                   {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -824,7 +821,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                 <Select value={eCity} onValueChange={setECity}>
                   <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
                   <SelectContent>
-                  <SelectItem value="NONE">None</SelectItem>
+                    <SelectItem value="">None</SelectItem>
                     {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
