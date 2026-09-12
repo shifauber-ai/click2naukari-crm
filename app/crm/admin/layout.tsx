@@ -79,12 +79,8 @@ const ADMIN_SECTIONS: NavSection[] = [
       { href: "/crm/admin/followups", label: "Follow Up", icon: Calendar },
       { href: "/crm/admin/issues", label: "Issues", icon: AlertTriangle },
       { href: "/crm/admin/other-hero", label: "Other Hero", icon: PhoneCall },
-      { href: "/crm/admin/review", label: "Admin Review", icon: ClipboardCheck },
+      { href: "/crm/admin/review", label: "Manager Review", icon: ClipboardCheck },
     ],
-  },
-  {
-    label: "Directory & Data",
-    items: [],
   },
   {
     label: "Call Sync",
@@ -102,7 +98,7 @@ const ADMIN_SECTIONS: NavSection[] = [
   {
     label: "System",
     items: [
-      { href: "/crm/admin/employees", label: "Users / Employees", icon: Users },
+      { href: "/crm/admin/employees", label: "Team Management", icon: Users },
       { href: "/crm/admin/products", label: "Products", icon: Package },
       { href: "/crm/admin/sims", label: "SIM", icon: CreditCard },
       { href: "/crm/admin/settings", label: "Settings", icon: Settings },
@@ -116,7 +112,7 @@ const MANAGER_EXCLUDED_HREFS = new Set([
   "/crm/admin/audit",
   "/crm/admin/settings",
   "/crm/admin/products",
-  "/crm/admin/review",
+  "/crm/admin/settings",
 ]);
 
 function filterSections(sections: NavSection[], isManager: boolean, assignedProductSlugs: Set<string> | null): NavSection[] {

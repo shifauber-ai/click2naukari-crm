@@ -182,7 +182,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .select("*, label:directory_labels(*)")
       .single();
     if (error) {
-      toast({ title: "Failed to create entry. Please try again.", variant: "destructive" });
+      toast({ title: "Failed to create entry: " + error.message, variant: "destructive" });
     } else {
       setEntries((prev) => [data as DirectoryEntry, ...prev]);
       toast({ title: "Directory entry created" });
@@ -217,7 +217,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       })
       .eq("id", editEntry.id);
     if (error) {
-      toast({ title: "Failed to update entry.", variant: "destructive" });
+      toast({ title: "Failed to update entry: " + error.message, variant: "destructive" });
     } else {
       setEntries((prev) => prev.map((e) => e.id === editEntry.id ? {
         ...e, candidate_name: cName, phone_number: cPhone,
@@ -235,7 +235,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     if (!deleteEntry) return;
     const { error } = await supabase.from("directory_entries").delete().eq("id", deleteEntry.id);
     if (error) {
-      toast({ title: "Failed to delete entry.", variant: "destructive" });
+      toast({ title: "Failed to delete entry: " + error.message, variant: "destructive" });
     } else {
       setEntries((prev) => prev.filter((e) => e.id !== deleteEntry.id));
       toast({ title: "Entry deleted" });
@@ -287,7 +287,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .in("id", ids);
     if (error) {
-      toast({ title: "Bulk update failed.", variant: "destructive" });
+      toast({ title: "Bulk update failed: " + error.message, variant: "destructive" });
     } else {
       setEntries((prev) => prev.map((e) => selectedIds.has(e.id) ? { ...e, status: newStatus } : e));
       toast({ title: `${selectedIds.size} entries ${newStatus === "ACTIVE" ? "activated" : "deactivated"}` });
@@ -303,7 +303,7 @@ export function ProductDirectoryTab({ product }: { product: Product }) {
     const ids = Array.from(selectedIds);
     const { error } = await supabase.from("directory_entries").delete().in("id", ids);
     if (error) {
-      toast({ title: "Bulk delete failed.", variant: "destructive" });
+      toast({ title: "Bulk delete failed: " + error.message, variant: "destructive" });
     } else {
       setEntries((prev) => prev.filter((e) => !selectedIds.has(e.id)));
       toast({ title: `${selectedIds.size} entries deleted` });

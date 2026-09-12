@@ -214,7 +214,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       .select("*, employee:profiles(*), city:product_cities!city_id(city_name)")
       .single();
     if (error) {
-      toast({ title: "Caller could not be added. Please try again.", variant: "destructive" });
+      toast({ title: "Caller could not be added: " + error.message, variant: "destructive" });
     } else {
       const newRow = data as QueueRow & { city?: { city_name: string } | null };
       setQueue((prev) => [...prev, { ...newRow, city_name: newRow.city?.city_name || null }].sort((a, b) => a.priority - b.priority));
@@ -236,7 +236,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       .delete()
       .eq("id", removeRow.id);
     if (error) {
-      toast({ title: "Caller could not be removed. Please try again.", variant: "destructive" });
+      toast({ title: "Caller could not be removed: " + error.message, variant: "destructive" });
     } else {
       setQueue((prev) => prev.filter((r) => r.id !== removeRow.id));
       toast({ title: "Caller removed from queue" });
@@ -546,7 +546,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       {sortedQueue.length > 0 && (
         <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
           <p className="text-sm text-muted-foreground">
-            Leads are assigned to caller #1 first. On Ringing (1 min) or Interested / Call Back (48h), the lead moves to the next active caller. Rotation never wraps from the last caller back to #1.
+            Leads are assigned to caller #1 first. On Ringing (1 hour) or Interested / Call Back (24 hours), the lead moves to the next active caller in the same Product + City. Rotation never wraps from the last caller back to #1.
           </p>
         </div>
       )}

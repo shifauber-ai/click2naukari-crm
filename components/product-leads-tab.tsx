@@ -256,9 +256,12 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_name: eName, p_phone: ePhone, p_product_id: editLead.product_id,
       p_status: eStatus, p_current_caller_id: eCallerId === "NONE" ? null : eCallerId,
       p_remarks: eRemarks,
+      p_platform: ePlatform || "",
+      p_city: eCity || "",
+      p_source: editLead.source || "",
     });
     if (error) {
-      toast({ title: "Failed to update lead. Please try again.", variant: "destructive" });
+      toast({ title: "Failed to update lead: " + error.message, variant: "destructive" });
     } else {
       setLeads((prev) => prev.map((l) => l.id === editLead.id ? {
         ...l, name: eName, phone: ePhone, status: eStatus,
@@ -322,7 +325,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks,
     });
     if (error) {
-      toast({ title: "Failed to update status. Please try again.", variant: "destructive" });
+      toast({ title: "Failed to update status: " + error.message, variant: "destructive" });
     } else {
       setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: newStatus } : l));
       toast({ title: "Status updated" });
@@ -346,7 +349,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_new_status: assignLead.status, p_remarks: "Manual assignment",
     });
     if (error) {
-      toast({ title: "Failed to assign lead. Please try again.", variant: "destructive" });
+      toast({ title: "Failed to assign lead: " + error.message, variant: "destructive" });
     } else {
       setLeads((prev) => prev.map((l) => l.id === assignLead.id ? {
         ...l, current_caller_id: assignCallerId,
@@ -425,7 +428,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       p_lead_ids: ids, p_new_caller_id: bulkCallerId,
     });
     if (error) {
-      toast({ title: "Bulk assignment failed. Please try again.", variant: "destructive" });
+      toast({ title: "Bulk assignment failed: " + error.message, variant: "destructive" });
     } else {
       const result = data as { assigned_count: number };
       const callerName = employees.find((e) => e.id === bulkCallerId)?.full_name || "";
