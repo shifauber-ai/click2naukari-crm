@@ -137,6 +137,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   // Import config
   const [impSource, setImpSource] = useState("Showroom Data");
   const [impStatus, setImpStatus] = useState<string>(isHC ? "TAG_ADDED" : "NEW");
+  const [impPlatform, setImpPlatform] = useState<string>("");
 
   // Reference data
   const [productPlatforms, setProductPlatforms] = useState<{ id: string; name: string }[]>([]);
@@ -173,7 +174,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
 
-  const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
+  const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Leads", "Porter", "Other"];
   const crmFields = isHC ? HC_FIELDS : NORMAL_FIELDS;
 
   // Load reference data
@@ -318,7 +319,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const rowNum = idx + 2;
       const name = getCol(cells, mapping.name || "");
       const phone = getCol(cells, mapping.phone || "");
-      const platform = isHC ? "UBER" : (mapping.platform ? getCol(cells, mapping.platform).toUpperCase() : "");
+      const platform = isHC ? "UBER" : (mapping.platform ? getCol(cells, mapping.platform).toUpperCase() : impPlatform.toUpperCase());
       const city = mapping.city ? getCol(cells, mapping.city) : "";
       const status = isHC ? "TAG_ADDED" : (mapping.status ? getCol(cells, mapping.status) : impStatus);
       const source = mapping.source ? getCol(cells, mapping.source) : impSource;
@@ -387,7 +388,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       willImport: parsed.filter((r) => r.rowStatus === "OK" || r.rowStatus === "EXISTING_LEAD_DUPLICATE").length,
     });
     setShowMapping(false);
-  }, [fileRows, mapping, isHC, impStatus, impSource, product.name, product.id, productPlatforms, activeCities]);
+  }, [fileRows, mapping, isHC, impStatus, impSource, impPlatform, product.name, product.id, productPlatforms, activeCities]);
 
   const runImport = async () => {
     setImporting(true);
@@ -641,6 +642,19 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                       </SelectContent>
                     </Select>
                   </div>
+                  {!isHC && productPlatforms.length > 0 && (
+                    <div>
+                      <Label className="text-xs">Default Platform</Label>
+                      <Select value={impPlatform} onValueChange={setImpPlatform}>
+                        <SelectTrigger className="h-8"><SelectValue placeholder="From file column" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">From file column</SelectItem>
+                          {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">Used when file has no Platform column. Leave blank to require per-row data.</p>
+                    </div>
+                  )}
                   {!isHC && (
                     <div>
                       <Label className="text-xs">Default Status</Label>

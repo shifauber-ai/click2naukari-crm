@@ -18,11 +18,14 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, MapPin,
+  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, MapPin, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -43,6 +46,8 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [detailEmployee, setDetailEmployee] = useState<(Profile & { assigned_cities?: string[] }) | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<Profile | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [fullName, setFullName] = useState("");
@@ -391,6 +396,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailEmployee(p)} title="View"><Eye className="h-4 w-4" /></Button>
                       {isAdmin && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditFromRow(p)} title="Edit"><Pencil className="h-4 w-4" /></Button>}
                       {isAdmin && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openReset(p)} title="Reset password"><KeyRound className="h-4 w-4" /></Button>}
+                      {isAdmin && p.role !== "ADMIN" && <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(p)} title="Delete"><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -471,6 +477,43 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Employee Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.full_name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the user, their profile, caller queue memberships, city assignments, and manager product assignments. Leads will be unassigned. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!deleteTarget) return;
+                setDeleting(true);
+                const { ok, error } = await callEdgeFunction("crm-admin-users", {
+                  action: "delete_user", user_id: deleteTarget.id,
+                });
+                if (!ok) {
+                  toast({ title: error || "Failed to delete user", variant: "destructive" });
+                } else {
+                  toast({ title: "User permanently deleted" });
+                  setDeleteTarget(null);
+                  load();
+                }
+                setDeleting(false);
+              }}
+            >
+              {deleting ? "Deleting..." : "Delete Permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

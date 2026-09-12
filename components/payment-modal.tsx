@@ -96,7 +96,7 @@ export function PaymentModal({
       remarks: "",
     });
     if (error) {
-      toast({ title: "Failed to save payment", variant: "destructive" });
+      toast({ title: "Payment failed: " + error.message, variant: "destructive" });
     } else {
       toast({ title: qr ? "Payment saved as Pending. Confirm when UPI is received." : "Cash payment saved successfully" });
       onOpenChange(false);

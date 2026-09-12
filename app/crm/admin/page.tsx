@@ -36,8 +36,12 @@ import {
   IdCard,
   CreditCard,
   Calendar,
+  Wallet,
+  TrendingUp,
 } from "lucide-react";
-import { format, subDays, startOfDay } from "date-fns";
+import { format, subDays, startOfDay, eachDayOfInterval } from "date-fns";
+import { useAuth } from "@/lib/auth-context";
+import Link from "next/link";
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: "hsl(200 70% 60%)",
@@ -70,6 +74,7 @@ const STATUS_LABELS: Record<string, string> = {
 type RangeKey = "today" | "yesterday" | "7d" | "30d" | "all";
 
 export default function AdminDashboard() {
+  const { profile } = useAuth();
   const [range, setRange] = useState<RangeKey>("7d");
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Record<string, number>>({});
@@ -212,17 +217,25 @@ export default function AdminDashboard() {
     load();
   }, [load]);
 
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 17) return "Good Afternoon";
+    if (h < 21) return "Good Evening";
+    return "Good Night";
+  };
+
   return (
-    <div>
-      <PageHeader
-        title="Dashboard"
-        description="Overview of your CRM activity"
-        icon={LayoutDashboard}
-        actions={
+    <div className="space-y-6">
+      {/* Greeting Hero */}
+      <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-card to-card border border-border/60 p-6">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{getGreeting()}, {profile?.full_name}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">CRM Operations Overview</p>
+          </div>
           <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="yesterday">Yesterday</SelectItem>
@@ -231,12 +244,13 @@ export default function AdminDashboard() {
               <SelectItem value="all">All Time</SelectItem>
             </SelectContent>
           </Select>
-        }
-      />
+        </div>
+      </div>
 
       {loading ? (
         <LoadingState />
       ) : (
+        <>
         <div className="space-y-6">
           {/* Stat cards */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -255,6 +269,15 @@ export default function AdminDashboard() {
             <StatCard label="Active Employees" value={stats.activeEmployees} icon={Users} tone="primary" />
             <StatCard label="Active Hero IDs" value={stats.activeHeroIds} icon={IdCard} />
             <StatCard label="Active SIMs" value={stats.activeSims} icon={CreditCard} />
+          </div>
+
+          {/* Quick Links */}
+          <div className="flex flex-wrap gap-2">
+            <Link href="/crm/admin/car" className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm font-medium hover:bg-secondary">Car Workspace</Link>
+            <Link href="/crm/admin/auto" className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm font-medium hover:bg-secondary">Auto Workspace</Link>
+            <Link href="/crm/admin/bike" className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm font-medium hover:bg-secondary">Bike Workspace</Link>
+            <Link href="/crm/admin/hc" className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm font-medium hover:bg-secondary">HC Workspace</Link>
+            <Link href="/crm/admin/review" className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm font-medium hover:bg-secondary">Admin Review ({stats.adminReview})</Link>
           </div>
 
           {/* Charts */}
@@ -367,6 +390,7 @@ export default function AdminDashboard() {
             </Card>
           </div>
         </div>
+        </>
       )}
     </div>
   );
