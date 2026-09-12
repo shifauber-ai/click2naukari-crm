@@ -162,6 +162,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   // Import config
   const [impSource, setImpSource] = useState("Showroom Data");
   const [impStatus, setImpStatus] = useState<string>(isHC ? "TAG_ADDED" : "NEW");
+  const [importPlatformPreset, setImportPlatformPreset] = useState<string | null>(null);
 
   // Reference data
   const [productPlatforms, setProductPlatforms] = useState<{ id: string; name: string }[]>([]);
@@ -279,6 +280,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     setPreview(null);
     setParsedRows([]);
     setFileName(file.name);
+    // Preserve preset — cleared after validation applies it
 
     const isXlsx = file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
 
@@ -347,8 +349,8 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const rowNum = idx + 2;
       const name = getCol(cells, mapping.name || "");
       const phone = getCol(cells, mapping.phone || "");
-      const rawPlatform = isHC ? "UBER" : (mapping.platform ? getCol(cells, mapping.platform) : "");
-      const normalizedPlatform = isHC ? "UBER" : normalizePlatform(rawPlatform);
+      const rawPlatform = isHC ? "UBER" : (importPlatformPreset && importPlatformPreset !== "ALL" ? importPlatformPreset : (mapping.platform ? getCol(cells, mapping.platform) : ""));
+      const normalizedPlatform = isHC ? "UBER" : (importPlatformPreset && importPlatformPreset !== "ALL" ? importPlatformPreset : normalizePlatform(rawPlatform));
       const platform = normalizedPlatform === "__INVALID__" ? rawPlatform.trim() : (normalizedPlatform || "");
       const city = mapping.city ? getCol(cells, mapping.city) : "";
       const status = isHC ? "TAG_ADDED" : (mapping.status ? getCol(cells, mapping.status) : impStatus);
@@ -431,7 +433,8 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       willImport: parsed.filter((r) => r.rowStatus === "OK" || r.rowStatus === "EXISTING_LEAD_DUPLICATE").length,
     });
     setShowMapping(false);
-  }, [fileRows, mapping, isHC, impStatus, impSource, product.name, product.id, productPlatforms, activeCities]);
+    setImportPlatformPreset(null);
+  }, [fileRows, mapping, isHC, impStatus, impSource, product.name, product.id, productPlatforms, activeCities, importPlatformPreset]);
 
   const runImport = async () => {
     setImporting(true);
@@ -460,7 +463,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     const batchId = batch.id;
 
     const leadInserts: Record<string, unknown>[] = [];
-    const dirInserts: Record<string, unknown>[] = [];
     const importRecordInserts: Record<string, unknown>[] = [];
 
     for (const row of rowsToImport) {
@@ -469,17 +471,17 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         leadInserts.push({
           name: row.name, phone: row.phone, product_id: product.id,
           platform: "UBER", city: row.city || null, status: "TAG_ADDED",
+          source: row.source || null,
           vehicle_no: row.vehicleNo || null, dl_no: row.dlNo || null,
           total_trips: row.totalTrips ? parseInt(row.totalTrips, 10) : null,
           license_no: row.licenseNo || null,
         });
       } else {
-        dirInserts.push({
-          candidate_name: row.name, phone_number: row.phone,
-          product_id: product.id, platform: row.platform || null,
-          city: row.city || null, status: row.status || "ACTIVE",
-          remarks: "", import_batch_id: batchId, duplicate_type: dupType,
-          existing_lead_id: row.existingLeadId || null,
+        leadInserts.push({
+          name: row.name, phone: row.phone, product_id: product.id,
+          platform: row.platform || null, city: row.city || null,
+          source: row.source || null,
+          status: (row.status as string) || "NEW",
         });
       }
       importRecordInserts.push({
@@ -518,13 +520,17 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       });
     }
 
+    let insertedLeadIds: string[] = [];
     if (leadInserts.length > 0) {
-      const { error: leadErr } = await supabase.from("leads").insert(leadInserts);
-      if (leadErr) toast({ title: "Some records could not be imported.", variant: "destructive" });
-    }
-    if (dirInserts.length > 0) {
-      const { error: dirErr } = await supabase.from("directory_entries").insert(dirInserts);
-      if (dirErr) toast({ title: "Some directory entries could not be imported.", variant: "destructive" });
+      const { data: inserted, error: leadErr } = await supabase.from("leads").insert(leadInserts).select("id");
+      if (leadErr) {
+        toast({ title: "Import failed: " + leadErr.message, variant: "destructive" });
+      } else {
+        insertedLeadIds = ((inserted as { id: string }[]) || []).map((r) => r.id);
+        for (const leadId of insertedLeadIds) {
+          await supabase.rpc("assign_new_lead", { p_lead_id: leadId });
+        }
+      }
     }
     await supabase.from("import_records").insert(importRecordInserts);
     await supabase.from("import_batches").update({ imported, status: "COMPLETED" }).eq("id", batchId);
@@ -685,6 +691,32 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         {/* ===== IMPORT ===== */}
         <TabsContent value="import" className="space-y-4">
           {!showMapping && !preview && !importResult && (
+            <>
+            {!isHC && productPlatforms.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle className="text-base">Platform-wise Quick Import</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">Import leads by platform using the existing import workflow. Select a platform to pre-fill it during column mapping.</p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button variant="outline" onClick={() => { setImportPlatformPreset("ALL"); fileRef.current?.click(); }}>
+                      <Upload className="mr-1 h-4 w-4" /> Import All
+                    </Button>
+                    <Button variant="outline" onClick={() => { setImportPlatformPreset("UBER"); fileRef.current?.click(); }}>
+                      <Upload className="mr-1 h-4 w-4" /> Uber
+                    </Button>
+                    <Button variant="outline" onClick={() => { setImportPlatformPreset("OLA"); fileRef.current?.click(); }}>
+                      <Upload className="mr-1 h-4 w-4" /> Ola
+                    </Button>
+                    <Button variant="outline" onClick={() => { setImportPlatformPreset("RAPIDO"); fileRef.current?.click(); }}>
+                      <Upload className="mr-1 h-4 w-4" /> Rapido
+                    </Button>
+                  </div>
+                  {importPlatformPreset && importPlatformPreset !== "ALL" && (
+                    <p className="text-xs text-primary">Platform preset: {importPlatformPreset} — platform column will be auto-filled.</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader><CardTitle className="text-base">Import Data for {product.name}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -727,6 +759,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                 <p className="text-sm text-muted-foreground">Upload a CSV or Excel file. After upload, you'll map columns to CRM fields before importing.</p>
               </CardContent>
             </Card>
+            </>
           )}
 
           {/* Field Mapping UI */}

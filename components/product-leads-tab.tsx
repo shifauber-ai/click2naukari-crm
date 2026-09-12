@@ -55,7 +55,7 @@ interface LeadStats {
   adminReview: number;
 }
 
-export function ProductLeadsTab({ product }: { product: Product }) {
+export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Product; idDoneOnly?: boolean }) {
   const { profile } = useAuth();
   const { toast } = useToast();
 
@@ -127,6 +127,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
   const isAdmin = profile?.role === "ADMIN";
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
+  const isCarProduct = product.code === "CAR" || product.code === "MAINC001" || product.code === "C001";
 
   // Load reference data
   useEffect(() => {
@@ -193,6 +194,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       .order("created_at", { ascending: false })
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
+    if (idDoneOnly) { cq = cq.eq("status", "ID_DONE"); q = q.eq("status", "ID_DONE"); }
     if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
     if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
@@ -217,7 +219,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
       setLeads((dr.data as LeadWithCaller[]) || []);
     }
     setLoading(false);
-  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -446,8 +448,8 @@ export function ProductLeadsTab({ product }: { product: Product }) {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h2 className="text-lg font-bold tracking-tight">{product.name} Leads</h2>
-        <p className="text-sm text-muted-foreground">Manage and track leads for {product.name}</p>
+        <h2 className="text-lg font-bold tracking-tight">{idDoneOnly ? "ID Done Leads" : `${product.name} Leads`}</h2>
+        <p className="text-sm text-muted-foreground">{idDoneOnly ? "Leads with ID Done status" : `Manage and track leads for ${product.name}`}</p>
       </div>
 
       {/* Summary Cards */}
@@ -600,9 +602,18 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleWhatsApp(lead)} disabled={!lead.phone} title={lead.phone ? "WhatsApp" : "No phone"}>
                         <MessageCircle className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPaymentLead(lead)} title="Payment">
-                        <Wallet className="h-3.5 w-3.5" />
-                      </Button>
+                      {(lead.uber_id_done || lead.ola_id_done || lead.rapido_id_done) && (
+                        <div className="flex items-center gap-1 px-1">
+                          {lead.uber_id_done && <span className="rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success-foreground">UBER ID DONE</span>}
+                          {lead.ola_id_done && <span className="rounded bg-info/15 px-1.5 py-0.5 text-[10px] font-bold text-info-foreground">OLA ID DONE</span>}
+                          {lead.rapido_id_done && <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">RAPIDO ID DONE</span>}
+                        </div>
+                      )}
+                      {isCarProduct && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPaymentLead(lead)} title="Payment">
+                          <Wallet className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {canManage && (
                         <>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Status">
@@ -722,6 +733,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
               </div>
 
               {/* Payment History */}
+              {isCarProduct && (
               <div className="rounded-xl border border-border/60 bg-card p-4">
                 <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Payment History</h3>
                 {detailLoading ? (
@@ -750,12 +762,13 @@ export function ProductLeadsTab({ product }: { product: Product }) {
                   </>
                 )}
               </div>
+              )}
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => handleCall(detailLead)} disabled={!detailLead.phone}><PhoneCall className="mr-2 h-4 w-4" /> Call</Button>
                 <Button variant="outline" onClick={() => handleWhatsApp(detailLead)} disabled={!detailLead.phone}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp</Button>
-                <Button variant="outline" onClick={() => { setPaymentLead(detailLead); }}><Wallet className="mr-2 h-4 w-4" /> Payment</Button>
+                {isCarProduct && <Button variant="outline" onClick={() => { setPaymentLead(detailLead); }}><Wallet className="mr-2 h-4 w-4" /> Payment</Button>}
                 <Button variant="ghost" onClick={() => setDetailLead(null)}>Close</Button>
               </div>
             </div>
@@ -763,7 +776,7 @@ export function ProductLeadsTab({ product }: { product: Product }) {
         </DialogContent>
       </Dialog>
 
-      <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
+      {isCarProduct && <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />}
 
       {/* ===== Edit Dialog ===== */}
       <Dialog open={!!editLead} onOpenChange={(v) => !v && setEditLead(null)}>

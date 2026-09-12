@@ -19,11 +19,11 @@ import { PageHeader, EmptyState } from "@/components/page-parts";
 import { cn } from "@/lib/utils";
 import {
   Phone, Wallet, PhoneCall, Smartphone, BarChart3, MapPin,
-  BookMarked, Upload, Users, QrCode, type LucideIcon,
+  BookMarked, Upload, Users, QrCode, CheckCircle2, type LucideIcon,
 } from "lucide-react";
 
 export type ProductTab =
-  | "leads" | "payment" | "callers-queue" | "platforms"
+  | "leads" | "id-done" | "payment" | "callers-queue" | "platforms"
   | "reports" | "city" | "directory" | "import-export" | "employee" | "qr";
 
 interface TabDef { key: ProductTab; label: string; icon: LucideIcon; }
@@ -39,13 +39,13 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
 
   const tabs: TabDef[] = [
     { key: "leads", label: "Leads", icon: Phone },
+    { key: "id-done", label: "ID Done", icon: CheckCircle2 },
     ...(showPayment ? [{ key: "payment" as ProductTab, label: "Payment", icon: Wallet }] : []),
     ...(showPayment ? [{ key: "qr" as ProductTab, label: "QR", icon: QrCode }] : []),
     { key: "callers-queue", label: "Callers Queue", icon: PhoneCall },
     { key: "platforms", label: "Platforms", icon: Smartphone },
     { key: "reports", label: "Reports", icon: BarChart3 },
     { key: "city", label: "City", icon: MapPin },
-    { key: "directory", label: "Directory", icon: BookMarked },
     { key: "import-export", label: "Import / Export", icon: Upload },
     { key: "employee", label: "Employee", icon: Users },
   ];
@@ -79,11 +79,12 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
       </div>
 
       {activeTab === "leads" && <ProductLeadsTab product={product} />}
+      {activeTab === "id-done" && <ProductLeadsTab product={product} idDoneOnly />}
       {activeTab === "payment" && showPayment && <ProductPaymentTab product={product} />}
       {activeTab === "qr" && showPayment && <ProductQRTab product={product} />}
+      {activeTab === "callers-queue" && <ProductCallerQueueTab product={product} />}
       {activeTab === "directory" && <ProductDirectoryTab product={product} />}
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={false} />}
-      {activeTab === "callers-queue" && <ProductCallerQueueTab product={product} />}
       {activeTab === "platforms" && <ProductPlatformsTab product={product} />}
       {activeTab === "city" && <ProductCityTab product={product} />}
       {activeTab === "reports" && <ProductReportsTab product={product} />}
@@ -104,6 +105,7 @@ function TabPlaceholder({ tab, productName }: { tab: ProductTab; productName: st
     "import-export": { title: "Import / Export", desc: `Import and export data for ${productName}`, icon: Upload },
     "employee": { title: "Employee", desc: `Manage employees assigned to ${productName}`, icon: Users },
     "qr": { title: "QR", desc: `Manage payment QR codes for ${productName}`, icon: QrCode },
+    "id-done": { title: "ID Done", desc: `Leads with ID Done status for ${productName}`, icon: CheckCircle2 },
   };
   const info = labels[tab];
   return <EmptyState icon={info.icon} title={`${info.title} — Coming Soon`} description={info.desc} />;
