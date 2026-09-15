@@ -472,7 +472,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         .from("import_batches").insert({
           filename: fileName, total_rows: parsedRows.length, imported: 0,
           duplicate: internalDup, failed: invalid, invalid,
-          missing_fields: invalid + platformMissingCount, status: "PROCESSING",
+          missing_fields: invalid + platformMissingCount, status: "PENDING",
           product_id: product.id, platform: isHC ? "UBER" : (impPlatform || null),
           uploaded_by: profile?.id || null,
           existing_lead_duplicates: existingDup, internal_duplicates: internalDup,
