@@ -85,7 +85,7 @@ export function PaymentModal({
       product_id: product.id,
       candidate_name: lead.name,
       amount: parseFloat(amount) || 0,
-      payment_status: qr ? "PENDING" : "PAID",
+      payment_status: qr ? "PENDING" : "COMPLETED",
       payment_method: qr ? "UPI" : "CASH",
       payment_mode: qr ? "UPI" : "CASH",
       service_description: serviceDesc.trim(),

@@ -140,9 +140,9 @@ export function ProductPaymentTab({ product }: { product: Product }) {
     const { data, error } = await q;
     if (error) { setStatsLoading(false); return; }
     const records = (data as Record<string, unknown>[]) || [];
-    const totalAmt = records.filter((r) => r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL").reduce((s, r) => s + Number(r.amount || 0), 0);
-    const upiAmt = records.filter((r) => (r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL") && (r.payment_mode === "UPI")).reduce((s, r) => s + Number(r.amount || 0), 0);
-    const cashAmt = records.filter((r) => (r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL") && (r.payment_mode === "CASH")).reduce((s, r) => s + Number(r.amount || 0), 0);
+    const totalAmt = records.filter((r) => r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL" || r.payment_status === "COMPLETED").reduce((s, r) => s + Number(r.amount || 0), 0);
+    const upiAmt = records.filter((r) => (r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL" || r.payment_status === "COMPLETED") && (r.payment_mode === "UPI")).reduce((s, r) => s + Number(r.amount || 0), 0);
+    const cashAmt = records.filter((r) => (r.payment_status === "PAID" || r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL" || r.payment_status === "COMPLETED") && (r.payment_mode === "CASH")).reduce((s, r) => s + Number(r.amount || 0), 0);
     const pendingAmt = records.filter((r) => r.payment_status === "PENDING").reduce((s, r) => s + Number(r.amount || 0), 0);
     setStats({ total: totalAmt, upi: upiAmt, cash: cashAmt, pending: pendingAmt });
 
@@ -155,7 +155,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
       const amt = Number(r.amount || 0);
       eMap[id].transactions++;
       eMap[id].total += amt;
-      if (r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL" || r.payment_status === "PAID") eMap[id].successful += amt;
+      if (r.payment_status === "SUCCESS" || r.payment_status === "SUCCESSFUL" || r.payment_status === "PAID" || r.payment_status === "COMPLETED") eMap[id].successful += amt;
       if (r.payment_status === "FAILED") eMap[id].failed += amt;
       if (r.payment_status === "PENDING") eMap[id].pending += amt;
     });
@@ -296,7 +296,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
   const allSelected = payments.length > 0 && selectedIds.size === payments.length;
 
   const statusBadge = (status: string) => {
-    if (status === "SUCCESS" || status === "SUCCESSFUL" || status === "PAID")
+    if (status === "SUCCESS" || status === "SUCCESSFUL" || status === "PAID" || status === "COMPLETED")
       return <span className="text-xs font-medium px-2 py-0.5 rounded bg-success/20 text-success-foreground">Successful</span>;
     if (status === "FAILED")
       return <span className="text-xs font-medium px-2 py-0.5 rounded bg-destructive/10 text-destructive">Failed</span>;
