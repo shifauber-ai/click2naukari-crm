@@ -7,13 +7,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { PaymentModal } from "@/components/payment-modal";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Wallet, PhoneCall, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Lead, Platform, ProductCity } from "@/lib/types";
@@ -40,6 +42,15 @@ export default function EmployeeLeadsPage() {
   const [cities, setCities] = useState<ProductCity[]>([]);
   const [viewLead, setViewLead] = useState<LeadWithDetails | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [statusLead, setStatusLead] = useState<LeadWithDetails | null>(null);
+  const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
+  const [statusRemarks, setStatusRemarks] = useState("");
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [paymentLead, setPaymentLead] = useState<LeadWithDetails | null>(null);
+  const [deleteLead, setDeleteLead] = useState<LeadWithDetails | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const isCar = product.isCar;
 
   const loadPlatformsAndCities = useCallback(async () => {
     if (!product) return;
@@ -97,6 +108,50 @@ export default function EmployeeLeadsPage() {
   const handleWhatsApp = (lead: Lead) => {
     const cleanPhone = lead.phone.replace(/[^0-9]/g, "");
     window.open(`https://wa.me/${cleanPhone}`, "_blank");
+  };
+
+  const openStatus = (lead: LeadWithDetails) => {
+    setStatusLead(lead);
+    setNewStatus(lead.status === "NEW" ? "RINGING" : lead.status);
+    setStatusRemarks("");
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!statusLead) return;
+    setStatusSaving(true);
+    const { error } = await supabase.rpc("update_lead_status", {
+      p_lead_id: statusLead.id,
+      p_new_status: newStatus,
+      p_remarks: statusRemarks,
+    });
+    setStatusSaving(false);
+    if (error) {
+      toast({ title: `Status update failed: ${error.message}`, variant: "destructive" });
+      return;
+    }
+    setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: newStatus } : l));
+    setStatusLead(null);
+    toast({ title: "Status updated successfully" });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteLead) return;
+    setDeleting(true);
+    const { data, error } = await supabase.rpc("employee_soft_delete_lead", { p_lead_id: deleteLead.id });
+    setDeleting(false);
+    if (error) {
+      toast({ title: `Delete failed: ${error.message}`, variant: "destructive" });
+      return;
+    }
+    const result = data as { success: boolean; error?: string } | null;
+    if (result && !result.success) {
+      toast({ title: result.error || "Not authorized to delete this lead", variant: "destructive" });
+      return;
+    }
+    setLeads((prev) => prev.filter((l) => l.id !== deleteLead.id));
+    setTotal((prev) => prev - 1);
+    setDeleteLead(null);
+    toast({ title: "Lead deleted" });
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -197,8 +252,19 @@ export default function EmployeeLeadsPage() {
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleWhatsApp(lead)} title="WhatsApp">
                             <MessageCircle className="h-4 w-4" />
                           </Button>
+                          {isCar && (
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-600 hover:bg-amber-50" onClick={() => setPaymentLead(lead)} title="Payment">
+                              <Wallet className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Status Update">
+                            <PhoneCall className="h-4 w-4" />
+                          </Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)} title="View">
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => setDeleteLead(lead)} title="Delete">
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
@@ -285,6 +351,62 @@ export default function EmployeeLeadsPage() {
         </Sheet>
       )}
 
+      {/* Status Update Dialog */}
+      <Dialog open={!!statusLead} onOpenChange={(open) => !open && setStatusLead(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-slate-500">Lead</label>
+              <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500">New Status</label>
+              <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
+                <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW").map((s) => (
+                    <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500">Remarks</label>
+              <Input value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Optional remarks" className="mt-1 border-slate-200" />
+            </div>
+            <Button className="w-full gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={handleStatusUpdate} disabled={statusSaving}>
+              {statusSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Update Status"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Modal (Car only) */}
+      {isCar && (
+        <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
+      )}
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteLead} onOpenChange={(open) => !open && setDeleteLead(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Lead?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            Are you sure you want to delete <span className="font-medium">{deleteLead?.name}</span> ({deleteLead?.phone})? This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteLead(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
+              {deleting ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting...</> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add Lead */}
       <AddLeadDrawer
         open={addLeadOpen}
@@ -298,6 +420,7 @@ export default function EmployeeLeadsPage() {
     </div>
   );
 }
+
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
