@@ -453,10 +453,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       toast({ title: "Please select a Platform before importing.", variant: "destructive" });
       return;
     }
-    if (!impCity && !parsedRows.some((r) => r.city && r.rowStatus === "OK")) {
-      toast({ title: "Please select a City before importing.", variant: "destructive" });
-      return;
-    }
 
     setImporting(true);
     setImportProgress({ done: 0, total: 0 });
