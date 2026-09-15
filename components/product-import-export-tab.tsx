@@ -5,9 +5,6 @@ import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase/client";
 import { Product, ImportBatch, ImportRecord, DuplicateType, LEAD_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/types";
 import { PlatformBadge } from "@/components/platform-badge";
-import { ProductPlatformsTab } from "@/components/product-platforms-tab";
-import { ProductCityTab } from "@/components/product-city-tab";
-import { Smartphone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -158,7 +155,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [preview, setPreview] = useState<PreviewSummary | null>(null);
   const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importResult, setImportResult] = useState<{
     imported: number; internalDup: number; existingDup: number; invalid: number; batchId: string;
   } | null>(null);
@@ -167,8 +163,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [impSource, setImpSource] = useState("Showroom Data");
   const [impStatus, setImpStatus] = useState<string>(isHC ? "TAG_ADDED" : "NEW");
   const [importPlatformPreset, setImportPlatformPreset] = useState<string | null>(null);
-  const [defaultPlatform, setDefaultPlatform] = useState<string>("");
-  const [defaultCity, setDefaultCity] = useState<string>("");
 
   // Reference data
   const [productPlatforms, setProductPlatforms] = useState<{ id: string; name: string }[]>([]);
@@ -355,12 +349,10 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const rowNum = idx + 2;
       const name = getCol(cells, mapping.name || "");
       const phone = getCol(cells, mapping.phone || "");
-      const hasPlatformCol = !isHC && mapping.platform && mapping.platform !== "__ignore__";
-      const rawPlatform = isHC ? "UBER" : (importPlatformPreset && importPlatformPreset !== "ALL" ? importPlatformPreset : (hasPlatformCol ? getCol(cells, mapping.platform) : defaultPlatform));
-      const normalizedPlatform = isHC ? "UBER" : (importPlatformPreset && importPlatformPreset !== "ALL" ? importPlatformPreset : (hasPlatformCol ? normalizePlatform(rawPlatform) : (defaultPlatform || "")));
+      const rawPlatform = isHC ? "UBER" : (importPlatformPreset && importPlatformPreset !== "ALL" ? importPlatformPreset : (mapping.platform ? getCol(cells, mapping.platform) : ""));
+      const normalizedPlatform = isHC ? "UBER" : (importPlatformPreset && importPlatformPreset !== "ALL" ? importPlatformPreset : normalizePlatform(rawPlatform));
       const platform = normalizedPlatform === "__INVALID__" ? rawPlatform.trim() : (normalizedPlatform || "");
-      const hasCityCol = mapping.city && mapping.city !== "__ignore__";
-      const city = hasCityCol ? getCol(cells, mapping.city) : defaultCity;
+      const city = mapping.city ? getCol(cells, mapping.city) : "";
       const status = isHC ? "TAG_ADDED" : (mapping.status ? getCol(cells, mapping.status) : impStatus);
       const source = mapping.source ? getCol(cells, mapping.source) : impSource;
 
@@ -442,158 +434,116 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     });
     setShowMapping(false);
     setImportPlatformPreset(null);
-  }, [fileRows, mapping, isHC, impStatus, impSource, product.name, product.id, productPlatforms, activeCities, importPlatformPreset, defaultPlatform, defaultCity]);
-
-  const CHUNK_SIZE = 250;
+  }, [fileRows, mapping, isHC, impStatus, impSource, product.name, product.id, productPlatforms, activeCities, importPlatformPreset]);
 
   const runImport = async () => {
     setImporting(true);
-    setImportProgress({ current: 0, total: 0 });
     let imported = 0;
     const internalDup = parsedRows.filter((r) => r.rowStatus === "INTERNAL_DUPLICATE").length;
     const invalid = parsedRows.filter((r) => r.rowStatus === "INVALID").length;
     const existingDup = parsedRows.filter((r) => r.rowStatus === "EXISTING_LEAD_DUPLICATE").length;
     const platformMissingCount = parsedRows.filter((r) => r.rowStatus === "PLATFORM_MISSING").length;
     const rowsToImport = parsedRows.filter((r) => r.rowStatus === "OK" || r.rowStatus === "EXISTING_LEAD_DUPLICATE");
-    const totalToProcess = rowsToImport.length;
-    setImportProgress({ current: 0, total: totalToProcess });
 
-    let batchId: string | null = null;
+    const { data: batch, error: batchErr } = await supabase
+      .from("import_batches").insert({
+        filename: fileName, total_rows: parsedRows.length, imported: 0,
+        duplicate: internalDup, failed: invalid, invalid,
+        missing_fields: invalid + platformMissingCount, status: "PROCESSING",
+        product_id: product.id, platform: isHC ? "UBER" : null,
+        uploaded_by: profile?.id || null,
+        existing_lead_duplicates: existingDup, internal_duplicates: internalDup,
+        skipped: internalDup + platformMissingCount,
+      }).select("id").single();
 
-    try {
-      const { data: batch, error: batchErr } = await supabase
-        .from("import_batches").insert({
-          filename: fileName, total_rows: parsedRows.length, imported: 0,
-          duplicate: internalDup, failed: invalid, invalid,
-          missing_fields: invalid + platformMissingCount, status: "PROCESSING",
-          product_id: product.id, platform: isHC ? "UBER" : null,
-          uploaded_by: profile?.id || null,
-          existing_lead_duplicates: existingDup, internal_duplicates: internalDup,
-          skipped: internalDup + platformMissingCount,
-        }).select("id").single();
-
-      if (batchErr || !batch) {
-        toast({ title: "Import could not be started. Please try again.", variant: "destructive" });
-        return;
-      }
-      batchId = batch.id;
-
-      const importRecordInserts: Record<string, unknown>[] = [];
-
-      for (const row of rowsToImport) {
-        const dupType: DuplicateType = row.rowStatus === "EXISTING_LEAD_DUPLICATE" ? "EXISTING_LEAD_DUPLICATE" : "NONE";
-        importRecordInserts.push({
-          batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
-          product_id: product.id, platform: row.platform || (isHC ? "UBER" : null),
-          city: row.city || null, label: row.source || null,
-          status: row.rowStatus === "EXISTING_LEAD_DUPLICATE" ? "EXISTING_LEAD_DUPLICATE" : "IMPORTED",
-          duplicate_type: dupType, existing_lead_id: row.existingLeadId || null,
-          validation_error: null,
-        });
-        imported++;
-      }
-
-      for (const row of parsedRows.filter((r) => r.rowStatus === "INTERNAL_DUPLICATE")) {
-        importRecordInserts.push({
-          batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
-          product_id: product.id, platform: isHC ? "UBER" : row.platform, city: row.city || null,
-          label: row.source || null, status: "INTERNAL_DUPLICATE_SKIPPED",
-          duplicate_type: "INTERNAL_DUPLICATE", existing_lead_id: null, validation_error: row.error,
-        });
-      }
-      for (const row of parsedRows.filter((r) => r.rowStatus === "INVALID")) {
-        importRecordInserts.push({
-          batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
-          product_id: product.id, platform: isHC ? "UBER" : row.platform, city: row.city || null,
-          label: row.source || null, status: "INVALID",
-          duplicate_type: "NONE", existing_lead_id: null, validation_error: row.error,
-        });
-      }
-      for (const row of parsedRows.filter((r) => r.rowStatus === "PLATFORM_MISSING")) {
-        importRecordInserts.push({
-          batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
-          product_id: product.id, platform: null, city: row.city || null,
-          label: row.source || null, status: "PLATFORM_MISSING",
-          duplicate_type: "NONE", existing_lead_id: null, validation_error: row.error,
-        });
-      }
-
-      // Chunked lead inserts
-      let insertedLeadIds: string[] = [];
-      let insertFailed = false;
-
-      for (let i = 0; i < rowsToImport.length; i += CHUNK_SIZE) {
-        const chunk = rowsToImport.slice(i, i + CHUNK_SIZE);
-        const leadInserts: Record<string, unknown>[] = chunk.map((row) => {
-          if (isHC) {
-            return {
-              name: row.name, phone: row.phone, product_id: product.id,
-              platform: "UBER", city: row.city || null, status: "TAG_ADDED",
-              source: row.source || null,
-              vehicle_no: row.vehicleNo || null, dl_no: row.dlNo || null,
-              total_trips: row.totalTrips ? parseInt(row.totalTrips, 10) : null,
-              license_no: row.licenseNo || null,
-            };
-          }
-          return {
-            name: row.name, phone: row.phone, product_id: product.id,
-            platform: row.platform || null, city: row.city || null,
-            source: row.source || null,
-            status: (row.status as string) || "NEW",
-          };
-        });
-
-        const { data: inserted, error: leadErr } = await supabase.from("leads").insert(leadInserts).select("id");
-        if (leadErr) {
-          insertFailed = true;
-          toast({ title: `Import failed at row ${i + 1}: ${leadErr.message}`, variant: "destructive" });
-          break;
-        }
-        const ids = ((inserted as { id: string }[]) || []).map((r) => r.id);
-        insertedLeadIds.push(...ids);
-
-        // Parallel assign for this chunk
-        await Promise.all(ids.map((leadId) => supabase.rpc("assign_new_lead", { p_lead_id: leadId })));
-
-        // Chunked import records
-        const recChunk = importRecordInserts.slice(
-          importRecordInserts.findIndex((r) => r.row_number === chunk[0].rowIndex),
-          importRecordInserts.findIndex((r) => r.row_number === chunk[chunk.length - 1].rowIndex) + 1
-        );
-        if (recChunk.length > 0) {
-          await supabase.from("import_records").insert(recChunk);
-        }
-
-        setImportProgress({ current: Math.min(i + CHUNK_SIZE, totalToProcess), total: totalToProcess });
-      }
-
-      // Insert remaining records (skipped/invalid rows)
-      const remainingRecords = importRecordInserts.filter((r) => r.status !== "IMPORTED" && r.status !== "EXISTING_LEAD_DUPLICATE");
-      if (remainingRecords.length > 0) {
-        for (let i = 0; i < remainingRecords.length; i += CHUNK_SIZE) {
-          await supabase.from("import_records").insert(remainingRecords.slice(i, i + CHUNK_SIZE));
-        }
-      }
-
-      if (!insertFailed) {
-        await supabase.from("import_batches").update({ imported, status: "COMPLETED" }).eq("id", batchId);
-        setImportResult({ imported, internalDup, existingDup, invalid, batchId: batchId || "" });
-        toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid} Failed Records` });
-      } else {
-        await supabase.from("import_batches").update({ imported: insertedLeadIds.length, status: "FAILED" }).eq("id", batchId);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      toast({ title: `Import error: ${msg}`, variant: "destructive" });
-      if (batchId) {
-        await supabase.from("import_batches").update({ status: "FAILED" }).eq("id", batchId);
-      }
-    } finally {
-      setImporting(false);
-      setImportProgress(null);
-      loadBatches();
-      loadDupRecords();
+    if (batchErr || !batch) {
+      toast({ title: "Import could not be started. Please try again.", variant: "destructive" });
+      setImporting(false); return;
     }
+    const batchId = batch.id;
+
+    const leadInserts: Record<string, unknown>[] = [];
+    const importRecordInserts: Record<string, unknown>[] = [];
+
+    for (const row of rowsToImport) {
+      const dupType: DuplicateType = row.rowStatus === "EXISTING_LEAD_DUPLICATE" ? "EXISTING_LEAD_DUPLICATE" : "NONE";
+      if (isHC) {
+        leadInserts.push({
+          name: row.name, phone: row.phone, product_id: product.id,
+          platform: "UBER", city: row.city || null, status: "TAG_ADDED",
+          source: row.source || null,
+          vehicle_no: row.vehicleNo || null, dl_no: row.dlNo || null,
+          total_trips: row.totalTrips ? parseInt(row.totalTrips, 10) : null,
+          license_no: row.licenseNo || null,
+        });
+      } else {
+        leadInserts.push({
+          name: row.name, phone: row.phone, product_id: product.id,
+          platform: row.platform || null, city: row.city || null,
+          source: row.source || null,
+          status: (row.status as string) || "NEW",
+        });
+      }
+      importRecordInserts.push({
+        batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
+        product_id: product.id, platform: row.platform || (isHC ? "UBER" : null),
+        city: row.city || null, label: row.source || null,
+        status: row.rowStatus === "EXISTING_LEAD_DUPLICATE" ? "EXISTING_LEAD_DUPLICATE" : "IMPORTED",
+        duplicate_type: dupType, existing_lead_id: row.existingLeadId || null,
+        validation_error: null,
+      });
+      imported++;
+    }
+
+    for (const row of parsedRows.filter((r) => r.rowStatus === "INTERNAL_DUPLICATE")) {
+      importRecordInserts.push({
+        batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
+        product_id: product.id, platform: isHC ? "UBER" : row.platform, city: row.city || null,
+        label: row.source || null, status: "INTERNAL_DUPLICATE_SKIPPED",
+        duplicate_type: "INTERNAL_DUPLICATE", existing_lead_id: null, validation_error: row.error,
+      });
+    }
+    for (const row of parsedRows.filter((r) => r.rowStatus === "INVALID")) {
+      importRecordInserts.push({
+        batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
+        product_id: product.id, platform: isHC ? "UBER" : row.platform, city: row.city || null,
+        label: row.source || null, status: "INVALID",
+        duplicate_type: "NONE", existing_lead_id: null, validation_error: row.error,
+      });
+    }
+    for (const row of parsedRows.filter((r) => r.rowStatus === "PLATFORM_MISSING")) {
+      importRecordInserts.push({
+        batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
+        product_id: product.id, platform: null, city: row.city || null,
+        label: row.source || null, status: "PLATFORM_MISSING",
+        duplicate_type: "NONE", existing_lead_id: null, validation_error: row.error,
+      });
+    }
+
+    let insertedLeadIds: string[] = [];
+    let insertFailed = false;
+    if (leadInserts.length > 0) {
+      const { data: inserted, error: leadErr } = await supabase.from("leads").insert(leadInserts).select("id");
+      if (leadErr) {
+        insertFailed = true;
+        toast({ title: "Import failed: " + leadErr.message, variant: "destructive" });
+        await supabase.from("import_batches").update({ imported: 0, status: "FAILED" }).eq("id", batchId);
+      } else {
+        insertedLeadIds = ((inserted as { id: string }[]) || []).map((r) => r.id);
+        for (const leadId of insertedLeadIds) {
+          await supabase.rpc("assign_new_lead", { p_lead_id: leadId });
+        }
+      }
+    }
+    await supabase.from("import_records").insert(importRecordInserts);
+    if (!insertFailed) {
+      await supabase.from("import_batches").update({ imported, status: "COMPLETED" }).eq("id", batchId);
+      setImportResult({ imported, internalDup, existingDup, invalid, batchId });
+      toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid} Failed Records` });
+    }
+    setImporting(false);
+    loadBatches();
+    loadDupRecords();
   };
 
   const downloadCSV = (rows: (string | number)[][], filename: string) => {
@@ -738,8 +688,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         <TabsList className="mb-4">
           <TabsTrigger value="import"><Upload className="mr-1 h-4 w-4" /> Import</TabsTrigger>
           <TabsTrigger value="export"><Download className="mr-1 h-4 w-4" /> Export</TabsTrigger>
-          {!isHC && <TabsTrigger value="platform"><Smartphone className="mr-1 h-4 w-4" /> Platform</TabsTrigger>}
-          {!isHC && <TabsTrigger value="city"><MapPin className="mr-1 h-4 w-4" /> City</TabsTrigger>}
           <TabsTrigger value="history"><History className="mr-1 h-4 w-4" /> Import History</TabsTrigger>
           <TabsTrigger value="duplicates"><CopyX className="mr-1 h-4 w-4" /> Duplicate Data</TabsTrigger>
         </TabsList>
@@ -844,30 +792,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     </div>
                   ))}
                 </div>
-                {!isHC && (!mapping.platform || mapping.platform === "__ignore__") && (
-                  <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 space-y-2">
-                    <label className="text-sm font-medium">Default Platform <span className="text-destructive">*</span></label>
-                    <p className="text-xs text-muted-foreground">Your file does not have a Platform column mapped. Select a default platform for all rows.</p>
-                    <Select value={defaultPlatform} onValueChange={setDefaultPlatform}>
-                      <SelectTrigger className="w-full"><SelectValue placeholder="Select platform" /></SelectTrigger>
-                      <SelectContent>
-                        {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {!isHC && (!mapping.city || mapping.city === "__ignore__") && (
-                  <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 space-y-2">
-                    <label className="text-sm font-medium">Default City <span className="text-destructive">*</span></label>
-                    <p className="text-xs text-muted-foreground">Your file does not have a City column mapped. Select a default city for all rows.</p>
-                    <Select value={defaultCity} onValueChange={setDefaultCity}>
-                      <SelectTrigger className="w-full"><SelectValue placeholder="Select city" /></SelectTrigger>
-                      <SelectContent>
-                        {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
                 <div className="flex gap-2">
                   <Button onClick={applyMappingAndValidate}><CheckCircle2 className="mr-1 h-4 w-4" /> Validate & Preview</Button>
                   <Button variant="outline" onClick={resetUpload}>Cancel</Button>
@@ -895,17 +819,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                       <StatCard label="Ola" value={preview.ola} icon={CheckCircle2} tone="primary" />
                       <StatCard label="Rapido" value={preview.rapido} icon={CheckCircle2} tone="default" />
                       <StatCard label="Will Import" value={preview.willImport} icon={CheckCircle2} tone="success" />
-                    </div>
-                  )}
-                  {importing && importProgress && (
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Importing {importProgress.current.toLocaleString()} / {importProgress.total.toLocaleString()}</span>
-                        <span className="font-medium">{importProgress.total > 0 ? Math.round((importProgress.current / importProgress.total) * 100) : 0}%</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-secondary overflow-hidden">
-                        <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }} />
-                      </div>
                     </div>
                   )}
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -1052,20 +965,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* ===== PLATFORM ===== */}
-        {!isHC && (
-        <TabsContent value="platform" className="space-y-4">
-          <ProductPlatformsTab product={product} />
-        </TabsContent>
-        )}
-
-        {/* ===== CITY ===== */}
-        {!isHC && (
-        <TabsContent value="city" className="space-y-4">
-          <ProductCityTab product={product} />
-        </TabsContent>
-        )}
 
         {/* ===== IMPORT HISTORY ===== */}
         <TabsContent value="history" className="space-y-4">
