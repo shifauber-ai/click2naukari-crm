@@ -322,7 +322,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="PENDING">Pending</SelectItem>
-            <SelectItem value="SUCCESS">Paid / Successful</SelectItem>
+            <SelectItem value="COMPLETED">Paid / Successful</SelectItem>
             <SelectItem value="FAILED">Failed</SelectItem>
           </SelectContent>
         </Select>
@@ -408,7 +408,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
             <SelectItem value="PENDING">Pending</SelectItem>
-            <SelectItem value="SUCCESS">Successful</SelectItem>
+            <SelectItem value="COMPLETED">Successful</SelectItem>
             <SelectItem value="FAILED">Failed</SelectItem>
           </SelectContent>
         </Select>
@@ -446,7 +446,7 @@ export function ProductPaymentTab({ product }: { product: Product }) {
         <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm font-medium text-primary">{selectedIds.size} payments selected</span>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => handleBulkStatus("SUCCESS")} disabled={saving}>Mark Successful</Button>
+            <Button size="sm" variant="outline" onClick={() => handleBulkStatus("COMPLETED")} disabled={saving}>Mark Successful</Button>
             <Button size="sm" variant="outline" onClick={() => handleBulkStatus("PENDING")} disabled={saving}>Mark Pending</Button>
             <Button size="sm" variant="outline" onClick={() => handleBulkStatus("FAILED")} disabled={saving}>Mark Failed</Button>
             <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
