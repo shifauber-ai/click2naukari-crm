@@ -521,10 +521,13 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     }
 
     let insertedLeadIds: string[] = [];
+    let insertFailed = false;
     if (leadInserts.length > 0) {
       const { data: inserted, error: leadErr } = await supabase.from("leads").insert(leadInserts).select("id");
       if (leadErr) {
+        insertFailed = true;
         toast({ title: "Import failed: " + leadErr.message, variant: "destructive" });
+        await supabase.from("import_batches").update({ imported: 0, status: "FAILED" }).eq("id", batchId);
       } else {
         insertedLeadIds = ((inserted as { id: string }[]) || []).map((r) => r.id);
         for (const leadId of insertedLeadIds) {
@@ -533,10 +536,11 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       }
     }
     await supabase.from("import_records").insert(importRecordInserts);
-    await supabase.from("import_batches").update({ imported, status: "COMPLETED" }).eq("id", batchId);
-
-    setImportResult({ imported, internalDup, existingDup, invalid, batchId });
-    toast({ title: `Import complete: ${imported} imported, ${internalDup} internal duplicates, ${existingDup} existing lead duplicates, ${invalid} invalid, ${platformMissingCount} platform missing` });
+    if (!insertFailed) {
+      await supabase.from("import_batches").update({ imported, status: "COMPLETED" }).eq("id", batchId);
+      setImportResult({ imported, internalDup, existingDup, invalid, batchId });
+      toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid} Failed Records` });
+    }
     setImporting(false);
     loadBatches();
     loadDupRecords();

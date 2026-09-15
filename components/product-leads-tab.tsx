@@ -473,6 +473,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           <Input placeholder="Search name or phone..." value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-9" />
         </div>
+        {!idDoneOnly && (
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
@@ -480,6 +481,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
             {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
+        )}
         <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[130px]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>

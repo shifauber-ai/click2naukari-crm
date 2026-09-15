@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { PageHeader, StatCard, LoadingState } from "@/components/page-parts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -33,11 +36,13 @@ import {
   XCircle,
   AlertTriangle,
   Users,
-  IdCard,
-  CreditCard,
+  TrendingUp,
+  Trophy,
+  Medal,
+  Award,
   Calendar,
 } from "lucide-react";
-import { format, subDays, startOfDay } from "date-fns";
+import { format, subDays, startOfDay, eachDayOfInterval, startOfWeek, startOfMonth } from "date-fns";
 import { PlatformBadge } from "@/components/platform-badge";
 import {
   Table,
@@ -60,6 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
   OTHER_ISSUE: "hsl(210 15% 55%)",
   OTHER_HERO: "hsl(340 60% 65%)",
   ADMIN_REVIEW: "hsl(222 15% 40%)",
+  TAG_ADDED: "hsl(260 50% 65%)",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -74,19 +80,50 @@ const STATUS_LABELS: Record<string, string> = {
   OTHER_ISSUE: "Other Issue",
   OTHER_HERO: "Other Hero",
   ADMIN_REVIEW: "Admin Review",
+  TAG_ADDED: "Tag Added",
 };
 
-type RangeKey = "today" | "yesterday" | "7d" | "30d" | "all";
+type RangeKey = "today" | "yesterday" | "week" | "month" | "custom" | "all";
+
+interface ProductPerf {
+  id: string;
+  name: string;
+  total: number;
+  idDone: number;
+  interested: number;
+  callback: number;
+  ringing: number;
+  idBlock: number;
+  issues: number;
+  otherHero: number;
+}
+
+interface EmployeePerf {
+  id: string;
+  name: string;
+  product: string;
+  total: number;
+  idDone: number;
+  calls: number;
+  interested: number;
+  callback: number;
+  issues: number;
+}
 
 export default function AdminDashboard() {
-  const [range, setRange] = useState<RangeKey>("7d");
+  const { profile } = useAuth();
+  const [range, setRange] = useState<RangeKey>("week");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Record<string, number>>({});
-  const [dailyData, setDailyData] = useState<{ date: string; leads: number }[]>([]);
+  const [dailyData, setDailyData] = useState<{ date: string; leads: number; idDone: number }[]>([]);
   const [statusData, setStatusData] = useState<{ name: string; value: number }[]>([]);
-  const [productData, setProductData] = useState<{ name: string; leads: number }[]>([]);
+  const [productData, setProductData] = useState<ProductPerf[]>([]);
+  const [employeeData, setEmployeeData] = useState<EmployeePerf[]>([]);
   const [platformStats, setPlatformStats] = useState<Record<string, Record<string, number>>>({});
-  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  const [totalCalls, setTotalCalls] = useState(0);
 
   const getDateRange = () => {
     const now = new Date();
@@ -97,10 +134,15 @@ export default function AdminDashboard() {
         const y = subDays(now, 1);
         return { from: startOfDay(y), to: new Date(y.setHours(23, 59, 59, 999)) };
       }
-      case "7d":
-        return { from: subDays(now, 7), to: now };
-      case "30d":
-        return { from: subDays(now, 30), to: now };
+      case "week":
+        return { from: startOfWeek(now, { weekStartsOn: 1 }), to: now };
+      case "month":
+        return { from: startOfMonth(now), to: now };
+      case "custom":
+        return {
+          from: customFrom ? new Date(customFrom + "T00:00:00") : new Date(0),
+          to: customTo ? new Date(customTo + "T23:59:59") : now,
+        };
       default:
         return { from: new Date(0), to: now };
     }
@@ -109,46 +151,32 @@ export default function AdminDashboard() {
   const load = useCallback(async () => {
     setLoading(true);
     const { from, to } = getDateRange();
+    const fromIso = from.toISOString();
+    const toIso = to.toISOString();
 
-    const platformFilterFn = (q: any) => platformFilter !== "ALL" ? q.eq("platform", platformFilter) : q;
+    const pf = (q: any) => platformFilter !== "ALL" ? q.eq("platform", platformFilter) : q;
+    const dateFilter = (q: any) => q.gte("created_at", fromIso).lte("created_at", toIso);
 
     const [
-      totalLeads,
-      activeLeads,
-      ringing,
-      interested,
-      callback,
-      idDone,
-      idBlock,
-      docIssues,
-      vehicleIssues,
-      otherHero,
-      adminReview,
-      pendingFollowups,
-      activeEmployees,
-      activeHeroIds,
-      activeSims,
+      totalLeads, ringing, interested, callback, idDone, idBlock,
+      docIssues, vehicleIssues, otherHero, pendingFollowups, activeEmployees, callsCount,
     ] = await Promise.all([
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).gte("created_at", from.toISOString()).lte("created_at", to.toISOString())),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_active", true).not("status", "in", ["ID_DONE", "ID_BLOCK", "OTHER_HERO", "ADMIN_REVIEW"])),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "RINGING")),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "INTERESTED")),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "CALLBACK")),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_DONE")),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_BLOCK")),
-      supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "DOCUMENT_ISSUE"),
-      supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "VEHICLE_ISSUE"),
-      platformFilterFn(supabase.from("other_hero_leads").select("*", { count: "exact", head: true })),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).eq("in_admin_review", true)),
-      platformFilterFn(supabase.from("leads").select("*", { count: "exact", head: true }).not("next_followup_at", "is", null).lt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"])),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).gte("created_at", fromIso).lte("created_at", toIso)),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "RINGING").gte("created_at", fromIso).lte("created_at", toIso)),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "INTERESTED").gte("created_at", fromIso).lte("created_at", toIso)),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "CALLBACK").gte("created_at", fromIso).lte("created_at", toIso)),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_DONE").gte("created_at", fromIso).lte("created_at", toIso)),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", "ID_BLOCK").gte("created_at", fromIso).lte("created_at", toIso)),
+      supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "DOCUMENT_ISSUE").gte("created_at", fromIso).lte("created_at", toIso),
+      supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "VEHICLE_ISSUE").gte("created_at", fromIso).lte("created_at", toIso),
+      pf(supabase.from("other_hero_leads").select("*", { count: "exact", head: true }).gte("created_at", fromIso).lte("created_at", toIso)),
+      pf(supabase.from("leads").select("*", { count: "exact", head: true }).not("next_followup_at", "is", null).lt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"])),
       supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_active", true).eq("role", "EMPLOYEE"),
-      supabase.from("hero_ids").select("*", { count: "exact", head: true }).eq("status", "ACTIVE"),
-      supabase.from("sims").select("*", { count: "exact", head: true }).eq("status", "IN_USE"),
+      supabase.from("lead_status_history").select("*", { count: "exact", head: true }).gte("created_at", fromIso).lte("created_at", toIso),
     ]);
 
     setStats({
       total: totalLeads.count || 0,
-      active: activeLeads.count || 0,
       ringing: ringing.count || 0,
       interested: interested.count || 0,
       callback: callback.count || 0,
@@ -157,81 +185,106 @@ export default function AdminDashboard() {
       docIssues: docIssues.count || 0,
       vehicleIssues: vehicleIssues.count || 0,
       otherHero: otherHero.count || 0,
-      adminReview: adminReview.count || 0,
       pendingFollowups: pendingFollowups.count || 0,
       activeEmployees: activeEmployees.count || 0,
-      activeHeroIds: activeHeroIds.count || 0,
-      activeSims: activeSims.count || 0,
     });
+    setTotalCalls(callsCount.count || 0);
 
-    // Daily leads chart — fetch all leads in range once and group client-side.
-    const days = range === "30d" ? 30 : range === "7d" ? 7 : range === "today" ? 1 : 7;
-    const { data: dailyLeads } = await supabase
-      .from("leads")
-      .select("created_at")
-      .gte("created_at", subDays(new Date(), days).toISOString());
-    const dailyMap: Record<string, number> = {};
-    (dailyLeads as { created_at: string }[] | null)?.forEach((r) => {
+    const conversionPct = totalLeads.count ? ((idDone.count || 0) / totalLeads.count) * 100 : 0;
+    setStats((s) => ({ ...s, conversion: Math.round(conversionPct) }));
+
+    // Daily chart
+    const days = eachDayOfInterval({ start: from, end: to });
+    const { data: dailyLeads } = await pf(supabase.from("leads").select("created_at, status").gte("created_at", fromIso).lte("created_at", toIso));
+    const dailyMap: Record<string, { leads: number; idDone: number }> = {};
+    (dailyLeads as { created_at: string; status: string }[] | null)?.forEach((r) => {
       const d = format(startOfDay(new Date(r.created_at)), "dd MMM");
-      dailyMap[d] = (dailyMap[d] || 0) + 1;
+      if (!dailyMap[d]) dailyMap[d] = { leads: 0, idDone: 0 };
+      dailyMap[d].leads++;
+      if (r.status === "ID_DONE") dailyMap[d].idDone++;
     });
-    const daily: { date: string; leads: number }[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const dayStart = startOfDay(subDays(new Date(), i));
-      daily.push({ date: format(dayStart, "dd MMM"), leads: dailyMap[format(dayStart, "dd MMM")] || 0 });
-    }
-    setDailyData(daily);
+    setDailyData(days.map((day) => ({
+      date: format(day, "dd MMM"),
+      leads: dailyMap[format(day, "dd MMM")]?.leads || 0,
+      idDone: dailyMap[format(day, "dd MMM")]?.idDone || 0,
+    })).slice(-15));
 
-    // Status distribution.
-    const { data: statusRows } = await supabase
-      .from("leads")
-      .select("status")
-      .gte("created_at", from.toISOString())
-      .lte("created_at", to.toISOString());
+    // Status distribution
     const statusCounts: Record<string, number> = {};
-    (statusRows as { status: string }[] | null)?.forEach((r) => {
+    (dailyLeads as { status: string }[] | null)?.forEach((r) => {
       statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
     });
-    setStatusData(
-      Object.entries(statusCounts).map(([k, v]) => ({
-        name: STATUS_LABELS[k] || k,
-        value: v,
-      }))
-    );
+    setStatusData(Object.entries(statusCounts).map(([k, v]) => ({ name: STATUS_LABELS[k] || k, value: v })));
 
-    // Product performance.
-    const { data: productRows } = await supabase
+    // Product performance — fetch all lead rows in range
+    const { data: productRows } = await pf(supabase
       .from("leads")
-      .select("product_id, product:products(name)")
-      .gte("created_at", from.toISOString())
-      .lte("created_at", to.toISOString());
-    const prodCounts: Record<string, number> = {};
-    const prodNames: Record<string, string> = {};
-    (productRows as { product_id: string; product: { name: string } }[] | null)?.forEach((r) => {
-      prodCounts[r.product_id] = (prodCounts[r.product_id] || 0) + 1;
-      if (r.product?.name) prodNames[r.product_id] = r.product.name;
+      .select("product_id, product:products(name), status, current_caller_id")
+      .gte("created_at", fromIso).lte("created_at", toIso));
+
+    const { data: otherHeroRows } = await supabase
+      .from("other_hero_leads")
+      .select("product_id")
+      .gte("created_at", fromIso).lte("created_at", toIso);
+
+    const { data: issueRows } = await supabase
+      .from("issues")
+      .select("product_id, issue_type")
+      .gte("created_at", fromIso).lte("created_at", toIso);
+
+    const prodMap: Record<string, ProductPerf> = {};
+    (productRows as { product_id: string; product: { name: string }; status: string; current_caller_id: string | null }[] | null)?.forEach((r) => {
+      const id = r.product_id;
+      if (!prodMap[id]) prodMap[id] = { id, name: r.product?.name || "Unknown", total: 0, idDone: 0, interested: 0, callback: 0, ringing: 0, idBlock: 0, issues: 0, otherHero: 0 };
+      prodMap[id].total++;
+      if (r.status === "ID_DONE") prodMap[id].idDone++;
+      if (r.status === "INTERESTED") prodMap[id].interested++;
+      if (r.status === "CALLBACK") prodMap[id].callback++;
+      if (r.status === "RINGING") prodMap[id].ringing++;
+      if (r.status === "ID_BLOCK") prodMap[id].idBlock++;
     });
-    setProductData(
-      Object.entries(prodCounts).map(([id, v]) => ({
-        name: prodNames[id] || "Unknown",
-        leads: v,
-      }))
-    );
+    (otherHeroRows as { product_id: string }[] | null)?.forEach((r) => {
+      const id = r.product_id;
+      if (prodMap[id]) prodMap[id].otherHero++;
+    });
+    (issueRows as { product_id: string; issue_type: string }[] | null)?.forEach((r) => {
+      const id = r.product_id;
+      if (prodMap[id]) prodMap[id].issues++;
+    });
+    setProductData(Object.values(prodMap).sort((a, b) => b.total - a.total));
 
-    setLoading(false);
-
-    // Platform-wise breakdown
-    const { data: platformRows } = await supabase
+    // Employee performance
+    const { data: empRows } = await supabase
       .from("leads")
-      .select("platform, status, current_caller_id")
-      .gte("created_at", from.toISOString())
-      .lte("created_at", to.toISOString());
+      .select("current_caller_id, caller:profiles!current_caller_id(full_name), product:products(name), status")
+      .not("current_caller_id", "is", null)
+      .gte("created_at", fromIso).lte("created_at", toIso);
+    const { data: callRows } = await supabase
+      .from("lead_status_history")
+      .select("employee_id, new_status")
+      .gte("created_at", fromIso).lte("created_at", toIso);
+
+    const empMap: Record<string, EmployeePerf> = {};
+    (empRows as { current_caller_id: string; caller: { full_name: string }; product: { name: string }; status: string }[] | null)?.forEach((r) => {
+      const id = r.current_caller_id;
+      if (!empMap[id]) empMap[id] = { id, name: r.caller?.full_name || "Unknown", product: r.product?.name || "—", total: 0, idDone: 0, calls: 0, interested: 0, callback: 0, issues: 0 };
+      empMap[id].total++;
+      if (r.status === "ID_DONE") empMap[id].idDone++;
+      if (r.status === "INTERESTED") empMap[id].interested++;
+      if (r.status === "CALLBACK") empMap[id].callback++;
+    });
+    (callRows as { employee_id: string; new_status: string }[] | null)?.forEach((r) => {
+      const id = r.employee_id;
+      if (!empMap[id]) empMap[id] = { id, name: "Unknown", product: "—", total: 0, idDone: 0, calls: 0, interested: 0, callback: 0, issues: 0 };
+      empMap[id].calls++;
+    });
+    setEmployeeData(Object.values(empMap).sort((a, b) => b.idDone - a.idDone));
+
+    // Platform breakdown
     const platforms = ["UBER", "OLA", "RAPIDO"];
     const pStats: Record<string, Record<string, number>> = {};
-    platforms.forEach((p) => {
-      pStats[p] = { total: 0, assigned: 0, connected: 0, notConnected: 0, ringing: 0, interested: 0, notInterested: 0, idCreated: 0, adminReview: 0 };
-    });
-    (platformRows as { platform: string; status: string; current_caller_id: string | null }[] | null)?.forEach((r) => {
+    platforms.forEach((p) => { pStats[p] = { total: 0, assigned: 0, connected: 0, notConnected: 0, ringing: 0, interested: 0, notInterested: 0, idCreated: 0, adminReview: 0 }; });
+    (productRows as { platform?: string; status: string; current_caller_id: string | null }[] | null)?.forEach((r: any) => {
       const p = (r.platform || "").toUpperCase();
       if (!pStats[p]) return;
       pStats[p].total++;
@@ -245,24 +298,34 @@ export default function AdminDashboard() {
       if (["ID_DONE", "INTERESTED"].includes(r.status)) pStats[p].connected++;
     });
     setPlatformStats(pStats);
-  }, [range, platformFilter]);
+    setLoading(false);
+  }, [range, platformFilter, customFrom, customTo]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 17) return "Good Afternoon";
+    return "Good Evening";
+  })();
+
+  const productLeaderboard = [...productData].sort((a, b) => {
+    const convA = a.total ? a.idDone / a.total : 0;
+    const convB = b.total ? b.idDone / b.total : 0;
+    return convB - convA || b.idDone - a.idDone;
+  });
 
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description="Overview of your CRM activity"
+        title={`${greeting}, ${profile?.full_name?.split(" ")[0] || "Admin"}`}
+        description="Welcome to Click2Naukari"
         icon={LayoutDashboard}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Select value={platformFilter} onValueChange={setPlatformFilter}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="All Platforms" />
-              </SelectTrigger>
+              <SelectTrigger className="w-32"><SelectValue placeholder="Platform" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Platforms</SelectItem>
                 <SelectItem value="UBER">Uber</SelectItem>
@@ -271,14 +334,13 @@ export default function AdminDashboard() {
               </SelectContent>
             </Select>
             <Select value={range} onValueChange={(v) => setRange(v as RangeKey)}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="yesterday">Yesterday</SelectItem>
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
                 <SelectItem value="all">All Time</SelectItem>
               </SelectContent>
             </Select>
@@ -286,80 +348,183 @@ export default function AdminDashboard() {
         }
       />
 
+      {range === "custom" && (
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Start Date</label>
+            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-40" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">End Date</label>
+            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="w-40" />
+          </div>
+          <Button size="sm" onClick={load}><Calendar className="mr-2 h-4 w-4" /> Apply</Button>
+        </div>
+      )}
+
       {loading ? (
         <LoadingState />
       ) : (
         <div className="space-y-6">
-          {/* Stat cards */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             <StatCard label="Total Leads" value={stats.total} icon={Phone} tone="primary" />
-            <StatCard label="Active Leads" value={stats.active} icon={PhoneCall} tone="info" />
-            <StatCard label="Pending Follow-ups" value={stats.pendingFollowups} icon={Clock} tone="warning" />
-            <StatCard label="Ringing" value={stats.ringing} icon={PhoneCall} tone="warning" />
-            <StatCard label="Interested" value={stats.interested} icon={CheckCircle2} tone="success" />
-            <StatCard label="Call Back" value={stats.callback} icon={Clock} tone="info" />
             <StatCard label="ID Done" value={stats.idDone} icon={CheckCircle2} tone="success" />
+            <StatCard label="Conversion %" value={`${stats.conversion || 0}%`} icon={TrendingUp} tone="info" />
+            <StatCard label="Active Callers" value={stats.activeEmployees} icon={Users} tone="primary" />
+            <StatCard label="Total Calls" value={totalCalls} icon={PhoneCall} tone="info" />
+            <StatCard label="Interested" value={stats.interested} icon={CheckCircle2} tone="success" />
+            <StatCard label="Callback" value={stats.callback} icon={Clock} tone="warning" />
+            <StatCard label="Ringing" value={stats.ringing} icon={PhoneCall} tone="warning" />
             <StatCard label="ID Block" value={stats.idBlock} icon={XCircle} tone="danger" />
-            <StatCard label="Doc Issues" value={stats.docIssues} icon={AlertTriangle} tone="danger" />
-            <StatCard label="Vehicle Issues" value={stats.vehicleIssues} icon={AlertTriangle} tone="danger" />
+            <StatCard label="Issues" value={(stats.docIssues || 0) + (stats.vehicleIssues || 0)} icon={AlertTriangle} tone="danger" />
             <StatCard label="Other Hero" value={stats.otherHero} icon={PhoneCall} />
-            <StatCard label="Admin Review" value={stats.adminReview} icon={AlertTriangle} tone="danger" />
-            <StatCard label="Active Employees" value={stats.activeEmployees} icon={Users} tone="primary" />
-            <StatCard label="Active Hero IDs" value={stats.activeHeroIds} icon={IdCard} />
-            <StatCard label="Active SIMs" value={stats.activeSims} icon={CreditCard} />
+            <StatCard label="Pending Follow-ups" value={stats.pendingFollowups} icon={Calendar} tone="warning" />
           </div>
 
-          {/* Platform-wise summary cards */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Card className="border-border/60">
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <PlatformBadge platform="UBER" size="xs" />
-                    <span className="text-xs text-muted-foreground">Leads</span>
-                  </div>
-                  <p className="mt-1 text-2xl font-bold">{platformStats["UBER"]?.total || 0}</p>
-                </div>
-                <Phone className="h-8 w-8 text-muted-foreground/30" />
+          {/* Charts */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="border-border/40 shadow-sm">
+              <CardHeader><CardTitle className="text-base">Daily Leads & ID Done</CardTitle></CardHeader>
+              <CardContent>
+                {dailyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={dailyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="leads" fill="hsl(var(--chart-1))" radius={[6, 6, 0, 0]} name="Leads" />
+                      <Bar dataKey="idDone" fill="hsl(var(--chart-2))" radius={[6, 6, 0, 0]} name="ID Done" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="py-12 text-center text-sm text-muted-foreground">No data for this period.</p>}
               </CardContent>
             </Card>
-            <Card className="border-border/60">
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <PlatformBadge platform="OLA" size="xs" />
-                    <span className="text-xs text-muted-foreground">Leads</span>
-                  </div>
-                  <p className="mt-1 text-2xl font-bold">{platformStats["OLA"]?.total || 0}</p>
-                </div>
-                <Phone className="h-8 w-8 text-muted-foreground/30" />
-              </CardContent>
-            </Card>
-            <Card className="border-border/60">
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <PlatformBadge platform="RAPIDO" size="xs" />
-                    <span className="text-xs text-muted-foreground">Leads</span>
-                  </div>
-                  <p className="mt-1 text-2xl font-bold">{platformStats["RAPIDO"]?.total || 0}</p>
-                </div>
-                <Phone className="h-8 w-8 text-muted-foreground/30" />
-              </CardContent>
-            </Card>
-            <Card className="border-border/60">
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
-                  <span className="text-xs text-muted-foreground">Total Leads</span>
-                  <p className="mt-1 text-2xl font-bold">{stats.total}</p>
-                </div>
-                <Phone className="h-8 w-8 text-muted-foreground/30" />
+
+            <Card className="border-border/40 shadow-sm">
+              <CardHeader><CardTitle className="text-base">Status Distribution</CardTitle></CardHeader>
+              <CardContent>
+                {statusData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={45} paddingAngle={2}>
+                        {statusData.map((_, i) => (
+                          <Cell key={i} fill={Object.values(STATUS_COLORS)[i % Object.values(STATUS_COLORS).length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <p className="py-12 text-center text-sm text-muted-foreground">No data for this period.</p>}
               </CardContent>
             </Card>
           </div>
 
-          {/* Platform-wise breakdown table */}
-          <Card className="border-border/60">
+          {/* Product Performance Table */}
+          <Card className="border-border/40 shadow-sm">
+            <CardHeader><CardTitle className="text-base">Product Performance</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto scrollbar-thin">
+              {productData.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Total Leads</TableHead>
+                      <TableHead>ID Done</TableHead>
+                      <TableHead>Conversion %</TableHead>
+                      <TableHead>Interested</TableHead>
+                      <TableHead>Callback</TableHead>
+                      <TableHead>Ringing</TableHead>
+                      <TableHead>ID Block</TableHead>
+                      <TableHead>Issues</TableHead>
+                      <TableHead>Other Hero</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productData.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-semibold">{p.name}</TableCell>
+                        <TableCell className="font-medium">{p.total}</TableCell>
+                        <TableCell className="font-medium text-success-foreground">{p.idDone}</TableCell>
+                        <TableCell>{p.total > 0 ? Math.round((p.idDone / p.total) * 100) : 0}%</TableCell>
+                        <TableCell>{p.interested}</TableCell>
+                        <TableCell>{p.callback}</TableCell>
+                        <TableCell>{p.ringing}</TableCell>
+                        <TableCell>{p.idBlock}</TableCell>
+                        <TableCell>{p.issues}</TableCell>
+                        <TableCell>{p.otherHero}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : <p className="py-12 text-center text-sm text-muted-foreground">No data for this period.</p>}
+            </CardContent>
+          </Card>
+
+          {/* Leaderboards */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Caller Leaderboard */}
+            <Card className="border-border/40 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Trophy className="h-4 w-4 text-warning-foreground" /> Caller Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {employeeData.length > 0 ? employeeData.slice(0, 10).map((emp, i) => (
+                  <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 hover:bg-secondary/50 transition-colors">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-orange-500/20 text-orange-600" : "bg-secondary text-muted-foreground"
+                    }`}>
+                      {i < 3 ? <Medal className="h-4 w-4" /> : `#${i + 1}`}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-medium">{emp.name}</p>
+                      <p className="text-xs text-muted-foreground">{emp.product}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">{emp.idDone} <span className="text-xs font-normal text-muted-foreground">ID Done</span></p>
+                      <p className="text-xs text-muted-foreground">{emp.total} leads • {emp.total > 0 ? Math.round((emp.idDone / emp.total) * 100) : 0}%</p>
+                    </div>
+                  </div>
+                )) : <p className="py-8 text-center text-sm text-muted-foreground">No data.</p>}
+              </CardContent>
+            </Card>
+
+            {/* Product Leaderboard */}
+            <Card className="border-border/40 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Award className="h-4 w-4 text-primary" /> Product Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {productLeaderboard.length > 0 ? productLeaderboard.map((prod, i) => (
+                  <div key={prod.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 hover:bg-secondary/50 transition-colors">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-orange-500/20 text-orange-600" : "bg-secondary text-muted-foreground"
+                    }`}>
+                      {i < 3 ? <Award className="h-4 w-4" /> : `#${i + 1}`}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-medium">{prod.name}</p>
+                      <p className="text-xs text-muted-foreground">{prod.total} leads</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">{prod.total > 0 ? Math.round((prod.idDone / prod.total) * 100) : 0}%</p>
+                      <p className="text-xs text-muted-foreground">{prod.idDone} ID Done</p>
+                    </div>
+                  </div>
+                )) : <p className="py-8 text-center text-sm text-muted-foreground">No data.</p>}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Platform Breakdown */}
+          <Card className="border-border/40 shadow-sm">
             <CardHeader><CardTitle className="text-base">Platform-wise Breakdown</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto scrollbar-thin">
               <Table>
@@ -396,116 +561,6 @@ export default function AdminDashboard() {
               </Table>
             </CardContent>
           </Card>
-
-          {/* Charts */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-border/60">
-              <CardHeader>
-                <CardTitle className="text-base">Daily Leads</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {dailyData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={dailyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip
-                        contentStyle={{
-                          background: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Bar dataKey="leads" fill="hsl(var(--chart-1))" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="py-12 text-center text-sm text-muted-foreground">
-                    No data for this period.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60">
-              <CardHeader>
-                <CardTitle className="text-base">Status Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {statusData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={statusData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={90}
-                        innerRadius={45}
-                        paddingAngle={2}
-                      >
-                        {statusData.map((entry, i) => (
-                          <Cell
-                            key={i}
-                            fill={
-                              STATUS_COLORS[
-                                Object.keys(STATUS_LABELS).find(
-                                  (k) => STATUS_LABELS[k] === entry.name
-                                ) || ""
-                              ] || "hsl(var(--chart-1))"
-                            }
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="py-12 text-center text-sm text-muted-foreground">
-                    No data for this period.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60 lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base">Product Performance</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {productData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={productData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" width={120} />
-                      <Tooltip
-                        contentStyle={{
-                          background: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Bar dataKey="leads" fill="hsl(var(--chart-3))" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="py-12 text-center text-sm text-muted-foreground">
-                    No data for this period.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
     </div>

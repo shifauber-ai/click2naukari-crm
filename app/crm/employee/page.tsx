@@ -144,11 +144,18 @@ export default function EmployeeDashboard() {
 
   const activeFollowups = followupAlerts.filter((f) => !dismissedAlerts.has(f.id));
 
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 17) return "Good Afternoon";
+    return "Good Evening";
+  })();
+
   return (
     <div>
       <PageHeader
-        title="My Dashboard"
-        description={`Welcome back, ${profile?.full_name}`}
+        title={`${greeting}, ${profile?.full_name?.split(" ")[0] || ""}`}
+        description="Welcome to Click2Naukari"
         icon={LayoutDashboard}
       />
 
