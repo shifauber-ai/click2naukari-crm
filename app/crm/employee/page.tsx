@@ -1,327 +1,239 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase/client";
-import { useAuth } from "@/lib/auth-context";
-import { PageHeader, StatCard, LoadingState } from "@/components/page-parts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import {
-  LayoutDashboard,
-  Phone,
-  PhoneCall,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Calendar,
-  Wallet,
-  History,
-  TrendingUp,
-  Bell,
-  ExternalLink,
-} from "lucide-react";
-import { format, startOfDay, subDays, eachDayOfInterval } from "date-fns";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useEmployeeContext } from "@/lib/employee-context";
+import { supabase } from "@/lib/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Users, PhoneCall, PhoneIncoming, PhoneOutgoing, Calendar,
+  CheckCircle2, Star, AlertTriangle, TrendingUp, ArrowRight,
+} from "lucide-react";
+import { format } from "date-fns";
+import type { Lead } from "@/lib/types";
 
-type DashTab = "overview" | "leads" | "reports" | "payments" | "followups" | "id-done" | "calls";
+interface DashboardData {
+  totalLeads: number;
+  newLeads: number;
+  interested: number;
+  callback: number;
+  followUps: number;
+  idDone: number;
+  issues: number;
+  otherHero: number;
+  callsMade: number;
+  incomingCalls: number;
+  outgoingCalls: number;
+  todayLeads: number;
+  todayCalls: number;
+  todayFollowups: number;
+  todayIdDone: number;
+  conversion: number;
+}
+
+const initial: DashboardData = {
+  totalLeads: 0, newLeads: 0, interested: 0, callback: 0, followUps: 0,
+  idDone: 0, issues: 0, otherHero: 0, callsMade: 0, incomingCalls: 0,
+  outgoingCalls: 0, todayLeads: 0, todayCalls: 0, todayFollowups: 0,
+  todayIdDone: 0, conversion: 0,
+};
 
 export default function EmployeeDashboard() {
-  const { profile } = useAuth();
+  const { product, profile } = useEmployeeContext();
+  const [data, setData] = useState<DashboardData>(initial);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<Record<string, number>>({});
-  const [weekly, setWeekly] = useState<{ date: string; leads: number }[]>([]);
-  const [recentLeads, setRecentLeads] = useState<any[]>([]);
-  const [followupAlerts, setFollowupAlerts] = useState<{ id: string; name: string; phone: string; next_followup_at: string }[]>([]);
-  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<DashTab>("overview");
+  const [recentLeads, setRecentLeads] = useState<Lead[]>([]);
 
-  const load = useCallback(async () => {
-    if (!profile) return;
+  const loadDashboard = useCallback(async () => {
+    if (!profile?.id || !product) return;
     setLoading(true);
-    const todayStart = startOfDay(new Date()).toISOString();
-    const weekStart = subDays(new Date(), 6).toISOString();
-    const uid = profile.id;
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+    const todayStartIso = todayStart.toISOString();
+    const todayEndIso = todayEnd.toISOString();
+
+    const baseFilter = { current_caller_id: profile.id, product_id: product.id };
 
     const [
-      todayLeads,
-      ringing,
-      interested,
-      callback,
-      idDone,
-      issues,
-      otherHero,
-      pendingFollowups,
-      todayCalls,
+      total, newCount, interestedCount, callbackCount, followupCount,
+      idDoneCount, issuesCount, otherHeroCount, todayLeadsQ, todayFollowupsQ,
+      todayCalls, todayIdDone, callStats,
     ] = await Promise.all([
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", uid).gte("created_at", todayStart),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", uid).eq("status", "RINGING"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", uid).eq("status", "INTERESTED"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", uid).eq("status", "CALLBACK"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", uid).eq("status", "ID_DONE"),
-      supabase.from("issues").select("*", { count: "exact", head: true }).eq("employee_id", uid),
-      supabase.from("other_hero_leads").select("*", { count: "exact", head: true }).eq("employee_id", uid),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", uid).not("next_followup_at", "is", null).lt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
-      supabase.from("lead_status_history").select("*", { count: "exact", head: true }).eq("employee_id", uid).gte("created_at", todayStart),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "NEW"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "INTERESTED"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "CALLBACK"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).not("next_followup_at", "is", null).gt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "ID_DONE"),
+      supabase.from("issues").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id),
+      supabase.from("other_hero_leads").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).gte("created_at", todayStartIso),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).gte("next_followup_at", todayStartIso).lte("next_followup_at", todayEndIso).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
+      supabase.from("call_history").select("*", { count: "exact", head: true }).eq("caller_id", profile.id).eq("product_id", product.id).gte("call_timestamp", todayStartIso),
+      supabase.from("lead_status_history").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id).eq("new_status", "ID_DONE").gte("created_at", todayStartIso),
+      supabase.from("call_history").select("direction", { count: "exact" }).eq("caller_id", profile.id).eq("product_id", product.id).gte("call_timestamp", todayStartIso),
     ]);
 
-    setStats({
-      todayLeads: todayLeads.count || 0,
-      todayCalls: todayCalls.count || 0,
-      ringing: ringing.count || 0,
-      interested: interested.count || 0,
-      callback: callback.count || 0,
-      idDone: idDone.count || 0,
-      issues: issues.count || 0,
-      otherHero: otherHero.count || 0,
-      pendingFollowups: pendingFollowups.count || 0,
-    });
+    const totalLeads = total.count || 0;
+    const idDoneLeads = idDoneCount.count || 0;
+    const incoming = callStats.data?.filter((c: { direction: string }) => c.direction === "INCOMING").length || 0;
+    const outgoing = callStats.data?.filter((c: { direction: string }) => c.direction === "OUTGOING").length || 0;
 
-    // Weekly chart
-    const { data: weeklyLeads } = await supabase
-      .from("leads")
-      .select("created_at")
-      .eq("current_caller_id", uid)
-      .gte("created_at", weekStart);
-    const weeklyMap: Record<string, number> = {};
-    (weeklyLeads as { created_at: string }[] | null)?.forEach((r) => {
-      const d = format(startOfDay(new Date(r.created_at)), "EEE");
-      weeklyMap[d] = (weeklyMap[d] || 0) + 1;
+    setData({
+      totalLeads,
+      newLeads: newCount.count || 0,
+      interested: interestedCount.count || 0,
+      callback: callbackCount.count || 0,
+      followUps: followupCount.count || 0,
+      idDone: idDoneLeads,
+      issues: issuesCount.count || 0,
+      otherHero: otherHeroCount.count || 0,
+      callsMade: todayCalls.count || 0,
+      incomingCalls: incoming,
+      outgoingCalls: outgoing,
+      todayLeads: todayLeadsQ.count || 0,
+      todayCalls: todayCalls.count || 0,
+      todayFollowups: todayFollowupsQ.count || 0,
+      todayIdDone: todayIdDone.count || 0,
+      conversion: totalLeads > 0 ? Math.round((idDoneLeads / totalLeads) * 1000) / 10 : 0,
     });
-    const days = eachDayOfInterval({ start: subDays(new Date(), 6), end: new Date() });
-    setWeekly(days.map((day) => ({ date: format(day, "EEE"), leads: weeklyMap[format(day, "EEE")] || 0 })));
 
     // Recent leads
     const { data: recent } = await supabase
       .from("leads")
-      .select("*, product:products(name)")
-      .eq("current_caller_id", uid)
+      .select("*, product:products(*)")
+      .eq("current_caller_id", profile.id)
+      .eq("product_id", product.id)
       .order("created_at", { ascending: false })
       .limit(5);
-    setRecentLeads(recent || []);
-
-    // Follow-up alerts
-    const { data: followups } = await supabase
-      .from("leads")
-      .select("id, name, phone, next_followup_at")
-      .eq("current_caller_id", uid)
-      .not("next_followup_at", "is", null)
-      .lt("next_followup_at", new Date().toISOString())
-      .in("status", ["RINGING", "INTERESTED", "CALLBACK"])
-      .order("next_followup_at", { ascending: true })
-      .limit(10);
-    setFollowupAlerts((followups as { id: string; name: string; phone: string; next_followup_at: string }[]) || []);
-
+    setRecentLeads((recent as Lead[]) || []);
     setLoading(false);
-  }, [profile]);
+  }, [profile?.id, product]);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
-  if (loading) return <LoadingState />;
-
-  const tabs: { key: DashTab; label: string; icon: typeof Phone }[] = [
-    { key: "overview", label: "Overview", icon: LayoutDashboard },
-    { key: "leads", label: "All Leads", icon: Phone },
-    { key: "reports", label: "Reports", icon: TrendingUp },
-    { key: "payments", label: "Payment History", icon: Wallet },
-    { key: "followups", label: "Follow Ups", icon: Calendar },
-    { key: "id-done", label: "ID Done", icon: CheckCircle2 },
-    { key: "calls", label: "Call History", icon: History },
+  const kpiCards = [
+    { label: "Total Leads", value: data.totalLeads, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "New Leads", value: data.newLeads, icon: Users, color: "text-slate-600", bg: "bg-slate-100" },
+    { label: "Interested", value: data.interested, icon: TrendingUp, color: "text-green-600", bg: "bg-green-50" },
+    { label: "Callback", value: data.callback, icon: PhoneCall, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Follow Ups", value: data.followUps, icon: Calendar, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "ID Done", value: data.idDone, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Issues", value: data.issues, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50" },
+    { label: "Other Hero", value: data.otherHero, icon: Star, color: "text-indigo-600", bg: "bg-indigo-50" },
+    { label: "Calls Made", value: data.callsMade, icon: PhoneOutgoing, color: "text-cyan-600", bg: "bg-cyan-50" },
+    { label: "Incoming", value: data.incomingCalls, icon: PhoneIncoming, color: "text-orange-600", bg: "bg-orange-50" },
+    { label: "Outgoing", value: data.outgoingCalls, icon: PhoneOutgoing, color: "text-teal-600", bg: "bg-teal-50" },
   ];
 
-  const activeFollowups = followupAlerts.filter((f) => !dismissedAlerts.has(f.id));
-
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good Morning";
-    if (h < 17) return "Good Afternoon";
-    return "Good Evening";
-  })();
-
   return (
-    <div>
-      <PageHeader
-        title={`${greeting}, ${profile?.full_name?.split(" ")[0] || ""}`}
-        description="Welcome to Click2Naukari"
-        icon={LayoutDashboard}
-      />
-
-      {/* Follow-up Notifications */}
-      {activeFollowups.length > 0 && (
-        <div className="mb-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-warning-foreground">
-            <Bell className="h-4 w-4 animate-pulse" />
-            {activeFollowups.length} follow-up{activeFollowups.length !== 1 ? "s" : ""} due now
-          </div>
-          {activeFollowups.slice(0, 5).map((f) => (
-            <div key={f.id} className="flex items-center justify-between rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <Bell className="h-4 w-4 text-warning-foreground" />
-                <div>
-                  <p className="text-sm font-medium">{f.name}</p>
-                  <p className="text-xs text-muted-foreground">{f.phone} • Due: {format(new Date(f.next_followup_at), "dd MMM, HH:mm")}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link href="/crm/employee/leads">
-                  <Button size="sm" variant="outline"><ExternalLink className="mr-1 h-3.5 w-3.5" /> View Lead</Button>
-                </Link>
-                <Button size="sm" variant="ghost" onClick={() => setDismissedAlerts((prev) => new Set(prev).add(f.id))}>Dismiss</Button>
-              </div>
-            </div>
-          ))}
+    <div className="space-y-6 p-4 lg:p-6">
+      {/* KPI Grid */}
+      <div>
+        <h2 className="mb-4 text-lg font-bold text-slate-800">{product.name} Dashboard</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {loading
+            ? Array.from({ length: 11 }).map((_, i) => (
+                <Card key={i} className="border-slate-200">
+                  <CardContent className="p-4">
+                    <Skeleton className="mb-3 h-8 w-8 rounded-lg" />
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="mt-1 h-3 w-20" />
+                  </CardContent>
+                </Card>
+              ))
+            : kpiCards.map((kpi) => {
+                const Icon = kpi.icon;
+                return (
+                  <Card key={kpi.label} className="border-slate-200 transition-shadow hover:shadow-md">
+                    <CardContent className="p-4">
+                      <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${kpi.bg}`}>
+                        <Icon className={`h-4 w-4 ${kpi.color}`} />
+                      </div>
+                      <div className="text-2xl font-bold text-slate-800">{kpi.value}</div>
+                      <div className="text-xs text-slate-400">{kpi.label}</div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
         </div>
-      )}
-
-      {/* Tabs */}
-      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.key;
-          return (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`}>
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          );
-        })}
       </div>
 
-      {activeTab === "overview" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            <StatCard label="Today's Leads" value={stats.todayLeads} icon={Phone} tone="primary" />
-            <StatCard label="Today's Calls" value={stats.todayCalls} icon={PhoneCall} tone="info" />
-            <StatCard label="Ringing" value={stats.ringing} icon={PhoneCall} tone="warning" />
-            <StatCard label="Interested" value={stats.interested} icon={CheckCircle2} tone="success" />
-            <StatCard label="Call Back" value={stats.callback} icon={Clock} tone="info" />
-            <StatCard label="ID Done" value={stats.idDone} icon={CheckCircle2} tone="success" />
-            <StatCard label="Issues" value={stats.issues} icon={AlertTriangle} tone="danger" />
-            <StatCard label="Pending Follow-ups" value={stats.pendingFollowups} icon={Calendar} tone="warning" />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="border-border/60 lg:col-span-2">
-              <CardHeader><CardTitle className="text-base">This Week&apos;s Leads</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={weekly}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
-                    <Bar dataKey="leads" fill="hsl(var(--chart-1))" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60">
-              <CardHeader><CardTitle className="text-base">Recent Leads</CardTitle></CardHeader>
-              <CardContent>
-                {recentLeads.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No leads assigned yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {recentLeads.map((lead) => (
-                      <div key={lead.id} className="flex items-center justify-between rounded-lg border border-border/60 p-2.5">
-                        <div>
-                          <p className="text-sm font-medium">{lead.name}</p>
-                          <p className="text-xs text-muted-foreground">{lead.product?.name}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{format(new Date(lead.created_at), "dd MMM")}</span>
-                      </div>
-                    ))}
+      {/* Today's Performance + Recent Leads */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="border-slate-200 lg:col-span-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-slate-700">Today&apos;s Performance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
+            ) : (
+              <>
+                <PerfRow label="Total Leads" value={data.todayLeads} />
+                <PerfRow label="Calls" value={data.todayCalls} />
+                <PerfRow label="Follow Ups" value={data.todayFollowups} />
+                <PerfRow label="ID Done" value={data.todayIdDone} />
+                <div className="border-t border-slate-100 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-600">Conversion</span>
+                    <span className="text-lg font-bold text-blue-600">{data.conversion}%</span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "leads" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Today's Leads" value={stats.todayLeads} icon={Phone} tone="primary" />
-            <StatCard label="Ringing" value={stats.ringing} icon={PhoneCall} tone="warning" />
-            <StatCard label="Interested" value={stats.interested} icon={CheckCircle2} tone="success" />
-            <StatCard label="Call Back" value={stats.callback} icon={Clock} tone="info" />
-          </div>
-          <Card className="border-border/60">
-            <CardHeader><CardTitle className="text-base">All Leads</CardTitle></CardHeader>
-            <CardContent>
-              <Link href="/crm/employee/leads"><Button variant="outline"><ExternalLink className="mr-2 h-4 w-4" /> Go to My Leads</Button></Link>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === "reports" && (
-        <Card className="border-border/60">
-          <CardHeader><CardTitle className="text-base">Reports</CardTitle></CardHeader>
-          <CardContent>
-            <Link href="/crm/employee/reports"><Button variant="outline"><TrendingUp className="mr-2 h-4 w-4" /> View Reports</Button></Link>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
-      )}
 
-      {activeTab === "payments" && (
-        <Card className="border-border/60">
-          <CardHeader><CardTitle className="text-base">Payment History (Car Leads Only)</CardTitle></CardHeader>
+        <Card className="border-slate-200 lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base font-semibold text-slate-700">Recent Leads</CardTitle>
+            <Link href="/crm/employee/leads">
+              <Button variant="ghost" size="sm" className="gap-1 text-blue-600 hover:text-blue-700">
+                View All <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-3">Payment records are only available for Car product leads.</p>
-            <Link href="/crm/employee/leads"><Button variant="outline"><Wallet className="mr-2 h-4 w-4" /> View Car Leads</Button></Link>
+            {loading ? (
+              <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            ) : recentLeads.length === 0 ? (
+              <div className="py-8 text-center text-sm text-slate-400">No leads assigned yet</div>
+            ) : (
+              <div className="space-y-1">
+                {recentLeads.map((lead) => (
+                  <div key={lead.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-50">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                        {lead.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-700">{lead.name}</div>
+                        <div className="text-xs text-slate-400">{lead.phone}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-medium text-slate-600">{lead.platform || "—"}</div>
+                      <div className="text-[11px] text-slate-400">{format(new Date(lead.created_at), "dd MMM")}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
+      </div>
+    </div>
+  );
+}
 
-      {activeTab === "followups" && (
-        <Card className="border-border/60">
-          <CardHeader><CardTitle className="text-base">Follow-ups</CardTitle></CardHeader>
-          <CardContent>
-            <Link href="/crm/employee/followups"><Button variant="outline"><Calendar className="mr-2 h-4 w-4" /> View Follow-ups</Button></Link>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === "id-done" && (
-        <Card className="border-border/60">
-          <CardHeader><CardTitle className="text-base">ID Done Leads</CardTitle></CardHeader>
-          <CardContent>
-            <Link href="/crm/employee/leads"><Button variant="outline"><CheckCircle2 className="mr-2 h-4 w-4" /> View ID Done Leads</Button></Link>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === "calls" && (
-        <Card className="border-border/60">
-          <CardHeader><CardTitle className="text-base">Call History</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">Your recent call activity.</p>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <StatCard label="Today's Calls" value={stats.todayCalls} icon={PhoneCall} tone="info" />
-              <StatCard label="Pending Follow-ups" value={stats.pendingFollowups} icon={Calendar} tone="warning" />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+function PerfRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-slate-600">{label}</span>
+      <span className="text-sm font-bold text-slate-800">{value}</span>
     </div>
   );
 }
