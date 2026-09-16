@@ -78,6 +78,7 @@ import {
   ChevronRight,
   PhoneCall,
   Pencil,
+  ClipboardEdit,
   UserPlus,
   Trash2,
   BookMarked,
@@ -430,13 +431,13 @@ export default function AdminLeadsPage() {
   // ============ SINGLE DELETE ============
   const handleDeleteConfirm = async () => {
     if (!deleteLead) return;
-    const { error } = await supabase.rpc("admin_soft_delete_lead", {
+    const { error } = await supabase.rpc("admin_permanent_delete_lead", {
       p_lead_id: deleteLead.id,
     });
     if (error) {
       toast({ title: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Lead deleted successfully" });
+      toast({ title: "Lead permanently deleted" });
       setDeleteLead(null);
       load();
     }
@@ -520,33 +521,23 @@ export default function AdminLeadsPage() {
     if (selectedIds.size === 0) return;
     setBulkSaving(true);
     const ids = Array.from(selectedIds);
-    let successCount = 0;
-    let failCount = 0;
 
-    // Batch soft-delete via individual RPC calls (the RPC is SECURITY DEFINER).
-    // Process in parallel chunks for efficiency.
-    const chunkSize = 10;
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
-      const results = await Promise.all(
-        chunk.map((id) =>
-          supabase.rpc("admin_soft_delete_lead", { p_lead_id: id })
-        )
-      );
-      results.forEach((r) => {
-        if (r.error) failCount++;
-        else successCount++;
-      });
-    }
+    const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", {
+      p_lead_ids: ids,
+    });
 
-    if (failCount > 0) {
-      toast({
-        title: `${successCount} leads deleted, ${failCount} failed`,
-        description: "Some leads could not be deleted. They may have been already deleted or you may lack permissions.",
-        variant: "destructive",
-      });
+    if (error) {
+      toast({ title: error.message, variant: "destructive" });
     } else {
-      toast({ title: `${successCount} leads deleted successfully` });
+      const result = data as { deleted_count: number; not_found_count: number };
+      if (result.not_found_count > 0) {
+        toast({
+          title: `${result.deleted_count} leads permanently deleted`,
+          description: `${result.not_found_count} lead(s) could not be found.`,
+        });
+      } else {
+        toast({ title: `${result.deleted_count} leads permanently deleted` });
+      }
     }
     setBulkDeleteOpen(false);
     setSelectedIds(new Set());
@@ -940,15 +931,22 @@ export default function AdminLeadsPage() {
                             <TooltipContent>Delete Lead</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openStatus(lead)}
-                          title="Update status"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => openStatus(lead)}
+                                disabled={!lead.is_active}
+                              >
+                                <ClipboardEdit className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Update Status</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1333,7 +1331,7 @@ export default function AdminLeadsPage() {
               <strong>{deleteLead?.name}</strong> ({deleteLead?.phone})
               <br />
               <span className="mt-1 inline-block text-xs">
-                The lead will be soft-deleted and hidden from active lists. Related records (history, assignments, issues) are preserved.
+                The lead and all related records (history, assignments, issues, status changes) will be permanently removed from the database. This cannot be undone.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1343,7 +1341,7 @@ export default function AdminLeadsPage() {
               onClick={handleDeleteConfirm}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete Lead
+              Delete Permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1433,11 +1431,10 @@ export default function AdminLeadsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {selectedIds.size} selected leads?
+              Delete {selectedIds.size} leads permanently?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. The leads will be soft-deleted and
-              hidden from active lists. Related records are preserved.
+              This action cannot be undone. The leads and all related records (history, assignments, issues, status changes) will be permanently removed from the database.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1451,7 +1448,7 @@ export default function AdminLeadsPage() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...
                 </>
               ) : (
-                "Delete Selected"
+                "Delete Permanently"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
