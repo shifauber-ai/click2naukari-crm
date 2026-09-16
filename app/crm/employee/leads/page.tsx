@@ -21,13 +21,12 @@ import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { DateFilter } from "@/components/date-filter";
 import { StatusBadge } from "@/components/status-badge";
-import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
-  Wallet, Edit, ClipboardEdit, History, PhoneCall,
-  ChevronLeft, ChevronRight,
+  Wallet, Edit,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import type { Lead, Platform, ProductCity, LeadStatusHistory, LeadAssignment, ScheduledTransition } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
@@ -35,11 +34,9 @@ import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
 const PAGE_SIZE = 25;
 const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
-const HC_STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: "ALL", label: "All Status" },
-  { value: "RINGING", label: "Ringing" },
-  { value: "NOT_INTERESTED", label: "Switch Off" },
+const HC_INLINE_STATUSES = [
   { value: "TAG_ADDED", label: "Tag Added" },
+  { value: "RINGING", label: "Ringing" },
 ];
 
 interface LeadWithDetails extends Lead {
@@ -78,6 +75,39 @@ export default function EmployeeLeadsPage() {
 
   const isCar = product.isCar;
   const isHC = product.isHC;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [inlineStatusSaving, setInlineStatusSaving] = useState<string | null>(null);
+
+  const handleInlineStatusChange = async (leadId: string, newStatus: string) => {
+    setInlineStatusSaving(leadId);
+    const { error } = await supabase.rpc("update_lead_status", {
+      p_lead_id: leadId,
+      p_new_status: newStatus,
+      p_remarks: "",
+    });
+    if (error) {
+      toast({ title: `Failed: ${error.message}`, variant: "destructive" });
+    } else {
+      toast({ title: `Status updated to ${newStatus === "TAG_ADDED" ? "Tag Added" : "Ringing"}` });
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus as LeadStatus } : l));
+    }
+    setInlineStatusSaving(null);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (prev.size === leads.length) return new Set();
+      return new Set(leads.map((l) => l.id));
+    });
+  };
 
   const loadPlatformsAndCities = useCallback(async () => {
     if (!product) return;
@@ -106,7 +136,12 @@ export default function EmployeeLeadsPage() {
     if (dateRange.start) q = q.gte("created_at", dateRange.start);
     if (dateRange.end) q = q.lte("created_at", dateRange.end);
     if (search.trim()) {
-      q = q.or(`name.ilike.%${search.trim()}%,phone.ilike.%${search.trim()}%`);
+      const s = search.trim();
+      if (isHC) {
+        q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,vehicle_no.ilike.%${s}%,dl_no.ilike.%${s}%,license_no.ilike.%${s}%`);
+      } else {
+        q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
+      }
     }
     const { data, count, error } = await q;
     if (error) {
@@ -232,187 +267,209 @@ export default function EmployeeLeadsPage() {
 
   if (isHC) {
     return (
-      <div>
-        <PageHeader
-          title="All Leads"
-          description={`${total} leads assigned to you in ${product.name}`}
-          icon={Users}
-          actions={
-            <Button onClick={() => setAddLeadOpen(true)} className="gap-1.5 bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4" /> Add Lead
-            </Button>
-          }
-        />
+      <div className="space-y-4 p-4 lg:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">All Leads</h2>
+            <p className="text-sm text-slate-400">{total} leads assigned to you in {product.name}</p>
+          </div>
+          {selectedIds.size > 0 && (
+            <span className="text-sm font-medium text-blue-600">{selectedIds.size} selected</span>
+          )}
+        </div>
 
         {/* Filters */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
-              placeholder="Search name or phone..."
+              placeholder="Search name, phone, vehicle, DL, license..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="border-slate-200 pl-9"
             />
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              {HC_STATUS_OPTIONS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Source" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Sources</SelectItem>
-              {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
           <Select value={cityFilter} onValueChange={setCityFilter}>
-            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="City" /></SelectTrigger>
+            <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="All Cities" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Cities</SelectItem>
               {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="All Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Status</SelectItem>
+              <SelectItem value="RINGING">Ringing</SelectItem>
+              <SelectItem value="TAG_ADDED">Tag Added</SelectItem>
+            </SelectContent>
+          </Select>
           <DateFilter range={dateRange} onRangeChange={setDateRange} />
         </div>
 
-        {loading ? (
-          <LoadingState />
-        ) : leads.length === 0 ? (
-          <EmptyState icon={Users} title="No leads found" description="Try adjusting your filters or add a new lead." />
-        ) : (
-          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-            <div className="overflow-x-auto scrollbar-thin">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>City</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Next Follow-up</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {leads.map((lead) => (
-                    <TableRow key={lead.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-blue-50 text-xs font-semibold text-blue-700">
-                              {lead.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          {lead.name}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{lead.phone}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{lead.source || "—"}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{lead.city || "—"}</TableCell>
-                      <TableCell><StatusBadge status={lead.status} /></TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {lead.next_followup_at ? format(new Date(lead.next_followup_at), "dd MMM, HH:mm") : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(lead.created_at), "dd MMM yyyy")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <a href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="WhatsApp">
-                              <MessageCircle className="h-4 w-4" />
-                            </Button>
-                          </a>
-                          <a href={`tel:${lead.phone}`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Call">
-                              <PhoneCall className="h-4 w-4" />
-                            </Button>
-                          </a>
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>View Lead</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Update Status">
-                                  <ClipboardEdit className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Update Status</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openHistory(lead)} title="History">
-                                  <History className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>History</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
-              <span className="text-sm text-muted-foreground">{total} leads total</span>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm">Page {page + 1} of {totalPages}</span>
-                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+        {/* Leads Table */}
+        <Card className="border-slate-200">
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="space-y-2 p-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
+            ) : leads.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <Users className="mb-3 h-10 w-10 text-slate-300" />
+                <p className="text-sm font-medium text-slate-500">No leads found</p>
+                <p className="text-xs text-slate-400">Try adjusting your filters.</p>
               </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                      <th className="px-3 py-3 w-10">
+                        <Checkbox
+                          checked={leads.length > 0 && selectedIds.size === leads.length}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </th>
+                      <th className="px-3 py-3">Driver Name</th>
+                      <th className="px-3 py-3">Contact</th>
+                      <th className="px-3 py-3">Vehicle No</th>
+                      <th className="px-3 py-3">DL No</th>
+                      <th className="px-3 py-3">Total Trips</th>
+                      <th className="px-3 py-3">License No</th>
+                      <th className="px-3 py-3">Status</th>
+                      <th className="px-3 py-3">Call</th>
+                      <th className="px-3 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leads.map((lead) => (
+                      <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        <td className="px-3 py-3">
+                          <Checkbox
+                            checked={selectedIds.has(lead.id)}
+                            onCheckedChange={() => toggleSelect(lead.id)}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="bg-blue-50 text-xs font-semibold text-blue-700">
+                                {lead.name.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="font-medium text-slate-700">{lead.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-slate-600">{lead.phone}</td>
+                        <td className="px-3 py-3 text-slate-600">{lead.vehicle_no || "—"}</td>
+                        <td className="px-3 py-3 text-slate-600">{lead.dl_no || "—"}</td>
+                        <td className="px-3 py-3 text-slate-600">{lead.total_trips != null ? lead.total_trips : "—"}</td>
+                        <td className="px-3 py-3 text-slate-600">{lead.license_no || "—"}</td>
+                        <td className="px-3 py-3">
+                          <Select
+                            value={lead.status}
+                            onValueChange={(v) => handleInlineStatusChange(lead.id, v)}
+                            disabled={inlineStatusSaving === lead.id}
+                          >
+                            <SelectTrigger className="h-8 w-[120px] border-slate-200 text-xs font-medium">
+                              {inlineStatusSaving === lead.id ? (
+                                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving...</span>
+                              ) : (
+                                <SelectValue />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              {HC_INLINE_STATUSES.map((s) => (
+                                <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <a href={`tel:${lead.phone}`}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" title="Call">
+                              <Phone className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pagination */}
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              Page {page + 1} of {totalPages} — {total} total
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+              <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
             </div>
           </div>
         )}
 
-        {/* Shared dialogs */}
-        <LeadDialogs
-          viewLead={viewLead}
-          setViewLead={setViewLead}
-          statusLead={statusLead}
-          setStatusLead={setStatusLead}
-          historyLead={historyLead}
-          setHistoryLead={setHistoryLead}
-          product={product}
-          profile={profile}
-          platformStatuses={platformStatuses}
-          setPlatformStatuses={setPlatformStatuses}
-          platformStatusLoading={platformStatusLoading}
-          platformStatusSaving={platformStatusSaving}
-          detailPlatformStatuses={detailPlatformStatuses}
-          loadPlatformStatuses={loadPlatformStatuses}
-          handlePlatformStatusUpdate={handlePlatformStatusUpdate}
-          handleCall={handleCall}
-          handleWhatsApp={handleWhatsApp}
-          assignments={assignments}
-          history={history}
-          transitions={transitions}
-          historyLoading={historyLoading}
-        />
+        {/* View Lead Drawer */}
+        {viewLead && (
+          <Sheet open={!!viewLead} onOpenChange={(open) => !open && setViewLead(null)}>
+            <SheetContent side="right" className="w-full sm:max-w-lg">
+              <SheetHeader>
+                <SheetTitle className="text-lg">Lead Details</SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-4 overflow-y-auto">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="bg-blue-100 text-base font-semibold text-blue-700">
+                      {viewLead.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="text-lg font-semibold text-slate-800">{viewLead.name}</div>
+                    <div className="text-sm text-slate-400">{viewLead.phone}</div>
+                  </div>
+                </div>
 
-        {isCar && (
-          <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
+                <div className="grid grid-cols-2 gap-3">
+                  <DetailItem label="Driver Name" value={viewLead.name} />
+                  <DetailItem label="Contact" value={viewLead.phone} />
+                  <DetailItem label="Product" value={"HC"} />
+                  <DetailItem label="Platform" value={viewLead.platform || "—"} />
+                  <DetailItem label="Vehicle No" value={viewLead.vehicle_no || "—"} />
+                  <DetailItem label="DL No" value={viewLead.dl_no || "—"} />
+                  <DetailItem label="Total Trips" value={viewLead.total_trips != null ? String(viewLead.total_trips) : "—"} />
+                  <DetailItem label="License No" value={viewLead.license_no || "—"} />
+                  <DetailItem label="Source" value={viewLead.source || "—"} />
+                  <DetailItem label="City" value={viewLead.city || "—"} />
+                  <DetailItem label="Current Status" value={STATUS_LABELS[viewLead.status as LeadStatus] || viewLead.status} />
+                  <DetailItem label="Created Date" value={format(new Date(viewLead.created_at), "dd MMM yyyy, HH:mm")} />
+                </div>
+
+                {viewLead.remarks && (
+                  <div>
+                    <div className="text-xs font-medium text-slate-400">Notes</div>
+                    <div className="mt-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{viewLead.remarks}</div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}>
+                    <Phone className="h-4 w-4" /> Call
+                  </Button>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         )}
 
         <AddLeadDrawer
