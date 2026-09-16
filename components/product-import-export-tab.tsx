@@ -584,8 +584,24 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         imported, status: "COMPLETED",
       }).eq("id", batchId);
 
-      setImportResult({ imported, internalDup, existingDup, invalid: invalid + failedInsert, batchId });
-      toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid + failedInsert} Failed Records` });
+      // HC: auto-assign imported leads to active callers
+      if (isHC && imported > 0) {
+        try {
+          const { data: assignResult } = await supabase.rpc("hc_bulk_auto_assign", {
+            p_product_id: product.id,
+          });
+          const result = assignResult as { assigned: number; admin_review: number } | null;
+          if (result) {
+            toast({ title: `Import Completed: ${imported} Leads Imported, ${result.assigned} auto-assigned${result.admin_review > 0 ? `, ${result.admin_review} to Admin Review` : ""}` });
+          } else {
+            toast({ title: `Import Completed: ${imported} Leads Imported` });
+          }
+        } catch {
+          toast({ title: `Import Completed: ${imported} Leads Imported (auto-assign pending)` });
+        }
+      } else {
+        toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid + failedInsert} Failed Records` });
+      }
       loadBatches();
       loadDupRecords();
     } catch (err) {

@@ -18,7 +18,9 @@ export type LeadStatus =
   | "VEHICLE_ISSUE"
   | "OTHER_ISSUE"
   | "OTHER_HERO"
-  | "ADMIN_REVIEW";
+  | "ADMIN_REVIEW"
+  | "TAG_ADDED"
+  | "NOT_INTERESTED";
 
 export const LEAD_STATUSES: LeadStatus[] = [
   "NEW",
@@ -32,6 +34,8 @@ export const LEAD_STATUSES: LeadStatus[] = [
   "OTHER_ISSUE",
   "OTHER_HERO",
   "ADMIN_REVIEW",
+  "TAG_ADDED",
+  "NOT_INTERESTED",
 ];
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -46,6 +50,8 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   OTHER_ISSUE: "Other Issue",
   OTHER_HERO: "Other Hero",
   ADMIN_REVIEW: "Admin Review",
+  TAG_ADDED: "Tag Added",
+  NOT_INTERESTED: "Not Interested",
 };
 
 export interface Profile {
@@ -105,6 +111,7 @@ export interface Lead {
   dl_no?: string | null;
   total_trips?: number | null;
   license_no?: string | null;
+  ringing_started_at?: string | null;
   uber_id_done?: boolean;
   ola_id_done?: boolean;
   rapido_id_done?: boolean;

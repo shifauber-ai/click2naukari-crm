@@ -14,6 +14,8 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   OTHER_ISSUE: "bg-muted text-muted-foreground",
   OTHER_HERO: "bg-chart-5/20 text-chart-5 border-chart-5/30",
   ADMIN_REVIEW: "bg-foreground/10 text-foreground border-foreground/20",
+  TAG_ADDED: "bg-info text-info-foreground",
+  NOT_INTERESTED: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({
