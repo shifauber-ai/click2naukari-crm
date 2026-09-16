@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, Users, Calendar, Star, CheckCircle2,
   AlertTriangle, BarChart3, Phone, CreditCard, Bell,
-  Menu, LogOut, ChevronDown, Building2, X, PhoneCall,
+  Menu, LogOut, ChevronDown, Building2, X, PhoneCall, Tag,
 } from "lucide-react";
 import { format } from "date-fns";
 import { EmployeeProductContext } from "@/lib/employee-context";
@@ -137,15 +137,21 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   if (selectedProduct?.isCar) {
     navItems.push({ href: "/crm/employee/payments", label: "Payment Report", icon: CreditCard });
   }
-  navItems.push(
-    { href: "/crm/employee/followups", label: "Follow Ups", icon: Calendar },
-  );
-  if (selectedProduct?.isCar || selectedProduct?.isAuto) {
-    navItems.push({ href: "/crm/employee/other-hero", label: "Other Hero", icon: Star });
+  if (selectedProduct?.isHC) {
+    navItems.push({ href: "/crm/employee/tag-added", label: "Tag Added", icon: Tag });
+  } else {
+    navItems.push(
+      { href: "/crm/employee/followups", label: "Follow Ups", icon: Calendar },
+    );
+    if (selectedProduct?.isCar || selectedProduct?.isAuto) {
+      navItems.push({ href: "/crm/employee/other-hero", label: "Other Hero", icon: Star });
+    }
+    navItems.push(
+      { href: "/crm/employee/id-done", label: "ID Done", icon: CheckCircle2 },
+      { href: "/crm/employee/issues", label: "Issues", icon: AlertTriangle },
+    );
   }
   navItems.push(
-    { href: "/crm/employee/id-done", label: "ID Done", icon: CheckCircle2 },
-    { href: "/crm/employee/issues", label: "Issues", icon: AlertTriangle },
     { href: "/crm/employee/reports", label: "Reports", icon: BarChart3 },
     { href: "/crm/employee/call-history", label: "Call History", icon: Phone },
   );

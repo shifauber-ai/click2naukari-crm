@@ -7,24 +7,40 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { DateFilter } from "@/components/date-filter";
+import { StatusBadge } from "@/components/status-badge";
+import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
-  Wallet, Edit,
+  Wallet, Edit, ClipboardEdit, History, PhoneCall,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Lead, Platform, ProductCity } from "@/lib/types";
+import type { Lead, Platform, ProductCity, LeadStatusHistory, LeadAssignment, ScheduledTransition } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
 
 const PAGE_SIZE = 25;
 const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
+
+const HC_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "ALL", label: "All Status" },
+  { value: "RINGING", label: "Ringing" },
+  { value: "NOT_INTERESTED", label: "Switch Off" },
+  { value: "TAG_ADDED", label: "Tag Added" },
+];
 
 interface LeadWithDetails extends Lead {
   call_history?: { call_timestamp: string; direction: string; call_status: string }[];
@@ -49,13 +65,19 @@ export default function EmployeeLeadsPage() {
   const [viewLead, setViewLead] = useState<LeadWithDetails | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [statusLead, setStatusLead] = useState<LeadWithDetails | null>(null);
+  const [historyLead, setHistoryLead] = useState<LeadWithDetails | null>(null);
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
   const [detailPlatformStatuses, setDetailPlatformStatuses] = useState<Record<string, string>>({});
   const [paymentLead, setPaymentLead] = useState<LeadWithDetails | null>(null);
+  const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
+  const [history, setHistory] = useState<LeadStatusHistory[]>([]);
+  const [transitions, setTransitions] = useState<ScheduledTransition[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const isCar = product.isCar;
+  const isHC = product.isHC;
 
   const loadPlatformsAndCities = useCallback(async () => {
     if (!product) return;
@@ -78,7 +100,7 @@ export default function EmployeeLeadsPage() {
       .order("created_at", { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
-    if (platformFilter !== "ALL") q = q.eq("platform", platformFilter);
+    if (!isHC && platformFilter !== "ALL") q = q.eq("platform", platformFilter);
     if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
     if (cityFilter !== "ALL") q = q.eq("city", cityFilter);
     if (dateRange.start) q = q.gte("created_at", dateRange.start);
@@ -94,13 +116,12 @@ export default function EmployeeLeadsPage() {
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search, toast]);
+  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search, toast, isHC]);
 
   useEffect(() => { loadPlatformsAndCities(); }, [loadPlatformsAndCities]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
   useEffect(() => { setPage(0); }, [statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search]);
 
-  // Load distinct sources from DB for this product
   useEffect(() => {
     if (!product) return;
     supabase
@@ -158,6 +179,33 @@ export default function EmployeeLeadsPage() {
     setPlatformStatusLoading(false);
   };
 
+  const openHistory = async (lead: LeadWithDetails) => {
+    setHistoryLead(lead);
+    setHistoryLoading(true);
+    const [a, h, t] = await Promise.all([
+      supabase
+        .from("lead_assignments")
+        .select("*, new_caller:profiles!new_caller_id(*), previous_caller:profiles!previous_caller_id(*)")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("lead_status_history")
+        .select("*")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("scheduled_transitions")
+        .select("*")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+    setAssignments((a.data as LeadAssignment[]) || []);
+    setHistory((h.data as LeadStatusHistory[]) || []);
+    setTransitions((t.data as ScheduledTransition[]) || []);
+    setHistoryLoading(false);
+  };
+
   const handlePlatformStatusUpdate = async (platformName: string) => {
     if (!statusLead) return;
     const selected = platformStatuses[platformName];
@@ -182,8 +230,205 @@ export default function EmployeeLeadsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  if (isHC) {
+    return (
+      <div>
+        <PageHeader
+          title="All Leads"
+          description={`${total} leads assigned to you in ${product.name}`}
+          icon={Users}
+          actions={
+            <Button onClick={() => setAddLeadOpen(true)} className="gap-1.5 bg-blue-600 hover:bg-blue-700">
+              <Plus className="h-4 w-4" /> Add Lead
+            </Button>
+          }
+        />
 
+        {/* Filters */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search name or phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              {HC_STATUS_OPTIONS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Source" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Sources</SelectItem>
+              {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={cityFilter} onValueChange={setCityFilter}>
+            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="City" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Cities</SelectItem>
+              {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <DateFilter range={dateRange} onRangeChange={setDateRange} />
+        </div>
 
+        {loading ? (
+          <LoadingState />
+        ) : leads.length === 0 ? (
+          <EmptyState icon={Users} title="No leads found" description="Try adjusting your filters or add a new lead." />
+        ) : (
+          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+            <div className="overflow-x-auto scrollbar-thin">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>City</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Next Follow-up</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leads.map((lead) => (
+                    <TableRow key={lead.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-blue-50 text-xs font-semibold text-blue-700">
+                              {lead.name.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          {lead.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{lead.phone}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{lead.source || "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{lead.city || "—"}</TableCell>
+                      <TableCell><StatusBadge status={lead.status} /></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {lead.next_followup_at ? format(new Date(lead.next_followup_at), "dd MMM, HH:mm") : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {format(new Date(lead.created_at), "dd MMM yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <a href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="WhatsApp">
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                          </a>
+                          <a href={`tel:${lead.phone}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Call">
+                              <PhoneCall className="h-4 w-4" />
+                            </Button>
+                          </a>
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>View Lead</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Update Status">
+                                  <ClipboardEdit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Update Status</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openHistory(lead)} title="History">
+                                  <History className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>History</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
+              <span className="text-sm text-muted-foreground">{total} leads total</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">Page {page + 1} of {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Shared dialogs */}
+        <LeadDialogs
+          viewLead={viewLead}
+          setViewLead={setViewLead}
+          statusLead={statusLead}
+          setStatusLead={setStatusLead}
+          historyLead={historyLead}
+          setHistoryLead={setHistoryLead}
+          product={product}
+          profile={profile}
+          platformStatuses={platformStatuses}
+          setPlatformStatuses={setPlatformStatuses}
+          platformStatusLoading={platformStatusLoading}
+          platformStatusSaving={platformStatusSaving}
+          detailPlatformStatuses={detailPlatformStatuses}
+          loadPlatformStatuses={loadPlatformStatuses}
+          handlePlatformStatusUpdate={handlePlatformStatusUpdate}
+          handleCall={handleCall}
+          handleWhatsApp={handleWhatsApp}
+          assignments={assignments}
+          history={history}
+          transitions={transitions}
+          historyLoading={historyLoading}
+        />
+
+        {isCar && (
+          <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
+        )}
+
+        <AddLeadDrawer
+          open={addLeadOpen}
+          onOpenChange={setAddLeadOpen}
+          product={product}
+          platforms={platforms}
+          cities={cities}
+          profileId={profile.id}
+          onAdded={() => { loadLeads(); }}
+        />
+      </div>
+    );
+  }
+
+  // Non-HC: original layout
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -330,6 +575,80 @@ export default function EmployeeLeadsPage() {
         </div>
       )}
 
+      <LeadDialogs
+        viewLead={viewLead}
+        setViewLead={setViewLead}
+        statusLead={statusLead}
+        setStatusLead={setStatusLead}
+        historyLead={historyLead}
+        setHistoryLead={setHistoryLead}
+        product={product}
+        profile={profile}
+        platformStatuses={platformStatuses}
+        setPlatformStatuses={setPlatformStatuses}
+        platformStatusLoading={platformStatusLoading}
+        platformStatusSaving={platformStatusSaving}
+        detailPlatformStatuses={detailPlatformStatuses}
+        loadPlatformStatuses={loadPlatformStatuses}
+        handlePlatformStatusUpdate={handlePlatformStatusUpdate}
+        handleCall={handleCall}
+        handleWhatsApp={handleWhatsApp}
+        assignments={assignments}
+        history={history}
+        transitions={transitions}
+        historyLoading={historyLoading}
+      />
+
+      {isCar && (
+        <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
+      )}
+
+      {/* Add Lead */}
+      <AddLeadDrawer
+        open={addLeadOpen}
+        onOpenChange={setAddLeadOpen}
+        product={product}
+        platforms={platforms}
+        cities={cities}
+        profileId={profile.id}
+        onAdded={() => { loadLeads(); }}
+      />
+    </div>
+  );
+}
+
+
+function LeadDialogs({
+  viewLead, setViewLead, statusLead, setStatusLead, historyLead, setHistoryLead,
+  product, profile, platformStatuses, setPlatformStatuses, platformStatusLoading,
+  platformStatusSaving, detailPlatformStatuses, loadPlatformStatuses,
+  handlePlatformStatusUpdate, handleCall, handleWhatsApp,
+  assignments, history, transitions, historyLoading,
+}: {
+  viewLead: LeadWithDetails | null;
+  setViewLead: (v: LeadWithDetails | null) => void;
+  statusLead: LeadWithDetails | null;
+  setStatusLead: (v: LeadWithDetails | null) => void;
+  historyLead: LeadWithDetails | null;
+  setHistoryLead: (v: LeadWithDetails | null) => void;
+  product: any;
+  profile: any;
+  platformStatuses: Record<string, string>;
+  setPlatformStatuses: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  platformStatusLoading: boolean;
+  platformStatusSaving: string | null;
+  detailPlatformStatuses: Record<string, string>;
+  loadPlatformStatuses: (leadId: string, target: "modal" | "detail") => Promise<void>;
+  handlePlatformStatusUpdate: (platformName: string) => Promise<void>;
+  handleCall: (lead: Lead) => void;
+  handleWhatsApp: (lead: Lead) => void;
+  assignments: LeadAssignment[];
+  history: LeadStatusHistory[];
+  transitions: ScheduledTransition[];
+  historyLoading: boolean;
+}) {
+  return (
+    <>
       {/* View Lead Drawer */}
       {viewLead && (
         <Sheet open={!!viewLead} onOpenChange={(open) => !open && setViewLead(null)}>
@@ -368,7 +687,6 @@ export default function EmployeeLeadsPage() {
                 </div>
               )}
 
-              {/* Platform Done */}
               <div>
                 <div className="text-xs font-medium text-slate-400">Platform Done</div>
                 <div className="mt-2 space-y-2">
@@ -396,7 +714,7 @@ export default function EmployeeLeadsPage() {
         </Sheet>
       )}
 
-      {/* Status Update Dialog — 3 Platform Sections */}
+      {/* Status Update Dialog */}
       <Dialog open={!!statusLead} onOpenChange={(open) => !open && setStatusLead(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -447,25 +765,95 @@ export default function EmployeeLeadsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Modal (Car only) */}
-      {isCar && (
-        <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
-      )}
+      {/* History Sheet */}
+      <Sheet open={!!historyLead} onOpenChange={() => setHistoryLead(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto scrollbar-thin">
+          <SheetHeader>
+            <SheetTitle>Lead History</SheetTitle>
+          </SheetHeader>
+          {historyLead && (
+            <div className="mt-4 space-y-6">
+              <div className="rounded-lg border border-border/60 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{historyLead.name}</p>
+                    <p className="text-sm text-muted-foreground">{historyLead.phone}</p>
+                  </div>
+                  <StatusBadge status={historyLead.status} />
+                </div>
+              </div>
 
-      {/* Add Lead */}
-      <AddLeadDrawer
-        open={addLeadOpen}
-        onOpenChange={setAddLeadOpen}
-        product={product}
-        platforms={platforms}
-        cities={cities}
-        profileId={profile.id}
-        onAdded={() => { loadLeads(); }}
-      />
-    </div>
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Assignments</h4>
+                {historyLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : assignments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No assignments recorded.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {assignments.map((a) => (
+                      <div key={a.id} className="rounded-lg border border-border/60 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{a.new_caller?.full_name || "Unassigned"}</span>
+                          <span className="text-xs text-muted-foreground">{format(new Date(a.created_at), "dd MMM, HH:mm")}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {a.assignment_reason.replace(/_/g, " ").toLowerCase()} · attempt {a.attempt_number}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {a.previous_caller?.full_name || "—"} → {a.new_caller?.full_name || "Admin Review"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Status Changes</h4>
+                {history.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No status changes recorded.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {history.map((h) => (
+                      <div key={h.id} className="rounded-lg border border-border/60 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span>{h.previous_status || "—"} → <StatusBadge status={h.new_status as LeadStatus} /></span>
+                          <span className="text-xs text-muted-foreground">{format(new Date(h.created_at), "dd MMM, HH:mm")}</span>
+                        </div>
+                        {h.remarks && <p className="mt-1 text-xs text-muted-foreground">{h.remarks}</p>}
+                        <p className="mt-0.5 text-xs text-muted-foreground">by {h.actor_type.toLowerCase()}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Scheduled Transitions</h4>
+                {transitions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No scheduled transitions.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {transitions.map((t) => (
+                      <div key={t.id} className="rounded-lg border border-border/60 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{t.transition_type.replace(/_/g, " ").toLowerCase()}</span>
+                          <span className="inline-flex rounded-md px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">{t.status}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">Fires: {format(new Date(t.next_action_at), "dd MMM, HH:mm")}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
-
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -489,6 +877,8 @@ function StatusPill({ status }: { status: string }) {
     OTHER_ISSUE: "bg-slate-100 text-slate-500",
     OTHER_HERO: "bg-indigo-100 text-indigo-700",
     ADMIN_REVIEW: "bg-slate-100 text-slate-500",
+    TAG_ADDED: "bg-blue-100 text-blue-700",
+    NOT_INTERESTED: "bg-slate-100 text-slate-500",
   };
   return (
     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] || "bg-slate-100 text-slate-500"}`}>
