@@ -35,6 +35,7 @@ export default function EmployeeFollowupsPage() {
   const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
   const [statusRemarks, setStatusRemarks] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
+  const [completingId, setCompletingId] = useState<string | null>(null);
   const [viewLead, setViewLead] = useState<Lead | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   const [sourceFilter, setSourceFilter] = useState<string>("ALL");
@@ -113,7 +114,11 @@ export default function EmployeeFollowupsPage() {
     if (dateRange.end) cq = cq.lte("created_at", dateRange.end);
 
     const { data: compData } = await cq;
-    let compLeads = (compData as { lead: Lead }[] | null)?.map((r) => r.lead).filter(Boolean) || [];
+    const compRows = (compData as { lead_id: string; lead: Lead }[] | null) || [];
+    const seenLeadIds = new Set<string>();
+    let compLeads = compRows
+      .filter((r) => r.lead && !seenLeadIds.has(r.lead_id) && seenLeadIds.add(r.lead_id))
+      .map((r) => r.lead);
     if (sourceFilter !== "ALL") compLeads = compLeads.filter((l) => l.source === sourceFilter);
     if (platformFilter !== "ALL") compLeads = compLeads.filter((l) => l.platform === platformFilter);
     setCompleted(compLeads);
@@ -136,8 +141,19 @@ export default function EmployeeFollowupsPage() {
   };
 
   const handleComplete = async (lead: Lead) => {
-    await supabase.rpc("update_lead_status", { p_lead_id: lead.id, p_new_status: "ID_DONE", p_remarks: "Completed from follow-up" });
-    loadFollowups();
+    if (completingId) return;
+    setCompletingId(lead.id);
+    try {
+      const { error } = await supabase.rpc("update_lead_status", { p_lead_id: lead.id, p_new_status: "ID_DONE", p_remarks: "Completed from follow-up" });
+      if (error) {
+        toast({ title: `Failed to complete: ${error.message}`, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Marked as completed" });
+      await loadFollowups();
+    } finally {
+      setCompletingId(null);
+    }
   };
 
   const openStatus = (lead: Lead) => {
@@ -204,8 +220,8 @@ export default function EmployeeFollowupsPage() {
               <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Update Status">
                 <Edit className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleComplete(lead)} title="Complete">
-                <CheckCircle2 className="h-4 w-4" />
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleComplete(lead)} disabled={completingId === lead.id} title="Complete">
+                {completingId === lead.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               </Button>
             </div>
           </div>
