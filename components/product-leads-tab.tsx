@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PLATFORM_STATUS_MAP, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -102,17 +101,30 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [eRemarks, setERemarks] = useState("");
   const [eCallerId, setECallerId] = useState<string>("NONE");
 
-  // Status form — single platform+status
-  const [statusPlatform, setStatusPlatform] = useState<string>("__none__");
-  const [statusValue, setStatusValue] = useState<string>("__none__");
-  const [statusLoading, setStatusLoading] = useState(false);
-  const [statusSaving, setStatusSaving] = useState(false);
+  // Status form — per-platform
+  const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
+  const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
+  const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
 
   const PLATFORM_CONFIG = [
     { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK"] },
     { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED"] },
     { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED"] },
   ];
+  const PLATFORM_STATUS_LABELS: Record<string, string> = {
+    RINGING: "Ringing",
+    FRESH: "Fresh",
+    EXISTING: "Existing",
+    OTHER_HERO: "Other Hero",
+    ID_DONE: "ID Done",
+    NOT_INTERESTED: "Not Interested",
+    DOC_ISSUE: "Documents Issue",
+    VEHICLE_ISSUE: "Vehicle Issue",
+    ID_BLOCK: "ID Block",
+    OTHER_NUMBER: "Other Number",
+    PAYMENT_ISSUE: "Payment Issue",
+    PENDING: "Pending",
+  };
 
   // Assign form
   const [assignCallerId, setAssignCallerId] = useState("");
@@ -205,42 +217,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (idDoneOnly) { cq = cq.eq("status", "ID_DONE"); q = q.eq("status", "ID_DONE"); }
+    if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
     if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
-    if (statusFilter !== "ALL") {
-      if (platformFilter !== "ALL") {
-        const platformName = productPlatforms.find((p) => p.name.toUpperCase() === platformFilter)?.name;
-        const platformId = productPlatforms.find((p) => p.name.toUpperCase() === platformFilter)?.id;
-        if (platformId) {
-          const { data: matched } = await supabase
-            .from("lead_platform_status")
-            .select("lead_id")
-            .eq("platform_id", platformId)
-            .eq("status", statusFilter);
-          const leadIds = (matched || []).map((r) => r.lead_id);
-          if (leadIds.length === 0) {
-            setTotal(0); setLeads([]); setLoading(false); return;
-          }
-          cq = cq.in("id", leadIds);
-          q = q.in("id", leadIds);
-        } else {
-          cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter);
-        }
-      } else if (productPlatforms.length > 1) {
-        const { data: matched } = await supabase
-          .from("lead_platform_status")
-          .select("lead_id")
-          .eq("status", statusFilter)
-          .in("platform_id", productPlatforms.map((p) => p.id));
-        const leadIds = Array.from(new Set((matched || []).map((r) => r.lead_id)));
-        if (leadIds.length === 0) {
-          setTotal(0); setLeads([]); setLoading(false); return;
-        }
-        cq = cq.in("id", leadIds);
-        q = q.in("id", leadIds);
-      } else {
-        cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter);
-      }
-    }
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
     if (sourceFilter !== "ALL") { cq = cq.eq("source", sourceFilter); q = q.eq("source", sourceFilter); }
@@ -263,7 +241,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       setLeads((dr.data as LeadWithCaller[]) || []);
     }
     setLoading(false);
-  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly, productPlatforms]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -334,12 +312,11 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     }
   };
 
-  // ===== Status Update (platform + status) =====
+  // ===== Status Update (per-platform) =====
   const openStatus = async (lead: LeadWithCaller) => {
     setStatusLead(lead);
-    setStatusLoading(true);
-    setStatusPlatform(lead.platform || productPlatforms[0]?.name?.toUpperCase() || "__none__");
-    setStatusValue("__none__");
+    setPlatformStatusLoading(true);
+    setPlatformStatuses({});
     const { data } = await supabase
       .from("lead_platform_status")
       .select("platform:platforms!platform_id(name), status")
@@ -348,38 +325,33 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
       if (row.platform?.name) loaded[row.platform.name] = row.status;
     });
-    const leadPlatformKey = Object.keys(loaded).find((k) =>
-      k.toLowerCase() === (lead.platform || "").toLowerCase()
-    );
-    if (leadPlatformKey) {
-      setStatusPlatform(leadPlatformKey.toUpperCase());
-      setStatusValue(loaded[leadPlatformKey]);
-    }
-    setStatusLoading(false);
+    setPlatformStatuses(loaded);
+    setPlatformStatusLoading(false);
   };
 
-  const handleStatusUpdate = async () => {
+  const handlePlatformStatusUpdate = async (platformName: string) => {
     if (!statusLead) return;
-    if (statusPlatform === "__none__" || statusValue === "__none__") {
-      toast({ title: "Please select platform and status.", variant: "destructive" });
+    const selected = platformStatuses[platformName];
+    if (!selected) {
+      toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
-    const platformName = productPlatforms.find((p) => p.name.toUpperCase() === statusPlatform)?.name || statusPlatform;
-    setStatusSaving(true);
+    setPlatformStatusSaving(platformName);
     const { error } = await supabase.rpc("update_lead_platform_status", {
       p_lead_id: statusLead.id,
       p_platform_name: platformName,
-      p_status: statusValue,
+      p_status: selected,
     });
     if (error) {
-      toast({ title: `Failed: ${error.message}`, variant: "destructive" });
+      toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
     } else {
-      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[statusValue] || statusValue}` });
+      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+      // Refresh detail if open
       if (detailLead?.id === statusLead.id) {
         loadPlatformDetailStatuses(statusLead.id);
       }
     }
-    setStatusSaving(false);
+    setPlatformStatusSaving(null);
   };
 
   // ===== Assign =====
@@ -932,44 +904,44 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         </DialogContent>
       </Dialog>
 
-      {/* ===== Status Dialog (Platform + Status) ===== */}
+      {/* ===== Status Dialog (3 Platform Sections) ===== */}
       <Dialog open={!!statusLead} onOpenChange={(v) => !v && setStatusLead(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Update Status</DialogTitle><DialogDescription>Set status for {statusLead?.name}</DialogDescription></DialogHeader>
-          {statusLoading ? (
+          <DialogHeader><DialogTitle>Update Status</DialogTitle><DialogDescription>Set platform-wise status for {statusLead?.name}</DialogDescription></DialogHeader>
+          {platformStatusLoading ? (
             <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : (
             <div className="space-y-4">
-              <div>
-                <Label>Platform</Label>
-                <Select value={statusPlatform} onValueChange={(v) => { setStatusPlatform(v); setStatusValue("__none__"); }}>
-                  <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
-                  <SelectContent>
-                    {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Status</Label>
-                <Select value={statusValue} onValueChange={setStatusValue}>
-                  <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                  <SelectContent>
-                    {(() => {
-                      const selectedPlatform = productPlatforms.find((p) => p.name.toUpperCase() === statusPlatform);
-                      const configKey = Object.keys(PLATFORM_STATUS_MAP).find((k) =>
-                        k.toLowerCase() === selectedPlatform?.name.toLowerCase()
-                      );
-                      const statuses = configKey ? PLATFORM_STATUS_MAP[configKey] : LEAD_STATUSES;
-                      return statuses.map((s) => <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || STATUS_LABELS[s as LeadStatus] || s}</SelectItem>);
-                    })()}
-                  </SelectContent>
-                </Select>
-              </div>
+              {PLATFORM_CONFIG.map((pc) => (
+                <div key={pc.name} className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold">{pc.name}</span>
+                    {platformStatuses[pc.name] && platformStatuses[pc.name] !== "PENDING" && (
+                      <span className="text-xs text-muted-foreground">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={platformStatuses[pc.name] || "__none__"}
+                      onValueChange={(v) => setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))}
+                    >
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        {pc.statuses.map((s) => <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      onClick={() => handlePlatformStatusUpdate(pc.name)}
+                      disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
+                    >
+                      {platformStatusSaving === pc.name ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setStatusLead(null)}>Close</Button>
-                <Button onClick={handleStatusUpdate} disabled={statusSaving || statusPlatform === "__none__" || statusValue === "__none__"}>
-                  {statusSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
-                </Button>
               </DialogFooter>
             </div>
           )}
