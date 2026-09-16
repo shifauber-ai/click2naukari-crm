@@ -7,11 +7,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { AlertTriangle, Phone, MessageCircle, Eye, Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertTriangle, Phone, MessageCircle, Eye } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { format } from "date-fns";
+import type { Platform } from "@/lib/types";
+import { DateFilter } from "@/components/date-filter";
+import { type DateRange } from "@/lib/employee-filters";
 
 const PAGE_SIZE = 25;
 const ISSUE_STATUSES = ["ID_BLOCK", "DOC_ISSUE", "VEHICLE_ISSUE", "OTHER_ISSUE"];
+const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
 interface IssueLead {
   id: string;
@@ -36,13 +42,40 @@ export default function EmployeeIssuesPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+  const [sourceFilter, setSourceFilter] = useState<string>("ALL");
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [sources, setSources] = useState<string[]>(SOURCES);
+  const [viewLead, setViewLead] = useState<IssueLead | null>(null);
+
+  const loadPlatforms = useCallback(async () => {
+    if (!product) return;
+    const { data } = await supabase
+      .from("product_platforms").select("platform:platforms(*)")
+      .eq("product_id", product.id).eq("is_active", true);
+    setPlatforms((data as { platform: Platform }[] | null)?.map((r) => r.platform).filter(Boolean) || []);
+  }, [product]);
+
+  useEffect(() => { loadPlatforms(); }, [loadPlatforms]);
+
+  useEffect(() => {
+    if (!product) return;
+    supabase
+      .from("leads").select("source").eq("product_id", product.id).not("source", "is", null).limit(100)
+      .then(({ data }) => {
+        if (data) {
+          const dbSources = Array.from(new Set(data.map((d: any) => d.source).filter(Boolean))) as string[];
+          setSources(Array.from(new Set([...SOURCES, ...dbSources])));
+        }
+      });
+  }, [product]);
 
   const loadIssues = useCallback(async () => {
     if (!profile?.id || !product) return;
     setLoading(true);
 
-    // Get leads with issue statuses
-    const { data, count, error } = await supabase
+    let q = supabase
       .from("leads")
       .select("id, name, phone, platform, city, source, status, created_at, updated_at, next_followup_at, remarks, uber_id_done, ola_id_done, rapido_id_done", { count: "exact" })
       .eq("current_caller_id", profile.id)
@@ -50,15 +83,21 @@ export default function EmployeeIssuesPage() {
       .in("status", ISSUE_STATUSES)
       .order("updated_at", { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
+    if (platformFilter !== "ALL") q = q.eq("platform", platformFilter);
+    if (dateRange.start) q = q.gte("created_at", dateRange.start);
+    if (dateRange.end) q = q.lte("created_at", dateRange.end);
 
+    const { data, count, error } = await q;
     if (!error) {
       setIssues((data as IssueLead[]) || []);
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page]);
+  }, [profile?.id, product, page, sourceFilter, platformFilter, dateRange]);
 
   useEffect(() => { loadIssues(); }, [loadIssues]);
+  useEffect(() => { setPage(0); }, [sourceFilter, platformFilter, dateRange]);
 
   const handleCall = async (lead: { id: string; phone: string }) => {
     await supabase.from("call_history").insert({
@@ -80,6 +119,25 @@ export default function EmployeeIssuesPage() {
       <div>
         <h2 className="text-lg font-bold text-slate-800">Issues</h2>
         <p className="text-sm text-slate-400">{total} leads with issues in {product.name}</p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <DateFilter range={dateRange} onRangeChange={setDateRange} />
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Sources</SelectItem>
+            {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={platformFilter} onValueChange={setPlatformFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Platforms</SelectItem>
+            {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="border-slate-200">
@@ -124,7 +182,7 @@ export default function EmployeeIssuesPage() {
                         <div className="flex items-center justify-end gap-1">
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)}><Phone className="h-4 w-4" /></Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => window.open(`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50"><Eye className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)}><Eye className="h-4 w-4" /></Button>
                         </div>
                       </td>
                     </tr>
@@ -144,6 +202,32 @@ export default function EmployeeIssuesPage() {
             <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
           </div>
         </div>
+      )}
+
+      {viewLead && (
+        <Sheet open={!!viewLead} onOpenChange={(open) => !open && setViewLead(null)}>
+          <SheetContent side="right" className="w-full sm:max-w-lg">
+            <SheetHeader><SheetTitle>Issue Details</SheetTitle></SheetHeader>
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-12 w-12"><AvatarFallback className="bg-red-100 text-base font-semibold text-red-700">{viewLead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                <div><div className="text-lg font-semibold text-slate-800">{viewLead.name}</div><div className="text-sm text-slate-400">{viewLead.phone}</div></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Platform</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.platform || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Source</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.source || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">City</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.city || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Issue</div><div className="mt-0.5 text-sm font-medium text-red-600">{statusLabel(viewLead.status)}</div></div>
+                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Created</div><div className="mt-0.5 text-sm font-medium text-slate-700">{format(new Date(viewLead.created_at), "dd MMM yyyy")}</div></div>
+                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Remarks</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.remarks || "—"}</div></div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}><Phone className="h-4 w-4" /> Call</Button>
+                <Button className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => window.open(`https://wa.me/${viewLead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
     </div>
   );

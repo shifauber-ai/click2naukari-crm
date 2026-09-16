@@ -8,15 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Phone, MessageCircle, Eye, Calendar, Clock, CheckCircle2, PhoneCall } from "lucide-react";
+import { Phone, MessageCircle, Eye, Calendar, Clock, CheckCircle2, Edit } from "lucide-react";
 import { format } from "date-fns";
-import type { Lead } from "@/lib/types";
+import type { Lead, Platform } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { DateFilter } from "@/components/date-filter";
+import { type DateRange, getStatusesForPlatform, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
+
+const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
 export default function EmployeeFollowupsPage() {
   const { product, profile } = useEmployeeContext();
@@ -32,6 +36,33 @@ export default function EmployeeFollowupsPage() {
   const [statusRemarks, setStatusRemarks] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
   const [viewLead, setViewLead] = useState<Lead | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+  const [sourceFilter, setSourceFilter] = useState<string>("ALL");
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [sources, setSources] = useState<string[]>(SOURCES);
+
+  const loadPlatforms = useCallback(async () => {
+    if (!product) return;
+    const { data } = await supabase
+      .from("product_platforms").select("platform:platforms(*)")
+      .eq("product_id", product.id).eq("is_active", true);
+    setPlatforms((data as { platform: Platform }[] | null)?.map((r) => r.platform).filter(Boolean) || []);
+  }, [product]);
+
+  useEffect(() => { loadPlatforms(); }, [loadPlatforms]);
+
+  useEffect(() => {
+    if (!product) return;
+    supabase
+      .from("leads").select("source").eq("product_id", product.id).not("source", "is", null).limit(100)
+      .then(({ data }) => {
+        if (data) {
+          const dbSources = Array.from(new Set(data.map((d: any) => d.source).filter(Boolean))) as string[];
+          setSources(Array.from(new Set([...SOURCES, ...dbSources])));
+        }
+      });
+  }, [product]);
 
   const loadFollowups = useCallback(async () => {
     if (!profile?.id || !product) return;
@@ -41,7 +72,7 @@ export default function EmployeeFollowupsPage() {
     const tomorrowStart = new Date(); tomorrowStart.setDate(tomorrowStart.getDate() + 1); tomorrowStart.setHours(0, 0, 0, 0);
     const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
 
-    const { data } = await supabase
+    let q = supabase
       .from("leads")
       .select("*, product:products(*)")
       .eq("current_caller_id", profile.id)
@@ -50,6 +81,12 @@ export default function EmployeeFollowupsPage() {
       .not("next_followup_at", "is", null)
       .order("next_followup_at", { ascending: true })
       .limit(200);
+    if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
+    if (platformFilter !== "ALL") q = q.eq("platform", platformFilter);
+    if (dateRange.start) q = q.gte("next_followup_at", dateRange.start);
+    if (dateRange.end) q = q.lte("next_followup_at", dateRange.end);
+
+    const { data } = await q;
 
     const all = (data as Lead[]) || [];
     setOverdue(all.filter((l) => new Date(l.next_followup_at!) < now));
@@ -63,8 +100,8 @@ export default function EmployeeFollowupsPage() {
     }));
     setUpcoming(all.filter((l) => new Date(l.next_followup_at!) > tomorrowEnd));
 
-    // Completed follow-ups: leads that had follow-ups in the past and are now ID_DONE or other terminal
-    const { data: compData } = await supabase
+    // Completed follow-ups
+    let cq = supabase
       .from("lead_status_history")
       .select("lead_id, created_at, new_status, lead:leads!lead_id(*)")
       .eq("employee_id", profile.id)
@@ -72,9 +109,16 @@ export default function EmployeeFollowupsPage() {
       .in("new_status", ["ID_DONE", "NOT_INTERESTED"])
       .order("created_at", { ascending: false })
       .limit(50);
-    setCompleted((compData as { lead: Lead }[] | null)?.map((r) => r.lead).filter(Boolean) || []);
+    if (dateRange.start) cq = cq.gte("created_at", dateRange.start);
+    if (dateRange.end) cq = cq.lte("created_at", dateRange.end);
+
+    const { data: compData } = await cq;
+    let compLeads = (compData as { lead: Lead }[] | null)?.map((r) => r.lead).filter(Boolean) || [];
+    if (sourceFilter !== "ALL") compLeads = compLeads.filter((l) => l.source === sourceFilter);
+    if (platformFilter !== "ALL") compLeads = compLeads.filter((l) => l.platform === platformFilter);
+    setCompleted(compLeads);
     setLoading(false);
-  }, [profile?.id, product]);
+  }, [profile?.id, product, dateRange, sourceFilter, platformFilter]);
 
   useEffect(() => { loadFollowups(); }, [loadFollowups]);
 
@@ -157,8 +201,8 @@ export default function EmployeeFollowupsPage() {
               <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)} title="View">
                 <Eye className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Status Update">
-                <PhoneCall className="h-4 w-4" />
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Update Status">
+                <Edit className="h-4 w-4" />
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleComplete(lead)} title="Complete">
                 <CheckCircle2 className="h-4 w-4" />
@@ -170,11 +214,37 @@ export default function EmployeeFollowupsPage() {
     );
   };
 
+  // Platform-specific statuses for dialog
+  const platformStatuses = getStatusesForPlatform(statusLead?.platform || null);
+  const availableStatuses = platformStatuses
+    ? platformStatuses.filter((s) => LEAD_STATUSES.includes(s as LeadStatus) || Object.keys(PLATFORM_STATUS_LABELS).includes(s))
+    : LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW");
+  const statusLabelMap: Record<string, string> = { ...STATUS_LABELS, ...PLATFORM_STATUS_LABELS };
+
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div>
         <h2 className="text-lg font-bold text-slate-800">Follow Ups</h2>
         <p className="text-sm text-slate-400">Manage your upcoming and completed follow-ups for {product.name}</p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <DateFilter range={dateRange} onRangeChange={setDateRange} />
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Sources</SelectItem>
+            {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={platformFilter} onValueChange={setPlatformFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Platforms</SelectItem>
+            {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Tabs defaultValue="overdue">
@@ -202,14 +272,17 @@ export default function EmployeeFollowupsPage() {
             <div>
               <label className="text-xs font-medium text-slate-500">Lead</label>
               <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+              {statusLead?.platform && (
+                <div className="mt-0.5 text-xs text-slate-400">Platform: {statusLead.platform}</div>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500">New Status</label>
               <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
                 <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW").map((s) => (
-                    <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                  {availableStatuses.map((s) => (
+                    <SelectItem key={s} value={s}>{statusLabelMap[s] || s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

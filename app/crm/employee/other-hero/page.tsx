@@ -7,8 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Star, Phone, MessageCircle, Eye } from "lucide-react";
+import { Star, Phone, MessageCircle, Eye, Building2 } from "lucide-react";
 import { format } from "date-fns";
+import Link from "next/link";
 
 const PAGE_SIZE = 25;
 
@@ -19,8 +20,10 @@ export default function EmployeeOtherHeroPage() {
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
 
+  const allowed = product.isCar || product.isAuto;
+
   const loadLeads = useCallback(async () => {
-    if (!profile?.id || !product) return;
+    if (!profile?.id || !product || !allowed) return;
     setLoading(true);
     const { data, count, error } = await supabase
       .from("leads")
@@ -35,9 +38,26 @@ export default function EmployeeOtherHeroPage() {
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page]);
+  }, [profile?.id, product, page, allowed]);
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
+
+  if (!allowed) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <Building2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <h2 className="text-lg font-semibold text-slate-700">Not Available</h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Other Hero is not available for {product.name}.
+          </p>
+          <Link href="/crm/employee" className="mt-4 inline-block">
+            <Button variant="outline">Back to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const handleCall = async (lead: any) => {
     await supabase.from("call_history").insert({

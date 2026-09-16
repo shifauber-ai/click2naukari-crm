@@ -8,11 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle2, Phone, MessageCircle, Eye } from "lucide-react";
 import { format } from "date-fns";
-import type { Lead } from "@/lib/types";
+import type { Lead, Platform } from "@/lib/types";
+import { DateFilter } from "@/components/date-filter";
+import { type DateRange } from "@/lib/employee-filters";
 
 const PAGE_SIZE = 25;
+const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
 export default function EmployeeIdDonePage() {
   const { product, profile } = useEmployeeContext();
@@ -21,11 +25,38 @@ export default function EmployeeIdDonePage() {
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [viewLead, setViewLead] = useState<Lead | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+  const [sourceFilter, setSourceFilter] = useState<string>("ALL");
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [sources, setSources] = useState<string[]>(SOURCES);
+
+  const loadPlatforms = useCallback(async () => {
+    if (!product) return;
+    const { data } = await supabase
+      .from("product_platforms").select("platform:platforms(*)")
+      .eq("product_id", product.id).eq("is_active", true);
+    setPlatforms((data as { platform: Platform }[] | null)?.map((r) => r.platform).filter(Boolean) || []);
+  }, [product]);
+
+  useEffect(() => { loadPlatforms(); }, [loadPlatforms]);
+
+  useEffect(() => {
+    if (!product) return;
+    supabase
+      .from("leads").select("source").eq("product_id", product.id).not("source", "is", null).limit(100)
+      .then(({ data }) => {
+        if (data) {
+          const dbSources = Array.from(new Set(data.map((d: any) => d.source).filter(Boolean))) as string[];
+          setSources(Array.from(new Set([...SOURCES, ...dbSources])));
+        }
+      });
+  }, [product]);
 
   const loadLeads = useCallback(async () => {
     if (!profile?.id || !product) return;
     setLoading(true);
-    const { data, count, error } = await supabase
+    let q = supabase
       .from("leads")
       .select("*, product:products(*)", { count: "exact" })
       .eq("current_caller_id", profile.id)
@@ -33,14 +64,20 @@ export default function EmployeeIdDonePage() {
       .eq("status", "ID_DONE")
       .order("updated_at", { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
+    if (platformFilter !== "ALL") q = q.eq("platform", platformFilter);
+    if (dateRange.start) q = q.gte("updated_at", dateRange.start);
+    if (dateRange.end) q = q.lte("updated_at", dateRange.end);
+    const { data, count, error } = await q;
     if (!error) {
       setLeads((data as Lead[]) || []);
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page]);
+  }, [profile?.id, product, page, sourceFilter, platformFilter, dateRange]);
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
+  useEffect(() => { setPage(0); }, [sourceFilter, platformFilter, dateRange]);
 
   const handleCall = async (lead: Lead) => {
     await supabase.from("call_history").insert({
@@ -59,6 +96,25 @@ export default function EmployeeIdDonePage() {
       <div>
         <h2 className="text-lg font-bold text-slate-800">ID Done</h2>
         <p className="text-sm text-slate-400">{total} leads with ID Done status in {product.name}</p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <DateFilter range={dateRange} onRangeChange={setDateRange} />
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Sources</SelectItem>
+            {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={platformFilter} onValueChange={setPlatformFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Platforms</SelectItem>
+            {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="border-slate-200">

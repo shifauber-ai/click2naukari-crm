@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DateFilter } from "@/components/date-filter";
+import { type DateRange, getPresetRange, type DatePreset } from "@/lib/employee-filters";
 import {
   Users, PhoneCall, PhoneIncoming, PhoneOutgoing, Calendar,
   CheckCircle2, Star, AlertTriangle, TrendingUp, ArrowRight,
@@ -45,35 +47,55 @@ export default function EmployeeDashboard() {
   const [data, setData] = useState<DashboardData>(initial);
   const [loading, setLoading] = useState(true);
   const [recentLeads, setRecentLeads] = useState<Lead[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+  const [datePreset, setDatePreset] = useState<DatePreset>("today");
 
   const loadDashboard = useCallback(async () => {
     if (!profile?.id || !product) return;
     setLoading(true);
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-    const todayStartIso = todayStart.toISOString();
-    const todayEndIso = todayEnd.toISOString();
 
-    const baseFilter = { current_caller_id: profile.id, product_id: product.id };
+    const range = datePreset === "all" ? { start: null, end: null } : getPresetRange(datePreset);
+    const startIso = range.start;
+    const endIso = range.end;
+
+    let q = supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("current_caller_id", profile.id)
+      .eq("product_id", product.id);
+    if (startIso) q = q.gte("created_at", startIso);
+    if (endIso) q = q.lte("created_at", endIso);
+
+    const buildCount = (status?: string, col = "created_at") => {
+      let qq = supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("current_caller_id", profile.id)
+        .eq("product_id", product.id);
+      if (status) qq = qq.eq("status", status);
+      if (startIso) qq = qq.gte(col, startIso);
+      if (endIso) qq = qq.lte(col, endIso);
+      return qq;
+    };
 
     const [
       total, newCount, interestedCount, callbackCount, followupCount,
       idDoneCount, issuesCount, otherHeroCount, todayLeadsQ, todayFollowupsQ,
       todayCalls, todayIdDone, callStats,
     ] = await Promise.all([
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "NEW"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "INTERESTED"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "CALLBACK"),
+      buildCount(),
+      buildCount("NEW"),
+      buildCount("INTERESTED"),
+      buildCount("CALLBACK"),
       supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).not("next_followup_at", "is", null).gt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).eq("status", "ID_DONE"),
-      supabase.from("issues").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id),
-      supabase.from("other_hero_leads").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).gte("created_at", todayStartIso),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).gte("next_followup_at", todayStartIso).lte("next_followup_at", todayEndIso).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
-      supabase.from("call_history").select("*", { count: "exact", head: true }).eq("caller_id", profile.id).eq("product_id", product.id).gte("call_timestamp", todayStartIso),
-      supabase.from("lead_status_history").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id).eq("new_status", "ID_DONE").gte("created_at", todayStartIso),
-      supabase.from("call_history").select("direction", { count: "exact" }).eq("caller_id", profile.id).eq("product_id", product.id).gte("call_timestamp", todayStartIso),
+      buildCount("ID_DONE", "updated_at"),
+      supabase.from("issues").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id).gte("created_at", startIso || new Date(0).toISOString()).lte("created_at", endIso || new Date().toISOString()),
+      supabase.from("other_hero_leads").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id).gte("created_at", startIso || new Date(0).toISOString()).lte("created_at", endIso || new Date().toISOString()),
+      buildCount(),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("current_caller_id", profile.id).eq("product_id", product.id).gte("next_followup_at", startIso || new Date(0).toISOString()).lte("next_followup_at", endIso || new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"]),
+      supabase.from("call_history").select("*", { count: "exact", head: true }).eq("caller_id", profile.id).eq("product_id", product.id).gte("call_timestamp", startIso || new Date(0).toISOString()).lte("call_timestamp", endIso || new Date().toISOString()),
+      supabase.from("lead_status_history").select("*", { count: "exact", head: true }).eq("employee_id", profile.id).eq("product_id", product.id).eq("new_status", "ID_DONE").gte("created_at", startIso || new Date(0).toISOString()).lte("created_at", endIso || new Date().toISOString()),
+      supabase.from("call_history").select("direction", { count: "exact" }).eq("caller_id", profile.id).eq("product_id", product.id).gte("call_timestamp", startIso || new Date(0).toISOString()).lte("call_timestamp", endIso || new Date().toISOString()),
     ]);
 
     const totalLeads = total.count || 0;
@@ -110,7 +132,7 @@ export default function EmployeeDashboard() {
       .limit(5);
     setRecentLeads((recent as Lead[]) || []);
     setLoading(false);
-  }, [profile?.id, product]);
+  }, [profile?.id, product, datePreset]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
@@ -128,11 +150,33 @@ export default function EmployeeDashboard() {
     { label: "Outgoing", value: data.outgoingCalls, icon: PhoneOutgoing, color: "text-teal-600", bg: "bg-teal-50" },
   ];
 
+  const performanceLabel = datePreset === "all" ? "All Time Performance" :
+    datePreset === "today" ? "Today's Performance" :
+    datePreset === "yesterday" ? "Yesterday's Performance" :
+    datePreset === "this_week" ? "This Week's Performance" :
+    datePreset === "this_month" ? "This Month's Performance" : "Performance";
+
   return (
     <div className="space-y-6 p-4 lg:p-6">
-      {/* KPI Grid */}
+      {/* Date Filter + KPI Grid */}
       <div>
-        <h2 className="mb-4 text-lg font-bold text-slate-800">{product.name} Dashboard</h2>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-bold text-slate-800">{product.name} Dashboard</h2>
+          <DateFilter range={dateRange} onRangeChange={(r) => { setDateRange(r); if (r.start || r.end) setDatePreset("custom"); }} />
+        </div>
+        <div className="mb-3 flex gap-2">
+          {(["today", "yesterday", "this_week", "this_month", "all"] as DatePreset[]).map((p) => (
+            <Button
+              key={p}
+              size="sm"
+              variant={datePreset === p ? "default" : "outline"}
+              className={datePreset === p ? "bg-blue-600 hover:bg-blue-700" : "border-slate-200"}
+              onClick={() => { setDatePreset(p); setDateRange(getPresetRange(p)); }}
+            >
+              {p === "today" ? "Today" : p === "yesterday" ? "Yesterday" : p === "this_week" ? "This Week" : p === "this_month" ? "This Month" : "All Time"}
+            </Button>
+          ))}
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {loading
             ? Array.from({ length: 11 }).map((_, i) => (
@@ -161,11 +205,11 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* Today's Performance + Recent Leads */}
+      {/* Performance + Recent Leads */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="border-slate-200 lg:col-span-1">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-slate-700">Today&apos;s Performance</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-700">{performanceLabel}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {loading ? (

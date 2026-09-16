@@ -13,9 +13,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
+import { DateFilter } from "@/components/date-filter";
+import { type DateRange, getStatusesForPlatform, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
-  CheckCircle2, XCircle, Wallet, PhoneCall, Trash2,
+  CheckCircle2, XCircle, Wallet, Edit,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Lead, Platform, ProductCity } from "@/lib/types";
@@ -38,8 +40,12 @@ export default function EmployeeLeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  const [sourceFilter, setSourceFilter] = useState<string>("ALL");
+  const [cityFilter, setCityFilter] = useState<string>("ALL");
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [cities, setCities] = useState<ProductCity[]>([]);
+  const [sources, setSources] = useState<string[]>(SOURCES);
   const [viewLead, setViewLead] = useState<LeadWithDetails | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [statusLead, setStatusLead] = useState<LeadWithDetails | null>(null);
@@ -47,8 +53,6 @@ export default function EmployeeLeadsPage() {
   const [statusRemarks, setStatusRemarks] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
   const [paymentLead, setPaymentLead] = useState<LeadWithDetails | null>(null);
-  const [deleteLead, setDeleteLead] = useState<LeadWithDetails | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const isCar = product.isCar;
 
@@ -74,6 +78,10 @@ export default function EmployeeLeadsPage() {
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
     if (platformFilter !== "ALL") q = q.eq("platform", platformFilter);
+    if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
+    if (cityFilter !== "ALL") q = q.eq("city", cityFilter);
+    if (dateRange.start) q = q.gte("created_at", dateRange.start);
+    if (dateRange.end) q = q.lte("created_at", dateRange.end);
     if (search.trim()) {
       q = q.or(`name.ilike.%${search.trim()}%,phone.ilike.%${search.trim()}%`);
     }
@@ -85,11 +93,29 @@ export default function EmployeeLeadsPage() {
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page, statusFilter, platformFilter, search, toast]);
+  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search, toast]);
 
   useEffect(() => { loadPlatformsAndCities(); }, [loadPlatformsAndCities]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
-  useEffect(() => { setPage(0); }, [statusFilter, platformFilter, search]);
+  useEffect(() => { setPage(0); }, [statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search]);
+
+  // Load distinct sources from DB for this product
+  useEffect(() => {
+    if (!product) return;
+    supabase
+      .from("leads")
+      .select("source")
+      .eq("product_id", product.id)
+      .not("source", "is", null)
+      .limit(100)
+      .then(({ data }) => {
+        if (data) {
+          const dbSources = Array.from(new Set(data.map((d: any) => d.source).filter(Boolean))) as string[];
+          const merged = Array.from(new Set([...SOURCES, ...dbSources]));
+          setSources(merged);
+        }
+      });
+  }, [product]);
 
   const handleCall = async (lead: Lead) => {
     await supabase.from("call_history").insert({
@@ -134,27 +160,14 @@ export default function EmployeeLeadsPage() {
     toast({ title: "Status updated successfully" });
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteLead) return;
-    setDeleting(true);
-    const { data, error } = await supabase.rpc("employee_soft_delete_lead", { p_lead_id: deleteLead.id });
-    setDeleting(false);
-    if (error) {
-      toast({ title: `Delete failed: ${error.message}`, variant: "destructive" });
-      return;
-    }
-    const result = data as { success: boolean; error?: string } | null;
-    if (result && !result.success) {
-      toast({ title: result.error || "Not authorized to delete this lead", variant: "destructive" });
-      return;
-    }
-    setLeads((prev) => prev.filter((l) => l.id !== deleteLead.id));
-    setTotal((prev) => prev - 1);
-    setDeleteLead(null);
-    toast({ title: "Lead deleted" });
-  };
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Determine which statuses to show in the status update dialog
+  const platformStatuses = getStatusesForPlatform(statusLead?.platform || null);
+  const availableStatuses = platformStatuses
+    ? platformStatuses.filter((s) => LEAD_STATUSES.includes(s as LeadStatus) || Object.keys(PLATFORM_STATUS_LABELS).includes(s))
+    : LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW");
+  const statusLabelMap: Record<string, string> = { ...STATUS_LABELS, ...PLATFORM_STATUS_LABELS };
 
   return (
     <div className="space-y-4 p-4 lg:p-6">
@@ -193,6 +206,21 @@ export default function EmployeeLeadsPage() {
             {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Sources</SelectItem>
+            {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={cityFilter} onValueChange={setCityFilter}>
+          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="City" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Cities</SelectItem>
+            {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <DateFilter range={dateRange} onRangeChange={setDateRange} />
       </div>
 
       {/* Leads Table */}
@@ -246,6 +274,9 @@ export default function EmployeeLeadsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)} title="View">
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)} title="Call">
                             <Phone className="h-4 w-4" />
                           </Button>
@@ -257,14 +288,8 @@ export default function EmployeeLeadsPage() {
                               <Wallet className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Status Update">
-                            <PhoneCall className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)} title="View">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => setDeleteLead(lead)} title="Delete">
-                            <Trash2 className="h-4 w-4" />
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Update Status">
+                            <Edit className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
@@ -361,14 +386,17 @@ export default function EmployeeLeadsPage() {
             <div>
               <label className="text-xs font-medium text-slate-500">Lead</label>
               <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+              {statusLead?.platform && (
+                <div className="mt-0.5 text-xs text-slate-400">Platform: {statusLead.platform}</div>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500">New Status</label>
               <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
                 <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW").map((s) => (
-                    <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                  {availableStatuses.map((s) => (
+                    <SelectItem key={s} value={s}>{statusLabelMap[s] || s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -388,24 +416,6 @@ export default function EmployeeLeadsPage() {
       {isCar && (
         <PaymentModal open={!!paymentLead} onOpenChange={(v) => !v && setPaymentLead(null)} lead={paymentLead} product={product} />
       )}
-
-      {/* Delete Confirm Dialog */}
-      <Dialog open={!!deleteLead} onOpenChange={(open) => !open && setDeleteLead(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete Lead?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-slate-600">
-            Are you sure you want to delete <span className="font-medium">{deleteLead?.name}</span> ({deleteLead?.phone})? This action cannot be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteLead(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting...</> : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Add Lead */}
       <AddLeadDrawer

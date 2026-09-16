@@ -139,7 +139,11 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   }
   navItems.push(
     { href: "/crm/employee/followups", label: "Follow Ups", icon: Calendar },
-    { href: "/crm/employee/other-hero", label: "Other Hero", icon: Star },
+  );
+  if (selectedProduct?.isCar || selectedProduct?.isAuto) {
+    navItems.push({ href: "/crm/employee/other-hero", label: "Other Hero", icon: Star });
+  }
+  navItems.push(
     { href: "/crm/employee/id-done", label: "ID Done", icon: CheckCircle2 },
     { href: "/crm/employee/issues", label: "Issues", icon: AlertTriangle },
     { href: "/crm/employee/reports", label: "Reports", icon: BarChart3 },

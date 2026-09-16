@@ -7,6 +7,22 @@ import { useAuth } from "@/lib/auth-context";
 
 export interface EmployeeProduct extends Product {
   isCar: boolean;
+  isAuto: boolean;
+  isBike: boolean;
+  isTempo: boolean;
+  isHC: boolean;
+}
+
+function classifyProduct(code: string, name: string) {
+  const c = code.toUpperCase();
+  const n = name.toLowerCase().trim();
+  return {
+    isCar: c === "CAR" || c === "MAINC001" || c === "C001" || n === "car" || n.startsWith("car"),
+    isAuto: c === "AUTO" || c === "MAINA001" || c === "A001" || c === "P002" || n.startsWith("auto"),
+    isBike: c === "BIKE" || c === "MAINB001" || c === "B001" || c === "B002" || n.startsWith("bike"),
+    isTempo: c === "TEMPO" || c === "MAINT001" || c === "T001" || n.startsWith("tempo"),
+    isHC: c === "HC" || c === "H001" || n === "hc" || n.startsWith("hc"),
+  };
 }
 
 export function useEmployeeProducts() {
@@ -29,10 +45,10 @@ export function useEmployeeProducts() {
         const productMap = new Map<string, EmployeeProduct>();
         (data as unknown as { product: Product }[] | null)?.forEach((row) => {
           if (row.product && !productMap.has(row.product.id)) {
-            const code = row.product.code.toUpperCase();
+            const flags = classifyProduct(row.product.code, row.product.name);
             productMap.set(row.product.id, {
               ...row.product,
-              isCar: code === "CAR" || code === "MAINC001" || code === "C001" || row.product.name.toLowerCase() === "car",
+              ...flags,
             });
           }
         });
