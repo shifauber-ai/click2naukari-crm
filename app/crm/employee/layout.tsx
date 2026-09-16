@@ -143,9 +143,6 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   if (selectedProduct?.isCar || selectedProduct?.isAuto) {
     navItems.push({ href: "/crm/employee/other-hero", label: "Other Hero", icon: Star });
   }
-  if (selectedProduct?.isHC) {
-    navItems.push({ href: "/crm/employee/caller-queue", label: "Caller Queue", icon: PhoneCall });
-  }
   navItems.push(
     { href: "/crm/employee/id-done", label: "ID Done", icon: CheckCircle2 },
     { href: "/crm/employee/issues", label: "Issues", icon: AlertTriangle },

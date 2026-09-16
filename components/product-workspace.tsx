@@ -113,11 +113,12 @@ function TabPlaceholder({ tab, productName }: { tab: ProductTab; productName: st
 
 // HC Dashboard — separate workflow
 export function HCDashboard({ product }: { product: Product }) {
-  type HCTab = "leads" | "city" | "directory" | "import-export" | "employee";
+  type HCTab = "leads" | "caller-queue" | "city" | "directory" | "import-export" | "employee";
   const [activeTab, setActiveTab] = useState<HCTab>("leads");
 
   const hcTabs: { key: HCTab; label: string; icon: LucideIcon }[] = [
     { key: "leads", label: "Leads", icon: Phone },
+    { key: "caller-queue", label: "Caller Queue", icon: PhoneCall },
     { key: "city", label: "City", icon: MapPin },
     { key: "directory", label: "Directory", icon: BookMarked },
     { key: "import-export", label: "Import / Export", icon: Upload },
@@ -157,7 +158,8 @@ export function HCDashboard({ product }: { product: Product }) {
       </div>
 
       {activeTab === "leads" && <HCLeadsTab product={product} />}
-      {activeTab === "city" && <HCCityTab product={product} />}
+      {activeTab === "caller-queue" && <ProductCallerQueueTab product={product} />}
+      {activeTab === "city" && <HCCityTab product={product} />}]
       {activeTab === "directory" && <ProductDirectoryTab product={product} />}
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={true} />}
       {activeTab === "employee" && <ProductEmployeeTab product={product} />}
