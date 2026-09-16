@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { DateFilter } from "@/components/date-filter";
 import { StatusBadge } from "@/components/status-badge";
-import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG } from "@/lib/employee-filters";
+import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG, PLATFORM_STATUS_MAP } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
   Wallet, Edit,
@@ -66,6 +66,8 @@ export default function EmployeeLeadsPage() {
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+  const [statusPlatform, setStatusPlatform] = useState<string>("__none__");
+  const [statusValue, setStatusValue] = useState<string>("__none__");
   const [detailPlatformStatuses, setDetailPlatformStatuses] = useState<Record<string, string>>({});
   const [paymentLead, setPaymentLead] = useState<LeadWithDetails | null>(null);
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
@@ -129,7 +131,36 @@ export default function EmployeeLeadsPage() {
       .eq("product_id", product.id)
       .order("created_at", { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
+    if (statusFilter !== "ALL" && !isHC) {
+      if (platformFilter !== "ALL") {
+        const platformId = platforms.find((p) => p.name === platformFilter || p.name.toUpperCase() === platformFilter)?.id;
+        if (platformId) {
+          const { data: matched } = await supabase
+            .from("lead_platform_status")
+            .select("lead_id")
+            .eq("platform_id", platformId)
+            .eq("status", statusFilter);
+          const leadIds = (matched || []).map((r) => r.lead_id);
+          if (leadIds.length === 0) { setLeads([]); setTotal(0); setLoading(false); return; }
+          q = q.in("id", leadIds);
+        } else {
+          q = q.eq("status", statusFilter);
+        }
+      } else if (platforms.length > 1) {
+        const { data: matched } = await supabase
+          .from("lead_platform_status")
+          .select("lead_id")
+          .eq("status", statusFilter)
+          .in("platform_id", platforms.map((p) => p.id));
+        const leadIds = Array.from(new Set((matched || []).map((r) => r.lead_id)));
+        if (leadIds.length === 0) { setLeads([]); setTotal(0); setLoading(false); return; }
+        q = q.in("id", leadIds);
+      } else {
+        q = q.eq("status", statusFilter);
+      }
+    } else if (statusFilter !== "ALL" && isHC) {
+      q = q.eq("status", statusFilter);
+    }
     if (!isHC && platformFilter !== "ALL") q = q.eq("platform", platformFilter);
     if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
     if (cityFilter !== "ALL") q = q.eq("city", cityFilter);
@@ -151,7 +182,7 @@ export default function EmployeeLeadsPage() {
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search, toast, isHC]);
+  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search, toast, isHC, platforms]);
 
   useEffect(() => { loadPlatformsAndCities(); }, [loadPlatformsAndCities]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
@@ -204,13 +235,22 @@ export default function EmployeeLeadsPage() {
     });
     if (target === "modal") setPlatformStatuses(loaded);
     else setDetailPlatformStatuses(loaded);
+    return loaded;
   };
 
   const openStatus = async (lead: LeadWithDetails) => {
     setStatusLead(lead);
     setPlatformStatusLoading(true);
-    setPlatformStatuses({});
-    await loadPlatformStatuses(lead.id, "modal");
+    setStatusPlatform(lead.platform || platforms[0]?.name || "__none__");
+    setStatusValue("__none__");
+    const loaded = await loadPlatformStatuses(lead.id, "modal");
+    const leadPlatformKey = Object.keys(loaded).find((k) =>
+      k.toLowerCase() === (lead.platform || "").toLowerCase()
+    );
+    if (leadPlatformKey) {
+      setStatusPlatform(leadPlatformKey);
+      setStatusValue(loaded[leadPlatformKey]);
+    }
     setPlatformStatusLoading(false);
   };
 
@@ -241,23 +281,22 @@ export default function EmployeeLeadsPage() {
     setHistoryLoading(false);
   };
 
-  const handlePlatformStatusUpdate = async (platformName: string) => {
+  const handlePlatformStatusUpdate = async () => {
     if (!statusLead) return;
-    const selected = platformStatuses[platformName];
-    if (!selected) {
-      toast({ title: "Please select a status.", variant: "destructive" });
+    if (statusPlatform === "__none__" || statusValue === "__none__") {
+      toast({ title: "Please select platform and status.", variant: "destructive" });
       return;
     }
-    setPlatformStatusSaving(platformName);
+    setPlatformStatusSaving(statusPlatform);
     const { error } = await supabase.rpc("update_lead_platform_status", {
       p_lead_id: statusLead.id,
-      p_platform_name: platformName,
-      p_status: selected,
+      p_platform_name: statusPlatform,
+      p_status: statusValue,
     });
     if (error) {
       toast({ title: `Failed: ${error.message}`, variant: "destructive" });
     } else {
-      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+      toast({ title: `${statusPlatform} status updated to ${PLATFORM_STATUS_LABELS[statusValue] || statusValue}` });
       if (viewLead?.id === statusLead.id) loadPlatformStatuses(statusLead.id, "detail");
     }
     setPlatformStatusSaving(null);
@@ -641,8 +680,11 @@ export default function EmployeeLeadsPage() {
         setHistoryLead={setHistoryLead}
         product={product}
         profile={profile}
-        platformStatuses={platformStatuses}
-        setPlatformStatuses={setPlatformStatuses}
+        platforms={platforms}
+        statusPlatform={statusPlatform}
+        setStatusPlatform={setStatusPlatform}
+        statusValue={statusValue}
+        setStatusValue={setStatusValue}
         platformStatusLoading={platformStatusLoading}
         platformStatusSaving={platformStatusSaving}
         detailPlatformStatuses={detailPlatformStatuses}
@@ -677,8 +719,8 @@ export default function EmployeeLeadsPage() {
 
 function LeadDialogs({
   viewLead, setViewLead, statusLead, setStatusLead, historyLead, setHistoryLead,
-  product, profile, platformStatuses, setPlatformStatuses, platformStatusLoading,
-  platformStatusSaving, detailPlatformStatuses, loadPlatformStatuses,
+  product, profile, platforms, statusPlatform, setStatusPlatform, statusValue, setStatusValue,
+  platformStatusLoading, platformStatusSaving, detailPlatformStatuses, loadPlatformStatuses,
   handlePlatformStatusUpdate, handleCall, handleWhatsApp,
   assignments, history, transitions, historyLoading,
 }: {
@@ -690,13 +732,16 @@ function LeadDialogs({
   setHistoryLead: (v: LeadWithDetails | null) => void;
   product: any;
   profile: any;
-  platformStatuses: Record<string, string>;
-  setPlatformStatuses: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  platforms: Platform[];
+  statusPlatform: string;
+  setStatusPlatform: (v: string) => void;
+  statusValue: string;
+  setStatusValue: (v: string) => void;
   platformStatusLoading: boolean;
   platformStatusSaving: string | null;
   detailPlatformStatuses: Record<string, string>;
-  loadPlatformStatuses: (leadId: string, target: "modal" | "detail") => Promise<void>;
-  handlePlatformStatusUpdate: (platformName: string) => Promise<void>;
+  loadPlatformStatuses: (leadId: string, target: "modal" | "detail") => Promise<Record<string, string>>;
+  handlePlatformStatusUpdate: () => Promise<void>;
   handleCall: (lead: Lead) => void;
   handleWhatsApp: (lead: Lead) => void;
   assignments: LeadAssignment[];
@@ -785,38 +830,42 @@ function LeadDialogs({
                 <label className="text-xs font-medium text-slate-500">Lead</label>
                 <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
               </div>
-              {PLATFORM_CONFIG.map((pc) => (
-                <div key={pc.name} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-700">{pc.name}</span>
-                    {platformStatuses[pc.name] && (
-                      <span className="text-xs text-slate-400">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={platformStatuses[pc.name] || undefined}
-                      onValueChange={(v) => setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))}
-                    >
-                      <SelectTrigger className="flex-1 border-slate-200"><SelectValue placeholder="Select status" /></SelectTrigger>
-                      <SelectContent>
-                        {pc.statuses.map((s) => (
-                          <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      onClick={() => handlePlatformStatusUpdate(pc.name)}
-                      disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {platformStatusSaving === pc.name ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <Button variant="outline" className="w-full" onClick={() => setStatusLead(null)}>Close</Button>
+              <div>
+                <label className="text-xs font-medium text-slate-500">Platform</label>
+                <Select value={statusPlatform} onValueChange={(v) => { setStatusPlatform(v); setStatusValue("__none__"); }}>
+                  <SelectTrigger className="mt-1 border-slate-200"><SelectValue placeholder="Select platform" /></SelectTrigger>
+                  <SelectContent>
+                    {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500">Status</label>
+                <Select value={statusValue} onValueChange={setStatusValue}>
+                  <SelectTrigger className="mt-1 border-slate-200"><SelectValue placeholder="Select status" /></SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      const configKey = Object.keys(PLATFORM_STATUS_MAP).find((k) =>
+                        k.toLowerCase() === statusPlatform.toLowerCase()
+                      );
+                      const statuses = configKey ? PLATFORM_STATUS_MAP[configKey] : LEAD_STATUSES;
+                      return statuses.map((s) => (
+                        <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || STATUS_LABELS[s as LeadStatus] || s}</SelectItem>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setStatusLead(null)}>Close</Button>
+                <Button
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  onClick={handlePlatformStatusUpdate}
+                  disabled={platformStatusSaving !== null || statusPlatform === "__none__" || statusValue === "__none__"}
+                >
+                  {platformStatusSaving !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
