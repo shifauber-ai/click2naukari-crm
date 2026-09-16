@@ -89,7 +89,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [paymentLead, setPaymentLead] = useState<LeadWithCaller | null>(null);
   const [historyLead, setHistoryLead] = useState<LeadWithCaller | null>(null);
   const [saving, setSaving] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   const [assignSaving, setAssignSaving] = useState(false);
 
   // Edit form
@@ -101,9 +101,30 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [eRemarks, setERemarks] = useState("");
   const [eCallerId, setECallerId] = useState<string>("NONE");
 
-  // Status form
-  const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
-  const [statusRemarks, setStatusRemarks] = useState("");
+  // Status form — per-platform
+  const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
+  const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
+  const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+
+  const PLATFORM_CONFIG = [
+    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK"] },
+    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED"] },
+    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED"] },
+  ];
+  const PLATFORM_STATUS_LABELS: Record<string, string> = {
+    RINGING: "Ringing",
+    FRESH: "Fresh",
+    EXISTING: "Existing",
+    OTHER_HERO: "Other Hero",
+    ID_DONE: "ID Done",
+    NOT_INTERESTED: "Not Interested",
+    DOC_ISSUE: "Documents Issue",
+    VEHICLE_ISSUE: "Vehicle Issue",
+    ID_BLOCK: "ID Block",
+    OTHER_NUMBER: "Other Number",
+    PAYMENT_ISSUE: "Payment Issue",
+    PENDING: "Pending",
+  };
 
   // Assign form
   const [assignCallerId, setAssignCallerId] = useState("");
@@ -122,6 +143,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   // Detail data
   const [detailCalls, setDetailCalls] = useState<{ call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]>([]);
   const [detailPayments, setDetailPayments] = useState<{ id: string; amount: number; service_description: string; payment_mode: string; payment_status: string; qr_id: string | null; qr_name?: string | null; collected_by_name?: string | null; created_at: string }[]>([]);
+  const [detailPlatformStatuses, setDetailPlatformStatuses] = useState<Record<string, string>>({});
   const [detailLoading, setDetailLoading] = useState(false);
 
   const isAdmin = profile?.role === "ADMIN";
@@ -290,29 +312,46 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     }
   };
 
-  // ===== Status Update =====
-  const openStatus = (lead: LeadWithCaller) => {
+  // ===== Status Update (per-platform) =====
+  const openStatus = async (lead: LeadWithCaller) => {
     setStatusLead(lead);
-    setNewStatus(lead.status === "NEW" ? "RINGING" : lead.status);
-    setStatusRemarks("");
+    setPlatformStatusLoading(true);
+    setPlatformStatuses({});
+    const { data } = await supabase
+      .from("lead_platform_status")
+      .select("platform:platforms!platform_id(name), status")
+      .eq("lead_id", lead.id);
+    const loaded: Record<string, string> = {};
+    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    });
+    setPlatformStatuses(loaded);
+    setPlatformStatusLoading(false);
   };
 
-  const handleStatusUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePlatformStatusUpdate = async (platformName: string) => {
     if (!statusLead) return;
-    setUpdatingStatus(true);
-    const { error } = await supabase.rpc("update_lead_status", {
-      p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks,
+    const selected = platformStatuses[platformName];
+    if (!selected) {
+      toast({ title: "Please select a status.", variant: "destructive" });
+      return;
+    }
+    setPlatformStatusSaving(platformName);
+    const { error } = await supabase.rpc("update_lead_platform_status", {
+      p_lead_id: statusLead.id,
+      p_platform_name: platformName,
+      p_status: selected,
     });
     if (error) {
-      toast({ title: "Failed to update status. Please try again.", variant: "destructive" });
+      toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
     } else {
-      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: newStatus } : l));
-      toast({ title: "Status updated" });
-      setStatusLead(null);
-      loadStats();
+      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+      // Refresh detail if open
+      if (detailLead?.id === statusLead.id) {
+        loadPlatformDetailStatuses(statusLead.id);
+      }
     }
-    setUpdatingStatus(false);
+    setPlatformStatusSaving(null);
   };
 
   // ===== Assign =====
@@ -343,6 +382,18 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   };
 
   // ===== Detail =====
+  const loadPlatformDetailStatuses = async (leadId: string) => {
+    const { data } = await supabase
+      .from("lead_platform_status")
+      .select("platform:platforms!platform_id(name), status")
+      .eq("lead_id", leadId);
+    const loaded: Record<string, string> = {};
+    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    });
+    setDetailPlatformStatuses(loaded);
+  };
+
   const openDetail = async (lead: LeadWithCaller) => {
     setDetailLead(lead);
     setDetailLoading(true);
@@ -359,6 +410,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         .eq("lead_id", lead.id)
         .order("created_at", { ascending: false })
         .limit(20),
+      loadPlatformDetailStatuses(lead.id),
     ]);
     setDetailCalls((callsRes.data as { call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]) || []);
     const payData = (paymentsRes.data as Record<string, unknown>[] | null) || [];
@@ -713,6 +765,21 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 </div>
               </div>
 
+              {/* Platform Done */}
+              <div className="rounded-xl border border-border/60 bg-card p-4">
+                <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Platform Done</h3>
+                <div className="space-y-2">
+                  {PLATFORM_CONFIG.map((pc) => (
+                    <div key={pc.name} className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/30 px-3 py-2">
+                      <span className="text-sm font-medium">{pc.name}</span>
+                      <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-foreground" : "text-muted-foreground"}`}>
+                        {detailPlatformStatuses[pc.name] ? (PLATFORM_STATUS_LABELS[detailPlatformStatuses[pc.name]] || detailPlatformStatuses[pc.name]) : "Pending"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Call History */}
               <div className="rounded-xl border border-border/60 bg-card p-4">
                 <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Call History</h3>
@@ -837,26 +904,47 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         </DialogContent>
       </Dialog>
 
-      {/* ===== Status Dialog ===== */}
+      {/* ===== Status Dialog (3 Platform Sections) ===== */}
       <Dialog open={!!statusLead} onOpenChange={(v) => !v && setStatusLead(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Update Status</DialogTitle><DialogDescription>Change status for {statusLead?.name}</DialogDescription></DialogHeader>
-          <form onSubmit={handleStatusUpdate} className="space-y-3">
-            <div>
-              <Label>New Status</Label>
-              <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
-                </SelectContent>
-              </Select>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Update Status</DialogTitle><DialogDescription>Set platform-wise status for {statusLead?.name}</DialogDescription></DialogHeader>
+          {platformStatusLoading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="space-y-4">
+              {PLATFORM_CONFIG.map((pc) => (
+                <div key={pc.name} className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold">{pc.name}</span>
+                    {platformStatuses[pc.name] && platformStatuses[pc.name] !== "PENDING" && (
+                      <span className="text-xs text-muted-foreground">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={platformStatuses[pc.name] || "__none__"}
+                      onValueChange={(v) => setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))}
+                    >
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        {pc.statuses.map((s) => <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      onClick={() => handlePlatformStatusUpdate(pc.name)}
+                      disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
+                    >
+                      {platformStatusSaving === pc.name ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setStatusLead(null)}>Close</Button>
+              </DialogFooter>
             </div>
-            <div><Label>Remarks</Label><Input value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Optional" /></div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setStatusLead(null)}>Cancel</Button>
-              <Button type="submit" disabled={updatingStatus}>{updatingStatus ? "Updating..." : "Update"}</Button>
-            </DialogFooter>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
 
