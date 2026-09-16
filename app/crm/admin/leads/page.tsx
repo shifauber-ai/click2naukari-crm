@@ -83,6 +83,7 @@ import {
   BookMarked,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
+import { PLATFORM_CONFIG, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
 
 const PAGE_SIZE = 25;
 
@@ -132,9 +133,9 @@ export default function AdminLeadsPage() {
   const [remarks, setRemarks] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
-  const [statusRemarks, setStatusRemarks] = useState("");
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
+  const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
+  const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
 
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
   const [history, setHistory] = useState<LeadStatusHistory[]>([]);
@@ -303,29 +304,41 @@ export default function AdminLeadsPage() {
     setSaving(false);
   };
 
-  const openStatus = (lead: Lead) => {
+  const openStatus = async (lead: Lead) => {
     setStatusLead(lead);
-    setNewStatus(lead.status === "NEW" ? "RINGING" : lead.status);
-    setStatusRemarks("");
+    setPlatformStatusLoading(true);
+    setPlatformStatuses({});
+    const { data } = await supabase
+      .from("lead_platform_status")
+      .select("platform:platforms!platform_id(name), status")
+      .eq("lead_id", lead.id);
+    const loaded: Record<string, string> = {};
+    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    });
+    setPlatformStatuses(loaded);
+    setPlatformStatusLoading(false);
   };
 
-  const handleStatusUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePlatformStatusUpdate = async (platformName: string) => {
     if (!statusLead) return;
-    setUpdatingStatus(true);
-    const { error } = await supabase.rpc("update_lead_status", {
+    const selected = platformStatuses[platformName];
+    if (!selected) {
+      toast({ title: "Please select a status.", variant: "destructive" });
+      return;
+    }
+    setPlatformStatusSaving(platformName);
+    const { error } = await supabase.rpc("update_lead_platform_status", {
       p_lead_id: statusLead.id,
-      p_new_status: newStatus,
-      p_remarks: statusRemarks,
+      p_platform_name: platformName,
+      p_status: selected,
     });
     if (error) {
       toast({ title: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Status updated" });
-      setStatusLead(null);
-      load();
+      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
     }
-    setUpdatingStatus(false);
+    setPlatformStatusSaving(null);
   };
 
   const openHistory = async (lead: Lead) => {
@@ -1052,77 +1065,74 @@ export default function AdminLeadsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Status update dialog */}
+      {/* Status update dialog — 3 Platform Sections */}
       <Dialog open={!!statusLead} onOpenChange={() => setStatusLead(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Update Lead Status</DialogTitle>
             <DialogDescription>
               {statusLead?.name} ({statusLead?.phone})
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleStatusUpdate} className="space-y-4">
-            <div className="space-y-2">
-              <Label>New Status</Label>
-              <Select
-                value={newStatus}
-                onValueChange={(v) => setNewStatus(v as LeadStatus)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LEAD_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {STATUS_LABELS[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {platformStatusLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-            <div className="space-y-2">
-              <Label>Remarks</Label>
-              <Textarea
-                value={statusRemarks}
-                onChange={(e) => setStatusRemarks(e.target.value)}
-                rows={3}
-                placeholder="Add notes about this status change..."
-              />
+          ) : (
+            <div className="space-y-4">
+              {PLATFORM_CONFIG.map((pc) => (
+                <div key={pc.name} className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold">{pc.name}</span>
+                    {platformStatuses[pc.name] && (
+                      <span className="text-xs text-muted-foreground">
+                        Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={platformStatuses[pc.name] || undefined}
+                      onValueChange={(v) =>
+                        setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))
+                      }
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pc.statuses.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {PLATFORM_STATUS_LABELS[s] || s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      onClick={() => handlePlatformStatusUpdate(pc.name)}
+                      disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
+                    >
+                      {platformStatusSaving === pc.name ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Update"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStatusLead(null)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
             </div>
-            {(ROTATION_STATUSES.includes(newStatus) ||
-              TERMINAL_STATUSES.includes(newStatus)) && (
-              <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                {ROTATION_STATUSES.includes(newStatus) && (
-                  <p>
-                    A backend timer will be set:{" "}
-                    {newStatus === "RINGING" ? "1 minute" : "48 hours"}. After
-                    that, the lead rotates to the next active caller.
-                  </p>
-                )}
-                {TERMINAL_STATUSES.includes(newStatus) && (
-                  <p>
-                    Any pending rotation timer will be cancelled. The lead moves
-                    to the appropriate tab.
-                  </p>
-                )}
-              </div>
-            )}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setStatusLead(null)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updatingStatus}>
-                {updatingStatus && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Update Status
-              </Button>
-            </DialogFooter>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
 

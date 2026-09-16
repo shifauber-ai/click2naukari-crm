@@ -14,10 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { DateFilter } from "@/components/date-filter";
-import { type DateRange, getStatusesForPlatform, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
+import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
-  CheckCircle2, XCircle, Wallet, Edit,
+  Wallet, Edit,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Lead, Platform, ProductCity } from "@/lib/types";
@@ -49,9 +49,10 @@ export default function EmployeeLeadsPage() {
   const [viewLead, setViewLead] = useState<LeadWithDetails | null>(null);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [statusLead, setStatusLead] = useState<LeadWithDetails | null>(null);
-  const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
-  const [statusRemarks, setStatusRemarks] = useState("");
-  const [statusSaving, setStatusSaving] = useState(false);
+  const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
+  const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
+  const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+  const [detailPlatformStatuses, setDetailPlatformStatuses] = useState<Record<string, string>>({});
   const [paymentLead, setPaymentLead] = useState<LeadWithDetails | null>(null);
 
   const isCar = product.isCar;
@@ -136,38 +137,52 @@ export default function EmployeeLeadsPage() {
     window.open(`https://wa.me/${cleanPhone}`, "_blank");
   };
 
-  const openStatus = (lead: LeadWithDetails) => {
-    setStatusLead(lead);
-    setNewStatus(lead.status === "NEW" ? "RINGING" : lead.status);
-    setStatusRemarks("");
+  const loadPlatformStatuses = async (leadId: string, target: "modal" | "detail") => {
+    const { data } = await supabase
+      .from("lead_platform_status")
+      .select("platform:platforms!platform_id(name), status")
+      .eq("lead_id", leadId);
+    const loaded: Record<string, string> = {};
+    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    });
+    if (target === "modal") setPlatformStatuses(loaded);
+    else setDetailPlatformStatuses(loaded);
   };
 
-  const handleStatusUpdate = async () => {
+  const openStatus = async (lead: LeadWithDetails) => {
+    setStatusLead(lead);
+    setPlatformStatusLoading(true);
+    setPlatformStatuses({});
+    await loadPlatformStatuses(lead.id, "modal");
+    setPlatformStatusLoading(false);
+  };
+
+  const handlePlatformStatusUpdate = async (platformName: string) => {
     if (!statusLead) return;
-    setStatusSaving(true);
-    const { error } = await supabase.rpc("update_lead_status", {
-      p_lead_id: statusLead.id,
-      p_new_status: newStatus,
-      p_remarks: statusRemarks,
-    });
-    setStatusSaving(false);
-    if (error) {
-      toast({ title: `Status update failed: ${error.message}`, variant: "destructive" });
+    const selected = platformStatuses[platformName];
+    if (!selected) {
+      toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
-    setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: newStatus } : l));
-    setStatusLead(null);
-    toast({ title: "Status updated successfully" });
+    setPlatformStatusSaving(platformName);
+    const { error } = await supabase.rpc("update_lead_platform_status", {
+      p_lead_id: statusLead.id,
+      p_platform_name: platformName,
+      p_status: selected,
+    });
+    if (error) {
+      toast({ title: `Failed: ${error.message}`, variant: "destructive" });
+    } else {
+      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+      if (viewLead?.id === statusLead.id) loadPlatformStatuses(statusLead.id, "detail");
+    }
+    setPlatformStatusSaving(null);
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // Determine which statuses to show in the status update dialog
-  const platformStatuses = getStatusesForPlatform(statusLead?.platform || null);
-  const availableStatuses = platformStatuses
-    ? platformStatuses.filter((s) => LEAD_STATUSES.includes(s as LeadStatus) || Object.keys(PLATFORM_STATUS_LABELS).includes(s))
-    : LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW");
-  const statusLabelMap: Record<string, string> = { ...STATUS_LABELS, ...PLATFORM_STATUS_LABELS };
+
 
   return (
     <div className="space-y-4 p-4 lg:p-6">
@@ -274,7 +289,7 @@ export default function EmployeeLeadsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)} title="View">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)} title="Call">
@@ -357,9 +372,14 @@ export default function EmployeeLeadsPage() {
               <div>
                 <div className="text-xs font-medium text-slate-400">Platform Done</div>
                 <div className="mt-2 space-y-2">
-                  <PlatformDoneRow label="Uber" done={viewLead.uber_id_done} />
-                  <PlatformDoneRow label="Ola" done={viewLead.ola_id_done} />
-                  <PlatformDoneRow label="Rapido" done={viewLead.rapido_id_done} />
+                  {PLATFORM_CONFIG.map((pc) => (
+                    <div key={pc.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                      <span className="text-sm text-slate-600">{pc.name}</span>
+                      <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-slate-700" : "text-slate-400"}`}>
+                        {detailPlatformStatuses[pc.name] ? (PLATFORM_STATUS_LABELS[detailPlatformStatuses[pc.name]] || detailPlatformStatuses[pc.name]) : "Pending"}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -376,39 +396,54 @@ export default function EmployeeLeadsPage() {
         </Sheet>
       )}
 
-      {/* Status Update Dialog */}
+      {/* Status Update Dialog — 3 Platform Sections */}
       <Dialog open={!!statusLead} onOpenChange={(open) => !open && setStatusLead(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Update Status</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-slate-500">Lead</label>
-              <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
-              {statusLead?.platform && (
-                <div className="mt-0.5 text-xs text-slate-400">Platform: {statusLead.platform}</div>
-              )}
+          {platformStatusLoading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-500">Lead</label>
+                <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+              </div>
+              {PLATFORM_CONFIG.map((pc) => (
+                <div key={pc.name} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-700">{pc.name}</span>
+                    {platformStatuses[pc.name] && (
+                      <span className="text-xs text-slate-400">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={platformStatuses[pc.name] || undefined}
+                      onValueChange={(v) => setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))}
+                    >
+                      <SelectTrigger className="flex-1 border-slate-200"><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        {pc.statuses.map((s) => (
+                          <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      onClick={() => handlePlatformStatusUpdate(pc.name)}
+                      disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {platformStatusSaving === pc.name ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button variant="outline" className="w-full" onClick={() => setStatusLead(null)}>Close</Button>
             </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500">New Status</label>
-              <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
-                <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {availableStatuses.map((s) => (
-                    <SelectItem key={s} value={s}>{statusLabelMap[s] || s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500">Remarks</label>
-              <Input value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Optional remarks" className="mt-1 border-slate-200" />
-            </div>
-            <Button className="w-full gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={handleStatusUpdate} disabled={statusSaving}>
-              {statusSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Update Status"}
-            </Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -437,23 +472,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg bg-slate-50 p-3">
       <div className="text-xs text-slate-400">{label}</div>
       <div className="mt-0.5 text-sm font-medium text-slate-700">{value}</div>
-    </div>
-  );
-}
-
-function PlatformDoneRow({ label, done }: { label: string; done?: boolean }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-      <span className="text-sm text-slate-600">{label}</span>
-      {done ? (
-        <span className="flex items-center gap-1 text-sm font-medium text-green-600">
-          <CheckCircle2 className="h-4 w-4" /> ID Done
-        </span>
-      ) : (
-        <span className="flex items-center gap-1 text-sm text-slate-400">
-          <XCircle className="h-4 w-4" /> Pending
-        </span>
-      )}
     </div>
   );
 }
