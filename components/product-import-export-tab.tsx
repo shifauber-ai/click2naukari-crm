@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase/client";
-import { Product, ImportBatch, ImportRecord, DuplicateType, LEAD_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/types";
+import { Product, ImportBatch, ImportRecord, DuplicateType } from "@/lib/types";
 import { PlatformBadge } from "@/components/platform-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +77,6 @@ const NORMAL_FIELDS: CRMField[] = [
   { key: "phone", label: "Phone", required: true },
   { key: "platform", label: "Platform", required: false },
   { key: "city", label: "City", required: false },
-  { key: "status", label: "Status", required: false },
   { key: "source", label: "Source", required: false },
 ];
 
@@ -146,7 +145,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
   // Import config
   const [impSource, setImpSource] = useState("Showroom Data");
-  const [impStatus, setImpStatus] = useState<string>(isHC ? "TAG_ADDED" : "NEW");
   const [importPlatformPreset, setImportPlatformPreset] = useState<string | null>(null);
   const [impPlatform, setImpPlatform] = useState<string>("");
   const [impCity, setImpCity] = useState<string>("");
@@ -174,7 +172,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [dupTypeFilter, setDupTypeFilter] = useState("ALL");
 
   // Export state
-  const [exportStatus, setExportStatus] = useState("ALL");
   const [exportPlatform, setExportPlatform] = useState("ALL");
   const [exportCity, setExportCity] = useState("ALL");
   const [exportEmployee, setExportEmployee] = useState("ALL");
@@ -368,7 +365,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         city = impCity;
       }
 
-      const status = isHC ? "TAG_ADDED" : (mapping.status ? getCol(cells, mapping.status) : impStatus);
+      const status = isHC ? "TAG_ADDED" : "NEW";
       const source = mapping.source ? getCol(cells, mapping.source) : impSource;
 
       if (!name && !phone) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Both name and phone empty" };
@@ -446,7 +443,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     });
     setShowMapping(false);
     setImportPlatformPreset(null);
-  }, [fileRows, mapping, isHC, impStatus, impSource, impPlatform, impCity, product.name, product.id, productPlatforms, activeCities, importPlatformPreset]);
+  }, [fileRows, mapping, isHC, impSource, impPlatform, impCity, product.name, product.id, productPlatforms, activeCities, importPlatformPreset]);
 
   const runImport = async () => {
     if (!isHC && !impPlatform && !parsedRows.some((r) => r.platform && r.rowStatus === "OK")) {
@@ -653,7 +650,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       .eq("product_id", product.id)
       .order("created_at", { ascending: false })
       .limit(10000);
-    if (exportStatus !== "ALL") query = query.eq("status", exportStatus);
     if (effPlatform !== "ALL") query = query.eq("platform", effPlatform);
     if (exportCity !== "ALL") query = query.eq("city", exportCity);
     if (exportEmployee !== "ALL") query = query.eq("current_caller_id", exportEmployee);
@@ -725,7 +721,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       if (format === "csv") downloadCSV([header], "hc-import-template.csv");
       else downloadXLSX([header], "Template", "hc-import-template.xlsx");
     } else {
-      const header = ["Name", "Phone", "Platform", "City", "Status"];
+      const header = ["Name", "Phone", "Platform", "City"];
       if (format === "csv") downloadCSV([header], `${product.code}-import-template.csv`);
       else downloadXLSX([header], "Template", `${product.code}-import-template.xlsx`);
     }
@@ -823,17 +819,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                       </SelectContent>
                     </Select>
                   </div>
-                  {!isHC && (
-                    <div>
-                      <Label className="text-xs">Default Status</Label>
-                      <Select value={impStatus} onValueChange={setImpStatus}>
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={() => downloadTemplate("csv")}><FileUp className="mr-1 h-4 w-4" /> CSV Template</Button>
@@ -994,15 +979,6 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">Export leads data using custom filters. Both CSV and Excel formats export the same filtered dataset.</p>
               <div className="flex flex-wrap gap-2">
-                {!isHC && (
-                  <Select value={exportStatus} onValueChange={setExportStatus}>
-                    <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">All Status</SelectItem>
-                      {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
                 {productPlatforms.length > 0 && (
                   <Select value={exportPlatform} onValueChange={setExportPlatform}>
                     <SelectTrigger className="w-[130px]"><SelectValue placeholder="Platform" /></SelectTrigger>

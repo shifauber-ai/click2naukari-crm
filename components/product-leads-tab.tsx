@@ -106,7 +106,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
 
-  const PLATFORM_CONFIG = [
+  const ALL_PLATFORM_CONFIG = [
     { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK"] },
     { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED"] },
     { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED"] },
@@ -125,6 +125,12 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     PAYMENT_ISSUE: "Payment Issue",
     PENDING: "Pending",
   };
+  const isSinglePlatform = productPlatforms.length <= 1;
+  const PLATFORM_CONFIG = isSinglePlatform
+    ? ALL_PLATFORM_CONFIG.filter((pc) =>
+        productPlatforms.some((pp) => pp.name.toUpperCase() === pc.name.toUpperCase())
+      )
+    : ALL_PLATFORM_CONFIG;
 
   // Assign form
   const [assignCallerId, setAssignCallerId] = useState("");
@@ -134,6 +140,10 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkCallerId, setBulkCallerId] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkAssignMode, setBulkAssignMode] = useState<"single" | "equal">("single");
+  const [bulkCallerIds, setBulkCallerIds] = useState<Set<string>>(new Set());
 
   // History data
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
@@ -298,18 +308,36 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     setSaving(false);
   };
 
-  // ===== Delete =====
+  // ===== Delete (permanent) =====
   const handleDelete = async () => {
     if (!deleteLead) return;
-    const { error } = await supabase.rpc("admin_soft_delete_lead", { p_lead_id: deleteLead.id });
+    const { error } = await supabase.rpc("admin_permanent_delete_lead", { p_lead_id: deleteLead.id });
     if (error) {
       toast({ title: "Failed to delete lead. Please try again.", variant: "destructive" });
     } else {
       setLeads((prev) => prev.filter((l) => l.id !== deleteLead.id));
-      toast({ title: "Lead deleted" });
+      toast({ title: "Lead permanently deleted" });
       setDeleteLead(null);
       loadStats();
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", { p_lead_ids: ids });
+    if (error) {
+      toast({ title: "Bulk delete failed. Please try again.", variant: "destructive" });
+    } else {
+      const result = data as { deleted_count: number; not_found_count: number } | null;
+      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      toast({ title: `${result?.deleted_count ?? ids.length} leads permanently deleted` });
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      loadStats();
+    }
+    setBulkDeleting(false);
   };
 
   // ===== Status Update (per-platform) =====
@@ -453,25 +481,57 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const allSelected = leads.length > 0 && selectedIds.size === leads.length;
 
   const handleBulkAssign = async () => {
-    if (!bulkCallerId || selectedIds.size === 0) return;
-    setBulkSaving(true);
+    if (selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
-    const { data, error } = await supabase.rpc("admin_bulk_assign_leads", {
-      p_lead_ids: ids, p_new_caller_id: bulkCallerId,
-    });
-    if (error) {
-      toast({ title: "Bulk assignment failed. Please try again.", variant: "destructive" });
+
+    if (bulkAssignMode === "equal") {
+      const callerIds = Array.from(bulkCallerIds);
+      if (callerIds.length === 0) {
+        toast({ title: "Select at least one caller.", variant: "destructive" });
+        return;
+      }
+      setBulkSaving(true);
+      const { data, error } = await supabase.rpc("admin_bulk_equally_assign_leads", {
+        p_lead_ids: ids, p_caller_ids: callerIds,
+      });
+      if (error) {
+        toast({ title: "Equal assignment failed. Please try again.", variant: "destructive" });
+      } else {
+        const result = data as { assigned_count: number; skipped_count: number };
+        setLeads((prev) => prev.map((l) => {
+          if (!selectedIds.has(l.id)) return l;
+          return l;
+        }));
+        toast({ title: `${result.assigned_count} leads equally assigned${result.skipped_count > 0 ? `, ${result.skipped_count} skipped` : ""}` });
+        setBulkAssignOpen(false); setBulkCallerIds(new Set()); setSelectedIds(new Set());
+        load();
+        loadStats();
+      }
+      setBulkSaving(false);
     } else {
-      const result = data as { assigned_count: number };
-      const callerName = employees.find((e) => e.id === bulkCallerId)?.full_name || "";
-      setLeads((prev) => prev.map((l) => selectedIds.has(l.id) ? {
-        ...l, current_caller_id: bulkCallerId, current_caller: { full_name: callerName },
-      } : l));
-      toast({ title: `${result.assigned_count} leads assigned` });
-      setBulkAssignOpen(false); setBulkCallerId(""); setSelectedIds(new Set());
-      loadStats();
+      if (!bulkCallerId) return;
+      setBulkSaving(true);
+      const { data, error } = await supabase.rpc("admin_bulk_assign_leads", {
+        p_lead_ids: ids, p_new_caller_id: bulkCallerId,
+      });
+      if (error) {
+        toast({ title: "Bulk assignment failed. Please try again.", variant: "destructive" });
+      } else {
+        const result = data as { assigned_count: number };
+        const callerName = employees.find((e) => e.id === bulkCallerId)?.full_name || "";
+        setLeads((prev) => prev.map((l) => selectedIds.has(l.id) ? {
+          ...l, current_caller_id: bulkCallerId, current_caller: { full_name: callerName },
+        } : l));
+        toast({ title: `${result.assigned_count} leads assigned` });
+        setBulkAssignOpen(false); setBulkCallerId(""); setSelectedIds(new Set());
+        loadStats();
+      }
+      setBulkSaving(false);
     }
-    setBulkSaving(false);
+  };
+
+  const toggleBulkCaller = (id: string) => {
+    setBulkCallerIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
   // ===== Call =====
@@ -534,6 +594,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           </SelectContent>
         </Select>
         )}
+        {!isSinglePlatform && (
         <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[130px]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
@@ -541,6 +602,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
             {productPlatforms.map((p) => <SelectItem key={p.id} value={p.name.toUpperCase()}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        )}
         {activeCities.length > 0 && (
           <Select value={cityFilter} onValueChange={(v) => { setCityFilter(v); setPage(0); }}>
             <SelectTrigger className="w-[130px]"><SelectValue placeholder="City" /></SelectTrigger>
@@ -582,9 +644,17 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
             {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setBulkAssignOpen(true)}>
+            <Button size="sm" variant="outline" onClick={() => { setBulkAssignMode("single"); setBulkAssignOpen(true); }}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign
             </Button>
+            <Button size="sm" variant="outline" onClick={() => { setBulkAssignMode("equal"); setBulkAssignOpen(true); }}>
+              <Users className="mr-2 h-4 w-4" /> Equally Assign
+            </Button>
+            {isAdmin && (
+              <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
           </div>
         </div>
@@ -612,7 +682,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>City</TableHead>
-                <TableHead>Platform</TableHead>
+                {!isSinglePlatform && <TableHead>Platform</TableHead>}
                 <TableHead>Source</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead>Caller</TableHead>}
@@ -631,11 +701,10 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   )}
                   <TableCell className="font-medium cursor-pointer hover:text-primary" onClick={() => openDetail(lead)}>
                     {lead.name}
-                    {!lead.is_active && <span className="ml-2 text-xs text-destructive">(deleted)</span>}
                   </TableCell>
                   <TableCell className="text-sm">{lead.phone}</TableCell>
                   <TableCell className="text-sm">{lead.city || "—"}</TableCell>
-                  <TableCell className="text-sm"><PlatformBadge platform={lead.platform} size="xs" /></TableCell>
+                  {!isSinglePlatform && <TableCell className="text-sm"><PlatformBadge platform={lead.platform} size="xs" /></TableCell>}
                   <TableCell className="text-sm">{lead.source || "—"}</TableCell>
                   <TableCell><StatusBadge status={lead.status} /></TableCell>
                   {canManage && (
@@ -975,32 +1044,69 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       {/* ===== Delete Dialog ===== */}
       <Dialog open={!!deleteLead} onOpenChange={(v) => !v && setDeleteLead(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Lead?</DialogTitle><DialogDescription>This will deactivate the lead "{deleteLead?.name}". You can restore it later.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Delete Lead?</DialogTitle><DialogDescription>This will permanently delete "{deleteLead?.name}" and all related records. This action cannot be undone.</DialogDescription></DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteLead(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete Permanently</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Bulk Delete Dialog ===== */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete {selectedIds.size} Leads?</DialogTitle><DialogDescription>This will permanently delete {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} and all related records. This action cannot be undone.</DialogDescription></DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Deleting..." : "Delete All Permanently"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ===== Bulk Assign Dialog ===== */}
       <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Bulk Assign</DialogTitle><DialogDescription>Assign {selectedIds.size} leads to a caller</DialogDescription></DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{bulkAssignMode === "equal" ? "Equally Assign Leads" : "Bulk Assign Leads"}</DialogTitle>
+            <DialogDescription>
+              {bulkAssignMode === "equal"
+                ? `Distribute ${selectedIds.size} leads equally among selected callers`
+                : `Assign ${selectedIds.size} leads to a single caller`}
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label>Caller</Label>
-              <Select value={bulkCallerId} onValueChange={setBulkCallerId}>
-                <SelectTrigger><SelectValue placeholder="Select caller" /></SelectTrigger>
-                <SelectContent>
-                  {eligibleCallers.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {bulkAssignMode === "single" ? (
+              <div>
+                <Label>Caller</Label>
+                <Select value={bulkCallerId} onValueChange={setBulkCallerId}>
+                  <SelectTrigger><SelectValue placeholder="Select caller" /></SelectTrigger>
+                  <SelectContent>
+                    {eligibleCallers.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div>
+                <Label>Select Callers (leads will be distributed equally)</Label>
+                <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border/60 p-2">
+                  {eligibleCallers.map((e) => (
+                    <label key={e.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
+                      <Checkbox checked={bulkCallerIds.has(e.id)} onCheckedChange={() => toggleBulkCaller(e.id)} />
+                      <span className="text-sm">{e.full_name}</span>
+                    </label>
+                  ))}
+                </div>
+                {bulkCallerIds.size > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">{bulkCallerIds.size} caller{bulkCallerIds.size !== 1 ? "s" : ""} selected</p>
+                )}
+              </div>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setBulkAssignOpen(false)}>Cancel</Button>
-              <Button onClick={handleBulkAssign} disabled={bulkSaving || !bulkCallerId}>
-                {bulkSaving ? "Assigning..." : `Assign ${selectedIds.size} Leads`}
+              <Button onClick={handleBulkAssign} disabled={bulkSaving || (bulkAssignMode === "single" ? !bulkCallerId : bulkCallerIds.size === 0)}>
+                {bulkSaving ? "Assigning..." : bulkAssignMode === "equal" ? `Equally Assign ${selectedIds.size} Leads` : `Assign ${selectedIds.size} Leads`}
               </Button>
             </DialogFooter>
           </div>

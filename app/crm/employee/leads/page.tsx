@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { DateFilter } from "@/components/date-filter";
 import { StatusBadge } from "@/components/status-badge";
-import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG } from "@/lib/employee-filters";
+import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG as ALL_PLATFORM_CONFIG } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
   Wallet, Edit,
@@ -75,6 +75,12 @@ export default function EmployeeLeadsPage() {
 
   const isCar = product.isCar;
   const isHC = product.isHC;
+  const isSinglePlatform = platforms.length <= 1;
+  const PLATFORM_CONFIG = isSinglePlatform
+    ? ALL_PLATFORM_CONFIG.filter((pc) =>
+        platforms.some((p) => p.name.toUpperCase() === pc.name.toUpperCase())
+      )
+    : ALL_PLATFORM_CONFIG;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inlineStatusSaving, setInlineStatusSaving] = useState<string | null>(null);
 
@@ -516,6 +522,7 @@ export default function EmployeeLeadsPage() {
             {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
+        {!isSinglePlatform && (
         <Select value={platformFilter} onValueChange={setPlatformFilter}>
           <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
@@ -523,6 +530,7 @@ export default function EmployeeLeadsPage() {
             {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        )}
         <Select value={sourceFilter} onValueChange={setSourceFilter}>
           <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
           <SelectContent>
@@ -558,7 +566,7 @@ export default function EmployeeLeadsPage() {
                   <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
                     <th className="px-4 py-3">Driver Name</th>
                     <th className="px-4 py-3">Phone</th>
-                    <th className="px-4 py-3">Platform</th>
+                    {!isSinglePlatform && <th className="px-4 py-3">Platform</th>}
                     <th className="px-4 py-3">Source</th>
                     <th className="px-4 py-3">City</th>
                     <th className="px-4 py-3">Status</th>
@@ -580,7 +588,7 @@ export default function EmployeeLeadsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{lead.phone}</td>
-                      <td className="px-4 py-3 text-slate-600">{lead.platform || "—"}</td>
+                      {!isSinglePlatform && <td className="px-4 py-3 text-slate-600">{lead.platform || "—"}</td>}
                       <td className="px-4 py-3 text-slate-600">{lead.source || "—"}</td>
                       <td className="px-4 py-3 text-slate-600">{lead.city || "—"}</td>
                       <td className="px-4 py-3">
@@ -654,6 +662,7 @@ export default function EmployeeLeadsPage() {
         history={history}
         transitions={transitions}
         historyLoading={historyLoading}
+        platformConfig={PLATFORM_CONFIG}
       />
 
       {isCar && (
@@ -680,7 +689,7 @@ function LeadDialogs({
   product, profile, platformStatuses, setPlatformStatuses, platformStatusLoading,
   platformStatusSaving, detailPlatformStatuses, loadPlatformStatuses,
   handlePlatformStatusUpdate, handleCall, handleWhatsApp,
-  assignments, history, transitions, historyLoading,
+  assignments, history, transitions, historyLoading, platformConfig,
 }: {
   viewLead: LeadWithDetails | null;
   setViewLead: (v: LeadWithDetails | null) => void;
@@ -703,6 +712,7 @@ function LeadDialogs({
   history: LeadStatusHistory[];
   transitions: ScheduledTransition[];
   historyLoading: boolean;
+  platformConfig: { name: string; statuses: string[] }[];
 }) {
   return (
     <>
@@ -747,7 +757,7 @@ function LeadDialogs({
               <div>
                 <div className="text-xs font-medium text-slate-400">Platform Done</div>
                 <div className="mt-2 space-y-2">
-                  {PLATFORM_CONFIG.map((pc) => (
+                  {platformConfig.map((pc) => (
                     <div key={pc.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
                       <span className="text-sm text-slate-600">{pc.name}</span>
                       <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-slate-700" : "text-slate-400"}`}>
@@ -785,7 +795,7 @@ function LeadDialogs({
                 <label className="text-xs font-medium text-slate-500">Lead</label>
                 <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
               </div>
-              {PLATFORM_CONFIG.map((pc) => (
+              {platformConfig.map((pc) => (
                 <div key={pc.name} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-700">{pc.name}</span>

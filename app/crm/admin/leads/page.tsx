@@ -80,11 +80,12 @@ import {
   Pencil,
   ClipboardEdit,
   UserPlus,
+  Users,
   Trash2,
   BookMarked,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { PLATFORM_CONFIG, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
+import { PLATFORM_CONFIG as ALL_PLATFORM_CONFIG, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
 
 const PAGE_SIZE = 25;
 
@@ -98,7 +99,7 @@ const TERMINAL_STATUSES: LeadStatus[] = [
   "OTHER_HERO",
 ];
 
-type DeleteFilter = "ACTIVE" | "ALL" | "DELETED";
+type DeleteFilter = "ACTIVE" | "ALL";
 
 export default function AdminLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -137,6 +138,7 @@ export default function AdminLeadsPage() {
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+  const [productPlatformsMap, setProductPlatformsMap] = useState<Map<string, { id: string; name: string }[]>>(new Map());
 
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
   const [history, setHistory] = useState<LeadStatusHistory[]>([]);
@@ -159,19 +161,29 @@ export default function AdminLeadsPage() {
   // Bulk assign state
   const [bulkCallerId, setBulkCallerId] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkAssignMode, setBulkAssignMode] = useState<"single" | "equal">("single");
+  const [bulkCallerIds, setBulkCallerIds] = useState<Set<string>>(new Set());
 
   const { toast } = useToast();
 
   useEffect(() => {
     (async () => {
-      const [{ data: prods }, { data: emps }, { data: cq }] = await Promise.all([
+      const [{ data: prods }, { data: emps }, { data: cq }, { data: pp }] = await Promise.all([
         supabase.from("products").select("*").order("name"),
         supabase.from("profiles").select("*").order("full_name"),
         supabase.from("caller_queues").select("*"),
+        supabase.from("product_platforms").select("product_id, platform:platforms(id, name)").eq("is_active", true),
       ]);
       setProducts((prods as Product[]) || []);
       setEmployees((emps as Profile[]) || []);
       setCallerQueues((cq as CallerQueue[]) || []);
+      const ppMap = new Map<string, { id: string; name: string }[]>();
+      (pp as { product_id: string; platform: { id: string; name: string } }[] | null)?.forEach((r) => {
+        if (!r.platform) return;
+        if (!ppMap.has(r.product_id)) ppMap.set(r.product_id, []);
+        ppMap.get(r.product_id)!.push({ id: r.platform.id, name: r.platform.name });
+      });
+      setProductPlatformsMap(ppMap);
     })();
   }, []);
 
@@ -187,9 +199,6 @@ export default function AdminLeadsPage() {
     if (deleteFilter === "ACTIVE") {
       countQuery = countQuery.eq("is_active", true);
       query = query.eq("is_active", true);
-    } else if (deleteFilter === "DELETED") {
-      countQuery = countQuery.eq("is_active", false);
-      query = query.eq("is_active", false);
     }
 
     if (productFilter !== "ALL") {
@@ -465,8 +474,39 @@ export default function AdminLeadsPage() {
 
   // ============ BULK ASSIGN ============
   const handleBulkAssign = async () => {
-    if (!bulkCallerId || selectedIds.size === 0) return;
+    if (selectedIds.size === 0) return;
     setBulkSaving(true);
+
+    if (bulkAssignMode === "equal") {
+      const callerIds = Array.from(bulkCallerIds);
+      if (callerIds.length === 0) {
+        toast({ title: "Select at least one caller.", variant: "destructive" });
+        setBulkSaving(false);
+        return;
+      }
+      const leadIds = Array.from(selectedIds);
+      const { data, error } = await supabase.rpc("admin_bulk_equally_assign_leads", {
+        p_lead_ids: leadIds,
+        p_caller_ids: callerIds,
+      });
+      if (error) {
+        toast({ title: error.message, variant: "destructive" });
+      } else {
+        const result = data as { assigned_count: number; skipped_count: number };
+        toast({
+          title: `${result.assigned_count} leads equally assigned`,
+          description: result.skipped_count > 0 ? `${result.skipped_count} skipped (ineligible or already assigned)` : undefined,
+        });
+        setBulkAssignOpen(false);
+        setBulkCallerIds(new Set());
+        setSelectedIds(new Set());
+        load();
+      }
+      setBulkSaving(false);
+      return;
+    }
+
+    if (!bulkCallerId) { setBulkSaving(false); return; }
 
     // Validate eligibility client-side first for user feedback.
     const leadIds = Array.from(selectedIds);
@@ -616,6 +656,16 @@ export default function AdminLeadsPage() {
   // Edit modal: callers eligible for the edit product.
   const editEligibleCallers = editLead ? getEligibleCallers(editProductId) : [];
 
+  // Compute PLATFORM_CONFIG filtered by the selected lead's product platforms.
+  const statusLeadProduct = statusLead ? productMap.get(statusLead.product_id) : null;
+  const statusLeadPlatforms = statusLeadProduct ? (productPlatformsMap.get(statusLeadProduct.id) || []) : [];
+  const isSinglePlatformStatus = statusLeadPlatforms.length <= 1;
+  const statusPlatformConfig = isSinglePlatformStatus
+    ? ALL_PLATFORM_CONFIG.filter((pc) =>
+        statusLeadPlatforms.some((pp) => pp.name.toUpperCase() === pc.name.toUpperCase())
+      )
+    : ALL_PLATFORM_CONFIG;
+
   return (
     <div>
       <PageHeader
@@ -744,7 +794,6 @@ export default function AdminLeadsPage() {
           <SelectContent>
             <SelectItem value="ACTIVE">Active</SelectItem>
             <SelectItem value="ALL">All</SelectItem>
-            <SelectItem value="DELETED">Deleted</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -756,8 +805,11 @@ export default function AdminLeadsPage() {
             {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setBulkAssignOpen(true)}>
+            <Button size="sm" variant="outline" onClick={() => { setBulkAssignMode("single"); setBulkAssignOpen(true); }}>
               <UserPlus className="mr-2 h-4 w-4" /> Assign
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setBulkAssignMode("equal"); setBulkAssignOpen(true); }}>
+              <Users className="mr-2 h-4 w-4" /> Equally Assign
             </Button>
             <Button
               size="sm"
@@ -831,9 +883,6 @@ export default function AdminLeadsPage() {
                     </TableCell>
                     <TableCell className="font-medium">
                       {lead.name}
-                      {!lead.is_active && (
-                        <span className="ml-2 text-xs text-destructive">(deleted)</span>
-                      )}
                     </TableCell>
                     <TableCell className="text-sm">{lead.phone}</TableCell>
                     <TableCell className="text-sm">
@@ -1078,7 +1127,7 @@ export default function AdminLeadsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {PLATFORM_CONFIG.map((pc) => (
+              {statusPlatformConfig.map((pc) => (
                 <div key={pc.name} className="rounded-lg border border-border/60 bg-muted/30 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold">{pc.name}</span>
@@ -1351,9 +1400,11 @@ export default function AdminLeadsPage() {
       <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Bulk Assign Leads</DialogTitle>
+            <DialogTitle>{bulkAssignMode === "equal" ? "Equally Assign Leads" : "Bulk Assign Leads"}</DialogTitle>
             <DialogDescription>
-              {selectedIds.size} leads selected
+              {bulkAssignMode === "equal"
+                ? `Distribute ${selectedIds.size} leads equally among selected callers`
+                : `${selectedIds.size} leads selected`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1367,6 +1418,7 @@ export default function AdminLeadsPage() {
                 <span className="font-medium">{bulkProductIds.size}</span>
               </div>
             </div>
+            {bulkAssignMode === "single" ? (
             <div className="space-y-2">
               <Label>Assign To</Label>
               <Select value={bulkCallerId} onValueChange={setBulkCallerId}>
@@ -1403,6 +1455,31 @@ export default function AdminLeadsPage() {
                 </p>
               )}
             </div>
+            ) : (
+            <div className="space-y-2">
+              <Label>Select Callers (leads will be distributed equally)</Label>
+              <div className="mt-1 max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border/60 p-2">
+                {(bulkEligibleEmployees.length > 0 ? bulkEligibleEmployees : bulkPartialEmployees).map((emp) => (
+                  <label key={emp.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50">
+                    <Checkbox
+                      checked={bulkCallerIds.has(emp.id)}
+                      onCheckedChange={() => {
+                        setBulkCallerIds((prev) => {
+                          const n = new Set(prev);
+                          if (n.has(emp.id)) n.delete(emp.id); else n.add(emp.id);
+                          return n;
+                        });
+                      }}
+                    />
+                    <span className="text-sm">{emp.full_name}</span>
+                  </label>
+                ))}
+              </div>
+              {bulkCallerIds.size > 0 && (
+                <p className="text-xs text-muted-foreground">{bulkCallerIds.size} caller{bulkCallerIds.size !== 1 ? "s" : ""} selected</p>
+              )}
+            </div>
+            )}
             <DialogFooter>
               <Button
                 type="button"
@@ -1413,10 +1490,10 @@ export default function AdminLeadsPage() {
               </Button>
               <Button
                 onClick={handleBulkAssign}
-                disabled={bulkSaving || !bulkCallerId}
+                disabled={bulkSaving || (bulkAssignMode === "single" ? !bulkCallerId : bulkCallerIds.size === 0)}
               >
                 {bulkSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Assign Selected Leads
+                {bulkAssignMode === "equal" ? `Equally Assign ${selectedIds.size} Leads` : "Assign Selected Leads"}
               </Button>
             </DialogFooter>
           </div>
