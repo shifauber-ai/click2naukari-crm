@@ -78,7 +78,7 @@ import {
   ChevronRight,
   PhoneCall,
   Pencil,
-  ClipboardCheck,
+  ListChecks,
   UserPlus,
   Users,
   Trash2,
@@ -993,7 +993,7 @@ export default function AdminLeadsPage() {
                                 onClick={() => openStatus(lead)}
                                 disabled={!lead.is_active}
                               >
-                                <ClipboardCheck className="h-4 w-4" />
+                                <ListChecks className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Update Status</TooltipContent>
