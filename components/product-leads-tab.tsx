@@ -107,6 +107,32 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
 
+  // Per-lead platform statuses fetched for multi-platform display
+  const [leadPlatformStatuses, setLeadPlatformStatuses] = useState<Record<string, Record<string, string>>>({});
+
+  const isMultiPlatform = productPlatforms.length > 1;
+
+  // Statuses available in the dropdown based on platform filter
+  const availableStatuses: string[] = (() => {
+    if (!isMultiPlatform) return LEAD_STATUSES as string[];
+    if (platformFilter === "ALL") {
+      // Union of all platform statuses
+      const union = new Set<string>();
+      ALL_PLATFORM_CONFIG.forEach((pc) => {
+        if (productPlatforms.some((pp) => pp.name.toUpperCase() === pc.name.toUpperCase())) {
+          pc.statuses.forEach((s) => union.add(s));
+        }
+      });
+      return Array.from(union);
+    }
+    // Specific platform: only that platform's statuses
+    const config = ALL_PLATFORM_CONFIG.find((pc) => pc.name.toUpperCase() === platformFilter);
+    return config ? config.statuses : [];
+  })();
+
+  // Show status column when a platform or status filter is selected (multi-platform only)
+  const showStatusColumn = !isMultiPlatform || platformFilter !== "ALL" || statusFilter !== "ALL";
+
   const ALL_PLATFORM_CONFIG = [
     { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK"] },
     { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED"] },
@@ -228,8 +254,35 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (idDoneOnly) { cq = cq.eq("status", "ID_DONE"); q = q.eq("status", "ID_DONE"); }
-    if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
-    if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
+    if (!isMultiPlatform) {
+      // Single-platform or non-platform products: filter on leads.status directly
+      if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
+      if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
+    } else {
+      // Multi-platform: filter on leads.platform text column for platform
+      if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
+      // Status filter uses lead_platform_status records (platform-specific)
+      if (statusFilter !== "ALL") {
+        // We need lead IDs that have the selected status on ANY platform (OR logic)
+        // Use a subquery via .in() on lead_id from lead_platform_status
+        const statusSub = supabase
+          .from("lead_platform_status")
+          .select("lead_id")
+          .eq("status", statusFilter);
+        if (platformFilter !== "ALL") {
+          // Specific platform: filter to that platform's status only
+          const platformId = productPlatforms.find((p) => p.name.toUpperCase() === platformFilter)?.id;
+          if (platformId) statusSub.eq("platform_id", platformId);
+        }
+        const { data: matchingLeadIds } = await statusSub;
+        const leadIds = (matchingLeadIds as { lead_id: string }[] | null)?.map((r) => r.lead_id) || [];
+        if (leadIds.length === 0) {
+          // No leads match this status filter
+          setTotal(0); setLeads([]); setLoading(false); return;
+        }
+        cq = cq.in("id", leadIds); q = q.in("id", leadIds);
+      }
+    }
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
     if (sourceFilter !== "ALL") { cq = cq.eq("source", sourceFilter); q = q.eq("source", sourceFilter); }
@@ -249,10 +302,29 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       toast({ title: "Unable to load leads. Please try again.", variant: "destructive" });
     } else {
       setTotal(cr.count || 0);
-      setLeads((dr.data as LeadWithCaller[]) || []);
+      const loadedLeads = (dr.data as LeadWithCaller[]) || [];
+      setLeads(loadedLeads);
+      // For multi-platform: fetch per-lead platform statuses for display
+      if (isMultiPlatform && loadedLeads.length > 0) {
+        const leadIds = loadedLeads.map((l) => l.id);
+        const { data: lpsData } = await supabase
+          .from("lead_platform_status")
+          .select("lead_id, platform:platforms!platform_id(name), status")
+          .in("lead_id", leadIds);
+        const map: Record<string, Record<string, string>> = {};
+        (lpsData as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+          if (row.platform?.name) {
+            if (!map[row.lead_id]) map[row.lead_id] = {};
+            map[row.lead_id][row.platform.name] = row.status;
+          }
+        });
+        setLeadPlatformStatuses(map);
+      } else {
+        setLeadPlatformStatuses({});
+      }
     }
     setLoading(false);
-  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly, isMultiPlatform, productPlatforms]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -264,6 +336,11 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   useEffect(() => {
     setSelectedIds(new Set());
   }, [statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, page, pageSize]);
+
+  // Reset status filter when platform filter changes (multi-platform only)
+  useEffect(() => {
+    if (isMultiPlatform) setStatusFilter("ALL");
+  }, [platformFilter, isMultiPlatform]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activeCities = cities.filter((c) => c.is_active);
@@ -594,7 +671,9 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
-            {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
+            {(isMultiPlatform ? availableStatuses : (LEAD_STATUSES as string[])).map((s) => (
+              <SelectItem key={s} value={s}>{isMultiPlatform ? (PLATFORM_STATUS_LABELS[s] || s) : STATUS_LABELS[s as LeadStatus]}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         )}
@@ -688,7 +767,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 <TableHead>City</TableHead>
                 {!isSinglePlatform && <TableHead>Platform</TableHead>}
                 <TableHead>Source</TableHead>
-                <TableHead>Status</TableHead>
+                {showStatusColumn && <TableHead>Status</TableHead>}
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Created</TableHead>
                 <TableHead>Follow-up</TableHead>
@@ -708,9 +787,27 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   </TableCell>
                   <TableCell className="text-sm">{lead.phone}</TableCell>
                   <TableCell className="text-sm">{lead.city || "—"}</TableCell>
-                  {!isSinglePlatform && <TableCell className="text-sm"><PlatformBadge platform={lead.platform} size="xs" /></TableCell>}
+                  {!isSinglePlatform && (
+                    <TableCell className="text-sm">
+                      <PlatformBadge platform={isMultiPlatform && platformFilter !== "ALL" ? platformFilter : lead.platform} size="xs" />
+                    </TableCell>
+                  )}
                   <TableCell className="text-sm">{lead.source || "—"}</TableCell>
-                  <TableCell><StatusBadge status={lead.status} /></TableCell>
+                  {showStatusColumn && (
+                    <TableCell>
+                      <StatusBadge status={(isMultiPlatform
+                        ? (platformFilter !== "ALL"
+                          ? (leadPlatformStatuses[lead.id]?.[productPlatforms.find((p) => p.name.toUpperCase() === platformFilter)?.name || ""] || lead.status as string)
+                          : (statusFilter !== "ALL"
+                            ? (() => {
+                              const ps = leadPlatformStatuses[lead.id] || {};
+                              const match = Object.entries(ps).find(([, s]) => s === statusFilter);
+                              return match ? match[1] : lead.status as string;
+                            })()
+                            : lead.status as string)
+                        ) : lead.status) as LeadStatus} />
+                    </TableCell>
+                  )}
                   {canManage && (
                     <TableCell className="text-sm">{lead.current_caller?.full_name || "Unassigned"}</TableCell>
                   )}
