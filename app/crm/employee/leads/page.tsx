@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PaymentModal } from "@/components/payment-modal";
 import { DateFilter } from "@/components/date-filter";
 import { StatusBadge } from "@/components/status-badge";
-import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG as ALL_PLATFORM_CONFIG } from "@/lib/employee-filters";
+import { type DateRange, PLATFORM_STATUS_LABELS, PLATFORM_CONFIG as ALL_PLATFORM_CONFIG, mapPlatformStatusToLeadStatus } from "@/lib/employee-filters";
 import {
   Users, Phone, MessageCircle, Eye, Plus, Search, Loader2,
   Wallet, Edit,
@@ -264,7 +264,13 @@ export default function EmployeeLeadsPage() {
       toast({ title: `Failed: ${error.message}`, variant: "destructive" });
     } else {
       toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
-      if (viewLead?.id === statusLead.id) loadPlatformStatuses(statusLead.id, "detail");
+      const mappedStatus = mapPlatformStatusToLeadStatus(selected);
+      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: mappedStatus as any } : l));
+      if (viewLead?.id === statusLead.id) {
+        setViewLead((prev) => prev ? { ...prev, status: mappedStatus as any } : prev);
+        loadPlatformStatuses(statusLead.id, "detail");
+      }
+      if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: mappedStatus as any } : prev);
     }
     setPlatformStatusSaving(null);
   };

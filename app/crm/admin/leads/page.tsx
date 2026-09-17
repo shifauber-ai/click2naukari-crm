@@ -78,14 +78,14 @@ import {
   ChevronRight,
   PhoneCall,
   Pencil,
-  ClipboardEdit,
+  ClipboardCheck,
   UserPlus,
   Users,
   Trash2,
   BookMarked,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { PLATFORM_CONFIG as ALL_PLATFORM_CONFIG, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
+import { PLATFORM_CONFIG as ALL_PLATFORM_CONFIG, PLATFORM_STATUS_LABELS, mapPlatformStatusToLeadStatus } from "@/lib/employee-filters";
 
 const PAGE_SIZE = 25;
 
@@ -347,6 +347,9 @@ export default function AdminLeadsPage() {
       toast({ title: error.message, variant: "destructive" });
     } else {
       toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+      const mappedStatus = mapPlatformStatusToLeadStatus(selected);
+      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: mappedStatus as LeadStatus } : l));
+      setStatusLead((prev) => prev ? { ...prev, status: mappedStatus as LeadStatus } : prev);
     }
     setPlatformStatusSaving(null);
   };
@@ -990,7 +993,7 @@ export default function AdminLeadsPage() {
                                 onClick={() => openStatus(lead)}
                                 disabled={!lead.is_active}
                               >
-                                <ClipboardEdit className="h-4 w-4" />
+                                <ClipboardCheck className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Update Status</TooltipContent>

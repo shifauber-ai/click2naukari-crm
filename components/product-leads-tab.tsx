@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { PaymentModal } from "@/components/payment-modal";
+import { mapPlatformStatusToLeadStatus } from "@/lib/employee-filters";
 
 const PAGE_SIZES = [25, 50, 100];
 const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
@@ -374,10 +375,14 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
     } else {
       toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
-      // Refresh detail if open
+      const mappedStatus = mapPlatformStatusToLeadStatus(selected);
+      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: mappedStatus as LeadStatus } : l));
       if (detailLead?.id === statusLead.id) {
+        setDetailLead((prev) => prev ? { ...prev, status: mappedStatus as LeadStatus } : prev);
         loadPlatformDetailStatuses(statusLead.id);
       }
+      if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: mappedStatus as LeadStatus } : prev);
+      loadStats();
     }
     setPlatformStatusSaving(null);
   };

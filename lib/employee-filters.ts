@@ -96,3 +96,17 @@ export function getStatusesForPlatform(platform: string | null): string[] | null
   );
   return key ? PLATFORM_STATUS_MAP[key] : null;
 }
+
+export function mapPlatformStatusToLeadStatus(platformStatus: string): string {
+  const direct: string[] = [
+    "RINGING", "ID_DONE", "ID_BLOCK", "DOC_ISSUE", "VEHICLE_ISSUE",
+    "OTHER_HERO", "NOT_INTERESTED", "INTERESTED", "CALLBACK", "TAG_ADDED",
+    "ADMIN_REVIEW", "NEW", "OTHER_ISSUE",
+  ];
+  if (direct.includes(platformStatus)) return platformStatus;
+  if (platformStatus === "FRESH") return "NEW";
+  if (platformStatus === "EXISTING") return "RINGING";
+  if (platformStatus === "OTHER_NUMBER" || platformStatus === "PAYMENT_ISSUE") return "OTHER_ISSUE";
+  if (platformStatus === "DONE") return "ID_DONE";
+  return platformStatus;
+}
