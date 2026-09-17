@@ -186,7 +186,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
 
-  const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
+  const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Leads", "Other"];
   const crmFields = isHC ? HC_FIELDS : NORMAL_FIELDS;
 
   // Load reference data

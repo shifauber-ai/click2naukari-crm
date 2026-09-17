@@ -16,6 +16,11 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   ADMIN_REVIEW: "bg-foreground/10 text-foreground border-foreground/20",
   TAG_ADDED: "bg-info text-info-foreground",
   NOT_INTERESTED: "bg-muted text-muted-foreground",
+  EXISTING: "bg-chart-3/20 text-chart-3 border-chart-3/30",
+  FRESH: "bg-info text-info-foreground",
+  OTHER_NUMBER: "bg-muted text-muted-foreground",
+  PAYMENT_ISSUE: "bg-destructive/15 text-destructive border-destructive/30",
+  DONE: "bg-success text-success-foreground",
 };
 
 export function StatusBadge({

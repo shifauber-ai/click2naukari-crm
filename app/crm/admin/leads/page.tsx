@@ -85,7 +85,7 @@ import {
   BookMarked,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { PLATFORM_CONFIG as ALL_PLATFORM_CONFIG, PLATFORM_STATUS_LABELS, mapPlatformStatusToLeadStatus } from "@/lib/employee-filters";
+import { PLATFORM_CONFIG as ALL_PLATFORM_CONFIG, PLATFORM_STATUS_LABELS } from "@/lib/employee-filters";
 
 const PAGE_SIZE = 25;
 
@@ -347,9 +347,9 @@ export default function AdminLeadsPage() {
       toast({ title: error.message, variant: "destructive" });
     } else {
       toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
-      const mappedStatus = mapPlatformStatusToLeadStatus(selected);
-      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: mappedStatus as LeadStatus } : l));
-      setStatusLead((prev) => prev ? { ...prev, status: mappedStatus as LeadStatus } : prev);
+      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
+      setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+      load();
     }
     setPlatformStatusSaving(null);
   };

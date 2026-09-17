@@ -20,7 +20,12 @@ export type LeadStatus =
   | "OTHER_HERO"
   | "ADMIN_REVIEW"
   | "TAG_ADDED"
-  | "NOT_INTERESTED";
+  | "NOT_INTERESTED"
+  | "EXISTING"
+  | "FRESH"
+  | "OTHER_NUMBER"
+  | "PAYMENT_ISSUE"
+  | "DONE";
 
 export const LEAD_STATUSES: LeadStatus[] = [
   "NEW",
@@ -36,6 +41,11 @@ export const LEAD_STATUSES: LeadStatus[] = [
   "ADMIN_REVIEW",
   "TAG_ADDED",
   "NOT_INTERESTED",
+  "EXISTING",
+  "FRESH",
+  "OTHER_NUMBER",
+  "PAYMENT_ISSUE",
+  "DONE",
 ];
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -52,6 +62,11 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   ADMIN_REVIEW: "Admin Review",
   TAG_ADDED: "Tag Added",
   NOT_INTERESTED: "Not Interested",
+  EXISTING: "Existing",
+  FRESH: "Fresh",
+  OTHER_NUMBER: "Other Number",
+  PAYMENT_ISSUE: "Payment Issue",
+  DONE: "Done",
 };
 
 export interface Profile {
