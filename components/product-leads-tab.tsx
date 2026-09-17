@@ -30,7 +30,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   Phone, Search, ChevronLeft, ChevronRight, Loader2,
   Pencil, Trash2, Users, UserPlus, History, Eye, PhoneCall,
-  Calendar, Filter, X, Wallet, MessageCircle, ExternalLink,
+  Calendar, Filter, X, Wallet, MessageCircle, ExternalLink, ListChecks,
 } from "lucide-react";
 import { format } from "date-fns";
 import { PaymentModal } from "@/components/payment-modal";
@@ -745,7 +745,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                       {canManage && (
                         <>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Status">
-                            <Phone className="h-3.5 w-3.5" />
+                            <ListChecks className="h-3.5 w-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssign(lead)} title="Assign">
                             <UserPlus className="h-3.5 w-3.5" />
