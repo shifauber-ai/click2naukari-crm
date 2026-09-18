@@ -72,6 +72,11 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [platformFilter, setPlatformFilter] = useState("ALL");
+
+  // Per-lead platform statuses: leadId -> { platformName -> status }
+  const [leadPlatformStatuses, setLeadPlatformStatuses] = useState<Record<string, Record<string, string>>>({});
+  // For All Platforms + specific status: which platform caused the match
+  const [leadMatchPlatform, setLeadMatchPlatform] = useState<Record<string, string>>({});
   const [cityFilter, setCityFilter] = useState("ALL");
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
   const [sourceFilter, setSourceFilter] = useState("ALL");
@@ -127,11 +132,29 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     PENDING: "Pending",
   };
   const isSinglePlatform = productPlatforms.length <= 1;
+  const isMultiPlatform = !isSinglePlatform && productPlatforms.length > 1;
   const PLATFORM_CONFIG = isSinglePlatform
     ? ALL_PLATFORM_CONFIG.filter((pc) =>
         productPlatforms.some((pp) => pp.name.toUpperCase() === pc.name.toUpperCase())
       )
     : ALL_PLATFORM_CONFIG;
+
+  // Dynamic status options based on platform filter
+  const availableStatuses = (() => {
+    if (platformFilter !== "ALL") {
+      const cfg = ALL_PLATFORM_CONFIG.find((pc) => pc.name.toUpperCase() === platformFilter);
+      return cfg ? cfg.statuses : [];
+    }
+    // All Platforms: union of all applicable platform statuses
+    const statusSet = new Set<string>();
+    PLATFORM_CONFIG.forEach((pc) => pc.statuses.forEach((s) => statusSet.add(s)));
+    return Array.from(statusSet);
+  })();
+
+  // Show Status column when: specific platform selected OR specific status selected (for multi-platform)
+  const showStatusColumn = isMultiPlatform && (platformFilter !== "ALL" || statusFilter !== "ALL");
+  // Show Platform column when: multi-platform (always, per requirement #7)
+  const showPlatformColumn = isMultiPlatform;
 
   // Assign form
   const [assignCallerId, setAssignCallerId] = useState("");
@@ -219,6 +242,72 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
 
   const load = useCallback(async () => {
     setLoading(true);
+
+    // For multi-platform products (Car/Auto), platform/status filtering uses lead_platform_status
+    // For single-platform or non-platform products, use leads.status/leads.platform directly
+    const usePlatformStatus = isMultiPlatform && !idDoneOnly;
+
+    // Step 1: If filtering by platform/status on a multi-platform product, fetch matching lead IDs first
+    let matchingLeadIds: string[] | null = null;
+    let matchPlatformMap: Record<string, string> = {};
+
+    if (usePlatformStatus && (platformFilter !== "ALL" || statusFilter !== "ALL")) {
+      // Build query on lead_platform_status joined with platforms
+      let psq = supabase
+        .from("lead_platform_status")
+        .select("lead_id, platform:platforms!platform_id(name), status");
+
+      if (platformFilter !== "ALL") {
+        // Filter by specific platform name (case-insensitive match)
+        const platformName = productPlatforms.find(
+          (pp) => pp.name.toUpperCase() === platformFilter
+        )?.name;
+        if (platformName) {
+          psq = psq.eq("platform_id", productPlatforms.find(
+            (pp) => pp.name.toUpperCase() === platformFilter
+          )!.id);
+        }
+      }
+
+      if (statusFilter !== "ALL") {
+        psq = psq.eq("status", statusFilter);
+      }
+
+      const { data: psData, error: psError } = await psq;
+      if (psError) {
+        toast({ title: "Unable to load leads. Please try again.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      // Build the set of matching lead IDs and the match platform map
+      const leadIdSet = new Set<string>();
+      (psData as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+        leadIdSet.add(row.lead_id);
+        if (row.platform?.name) {
+          // For All Platforms + specific status: record which platform matched
+          if (platformFilter === "ALL" && statusFilter !== "ALL") {
+            matchPlatformMap[row.lead_id] = row.platform.name;
+          }
+        }
+      });
+
+      if (leadIdSet.size === 0) {
+        setLeads([]);
+        setTotal(0);
+        setLeadPlatformStatuses({});
+        setLeadMatchPlatform({});
+        setLoading(false);
+        return;
+      }
+
+      matchingLeadIds = Array.from(leadIdSet);
+      setLeadMatchPlatform(matchPlatformMap);
+    } else {
+      setLeadMatchPlatform({});
+    }
+
+    // Step 2: Build the main leads query
     let cq = supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id);
     let q = supabase
       .from("leads")
@@ -228,8 +317,22 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (idDoneOnly) { cq = cq.eq("status", "ID_DONE"); q = q.eq("status", "ID_DONE"); }
-    if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
-    if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
+
+    if (usePlatformStatus) {
+      // Multi-platform: filter by matching lead IDs from lead_platform_status
+      if (matchingLeadIds) {
+        if (matchingLeadIds.length > 0) {
+          cq = cq.in("id", matchingLeadIds);
+          q = q.in("id", matchingLeadIds);
+        }
+      }
+      // When All Platforms + All Status, don't filter by platform or status at all
+    } else {
+      // Single-platform or idDoneOnly: use leads.status and leads.platform directly
+      if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
+      if (platformFilter !== "ALL") { cq = cq.eq("platform", platformFilter); q = q.eq("platform", platformFilter); }
+    }
+
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
     if (sourceFilter !== "ALL") { cq = cq.eq("source", sourceFilter); q = q.eq("source", sourceFilter); }
@@ -249,10 +352,31 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       toast({ title: "Unable to load leads. Please try again.", variant: "destructive" });
     } else {
       setTotal(cr.count || 0);
-      setLeads((dr.data as LeadWithCaller[]) || []);
+      const loadedLeads = (dr.data as LeadWithCaller[]) || [];
+      setLeads(loadedLeads);
+
+      // Step 3: For multi-platform, fetch per-lead platform statuses for display
+      if (isMultiPlatform && loadedLeads.length > 0) {
+        const leadIds = loadedLeads.map((l) => l.id);
+        const { data: lpsData } = await supabase
+          .from("lead_platform_status")
+          .select("lead_id, platform:platforms!platform_id(name), status")
+          .in("lead_id", leadIds);
+
+        const statusMap: Record<string, Record<string, string>> = {};
+        (lpsData as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+          if (row.platform?.name) {
+            if (!statusMap[row.lead_id]) statusMap[row.lead_id] = {};
+            statusMap[row.lead_id][row.platform.name] = row.status;
+          }
+        });
+        setLeadPlatformStatuses(statusMap);
+      } else {
+        setLeadPlatformStatuses({});
+      }
     }
     setLoading(false);
-  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly, isMultiPlatform, productPlatforms]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -376,12 +500,21 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     } else {
       toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
       setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
+      // Refresh per-lead platform statuses so the table reflects the update
+      setLeadPlatformStatuses((prev) => {
+        const updated = { ...prev };
+        if (updated[statusLead.id]) {
+          updated[statusLead.id] = { ...updated[statusLead.id], [platformName]: selected };
+        }
+        return updated;
+      });
       if (detailLead?.id === statusLead.id) {
         setDetailLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
         loadPlatformDetailStatuses(statusLead.id);
       }
       if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
       loadStats();
+      load();
     }
     setPlatformStatusSaving(null);
   };
@@ -557,6 +690,19 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
   };
 
+  // Helper: compute the display status for a lead in multi-platform mode
+  const getDisplayStatus = (lead: LeadWithCaller): LeadStatus => {
+    if (platformFilter !== "ALL") {
+      const platformName = productPlatforms.find((pp) => pp.name.toUpperCase() === platformFilter)?.name || "";
+      return (leadPlatformStatuses[lead.id]?.[platformName] || lead.status) as LeadStatus;
+    }
+    if (statusFilter !== "ALL" && leadMatchPlatform[lead.id]) {
+      return (leadPlatformStatuses[lead.id]?.[leadMatchPlatform[lead.id]] || lead.status) as LeadStatus;
+    }
+    const statuses = leadPlatformStatuses[lead.id] ? Object.values(leadPlatformStatuses[lead.id]) : [];
+    return (statuses[0] || lead.status) as LeadStatus;
+  };
+
   const startIdx = page * pageSize + 1;
   const endIdx = Math.min((page + 1) * pageSize, total);
 
@@ -594,12 +740,14 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
-            {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
+            {isMultiPlatform
+              ? availableStatuses.map((s) => <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>)
+              : LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
         )}
-        {!isSinglePlatform && (
-        <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
+        {isMultiPlatform && (
+        <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setStatusFilter("ALL"); setPage(0); }}>
           <SelectTrigger className="w-[130px]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Platforms</SelectItem>
@@ -686,9 +834,9 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>City</TableHead>
-                {!isSinglePlatform && <TableHead>Platform</TableHead>}
+                {showPlatformColumn && <TableHead>Platform</TableHead>}
                 <TableHead>Source</TableHead>
-                <TableHead>Status</TableHead>
+                {(showStatusColumn || isSinglePlatform || idDoneOnly) && <TableHead>Status</TableHead>}
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Created</TableHead>
                 <TableHead>Follow-up</TableHead>
@@ -708,9 +856,24 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   </TableCell>
                   <TableCell className="text-sm">{lead.phone}</TableCell>
                   <TableCell className="text-sm">{lead.city || "—"}</TableCell>
-                  {!isSinglePlatform && <TableCell className="text-sm"><PlatformBadge platform={lead.platform} size="xs" /></TableCell>}
+                  {showPlatformColumn && (
+                    <TableCell className="text-sm">
+                      <PlatformBadge
+                        platform={platformFilter !== "ALL" ? platformFilter : (lead.platform || undefined)}
+                        size="xs"
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="text-sm">{lead.source || "—"}</TableCell>
-                  <TableCell><StatusBadge status={lead.status} /></TableCell>
+                  {(showStatusColumn || isSinglePlatform || idDoneOnly) && (
+                    <TableCell>
+                      {isMultiPlatform && !idDoneOnly ? (
+                        <StatusBadge status={getDisplayStatus(lead)} />
+                      ) : (
+                        <StatusBadge status={lead.status} />
+                      )}
+                    </TableCell>
+                  )}
                   {canManage && (
                     <TableCell className="text-sm">{lead.current_caller?.full_name || "Unassigned"}</TableCell>
                   )}
