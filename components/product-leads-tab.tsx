@@ -451,18 +451,29 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     if (selectedIds.size === 0) return;
     setBulkDeleting(true);
     const ids = Array.from(selectedIds);
-    const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", { p_lead_ids: ids });
-    if (error) {
-      toast({ title: "Bulk delete failed. Please try again.", variant: "destructive" });
-    } else {
+    try {
+      const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", { p_lead_ids: ids });
+      if (error) {
+        toast({ title: `Bulk delete failed: ${error.message}`, variant: "destructive" });
+        return;
+      }
       const result = data as { deleted_count: number; not_found_count: number } | null;
-      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
-      toast({ title: `${result?.deleted_count ?? ids.length} leads permanently deleted` });
+      const deletedCount = result?.deleted_count ?? ids.length;
+      if (deletedCount === 0) {
+        toast({ title: "No leads were deleted. They may have already been removed.", variant: "destructive" });
+        return;
+      }
+      toast({ title: `${deletedCount} lead${deletedCount !== 1 ? "s" : ""} permanently deleted` });
       setBulkDeleteOpen(false);
       setSelectedIds(new Set());
+      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      load();
       loadStats();
+    } catch (err) {
+      toast({ title: `Bulk delete failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setBulkDeleting(false);
     }
-    setBulkDeleting(false);
   };
 
   // ===== Status Update (per-platform) =====
