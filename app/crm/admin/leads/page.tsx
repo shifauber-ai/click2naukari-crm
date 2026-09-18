@@ -560,32 +560,45 @@ export default function AdminLeadsPage() {
   };
 
   // ============ BULK DELETE ============
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
     if (selectedIds.size === 0) return;
     setBulkSaving(true);
     const ids = Array.from(selectedIds);
 
-    const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", {
-      p_lead_ids: ids,
-    });
+    try {
+      const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", {
+        p_lead_ids: ids,
+      });
 
-    if (error) {
-      toast({ title: error.message, variant: "destructive" });
-    } else {
+      if (error) {
+        toast({ title: `Delete failed: ${error.message}`, variant: "destructive" });
+        return;
+      }
+
       const result = data as { deleted_count: number; not_found_count: number };
+      const deletedCount = result?.deleted_count ?? 0;
+      if (deletedCount === 0) {
+        toast({ title: "No leads were deleted. They may have already been removed.", variant: "destructive" });
+        return;
+      }
+
       if (result.not_found_count > 0) {
         toast({
-          title: `${result.deleted_count} leads permanently deleted`,
+          title: `${deletedCount} leads permanently deleted`,
           description: `${result.not_found_count} lead(s) could not be found.`,
         });
       } else {
-        toast({ title: `${result.deleted_count} leads permanently deleted` });
+        toast({ title: `${deletedCount} leads permanently deleted` });
       }
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      load();
+    } catch (err) {
+      toast({ title: `Delete failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setBulkSaving(false);
     }
-    setBulkDeleteOpen(false);
-    setSelectedIds(new Set());
-    load();
-    setBulkSaving(false);
   };
 
   // ============ BULK SAVE TO DIRECTORY ============
@@ -1521,6 +1534,7 @@ export default function AdminLeadsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
+              disabled={bulkSaving}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {bulkSaving ? (
