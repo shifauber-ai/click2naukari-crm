@@ -13,7 +13,7 @@ const corsHeaders = {
 };
 
 interface ActionRequest {
-  action: "create" | "update" | "reset_password" | "set_active";
+  action: "create" | "update" | "reset_password" | "set_active" | "delete";
   email?: string;
   password?: string;
   full_name?: string;
@@ -207,6 +207,65 @@ Deno.serve(async (req: Request) => {
         entity_id: body.user_id,
         metadata: {},
       });
+      return json({ ok: true });
+    }
+
+    if (action === "delete") {
+      if (!body.user_id) return json({ error: "user_id required" }, 400);
+
+      // Safety: cannot delete yourself
+      if (body.user_id === callerId) {
+        return json({ error: "You cannot delete your own account" }, 400);
+      }
+
+      // Safety: cannot delete another admin
+      const { data: targetProfile } = await adminClient
+        .from("profiles")
+        .select("role")
+        .eq("id", body.user_id)
+        .maybeSingle();
+      if (!targetProfile) {
+        return json({ error: "Employee not found" }, 404);
+      }
+      if (targetProfile.role === "ADMIN") {
+        return json({ error: "Cannot delete an admin account" }, 400);
+      }
+
+      // Write audit log before deletion
+      await adminClient.from("audit_logs").insert({
+        actor_id: callerId,
+        action: "EMPLOYEE_DELETE",
+        entity: "profile",
+        entity_id: body.user_id,
+        metadata: { permanent_delete: true },
+      });
+
+      // Delete the profile row first.
+      // CASCADE removes: caller_devices, caller_queues, employee_product_cities,
+      // manager_product_assignments, notifications, whatsapp_accounts.
+      // SET NULL detaches: leads.current_caller_id, leads.created_by,
+      // lead_assignments.*, lead_status_history.*, issues.employee_id,
+      // call_history.caller_id, payment_records.*, scheduled_transitions.current_caller_id,
+      // directory_entries.employee_id, sims.employee_id, etc.
+      const { error: profileErr } = await adminClient
+        .from("profiles")
+        .delete()
+        .eq("id", body.user_id);
+      if (profileErr) return json({ error: profileErr.message }, 400);
+
+      // Delete the auth user so they can no longer log in
+      const { error: authErr } = await adminClient.auth.admin.deleteUser(
+        body.user_id
+      );
+      if (authErr) {
+        // Profile is already deleted; the auth user may not exist.
+        // Report but don't fail the whole operation.
+        return json({
+          ok: true,
+          warning: `Profile deleted but auth user removal failed: ${authErr.message}`,
+        });
+      }
+
       return json({ ok: true });
     }
 

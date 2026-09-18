@@ -31,8 +31,19 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { PageHeader, LoadingState, EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import {
   Users,
   Plus,
@@ -40,6 +51,7 @@ import {
   Loader2,
   KeyRound,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -51,8 +63,12 @@ export default function EmployeesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [resetTarget, setResetTarget] = useState<Profile | null>(null);
+  const { profile: currentProfile } = useAuth();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -164,6 +180,35 @@ export default function EmployeesPage() {
     } else {
       toast({ title: `Account ${!p.is_active ? "activated" : "deactivated"}` });
       load();
+    }
+  };
+
+  const openDelete = (p: Profile) => {
+    setDeleteTarget(p);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+        action: "delete",
+        user_id: deleteTarget.id,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to delete employee", variant: "destructive" });
+        return;
+      }
+      toast({ title: `${deleteTarget.full_name} permanently deleted` });
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Delete failed", variant: "destructive" });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -295,6 +340,17 @@ export default function EmployeesPage() {
                       >
                         <KeyRound className="h-4 w-4" />
                       </Button>
+                      {p.role !== "ADMIN" && p.id !== currentProfile?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          onClick={() => openDelete(p)}
+                          title="Delete permanently"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -443,6 +499,34 @@ export default function EmployeesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete {deleteTarget?.full_name} and their related CRM records? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...
+                </>
+              ) : (
+                "Delete Permanently"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Reset password dialog */}
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
