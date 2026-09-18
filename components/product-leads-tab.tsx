@@ -282,7 +282,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
 
       // Build the set of matching lead IDs and the match platform map
       const leadIdSet = new Set<string>();
-      (psData as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+      (psData as unknown as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
         leadIdSet.add(row.lead_id);
         if (row.platform?.name) {
           // For All Platforms + specific status: record which platform matched
@@ -364,7 +364,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           .in("lead_id", leadIds);
 
         const statusMap: Record<string, Record<string, string>> = {};
-        (lpsData as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+        (lpsData as unknown as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
           if (row.platform?.name) {
             if (!statusMap[row.lead_id]) statusMap[row.lead_id] = {};
             statusMap[row.lead_id][row.platform.name] = row.status;
