@@ -99,6 +99,19 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       toast({ title: "Failed to load employees", variant: "destructive" });
     } else {
       let profiles = (data as Profile[]) || [];
+      // Fetch city assignments for this product (also used for assignment filter)
+      const { data: cityAssigns } = await supabase
+        .from("employee_product_cities")
+        .select("employee_id, city_id, city:product_cities!city_id(city_name)")
+        .eq("product_id", product.id);
+      const cityMap: Record<string, string[]> = {};
+      (cityAssigns as { employee_id: string; city_id: string; city: { city_name: string } }[] | null)?.forEach((a) => {
+        if (!cityMap[a.employee_id]) cityMap[a.employee_id] = [];
+        if (a.city?.city_name) cityMap[a.employee_id].push(a.city.city_name);
+      });
+      // Build assigned set: caller_queue OR city assignment OR manager_product_assignment
+      const assignedIds = new Set<string>();
+      Object.keys(cityMap).forEach((id) => assignedIds.add(id));
       // Fetch all employee IDs assigned to this product via caller_queues
       const { data: cqData } = await supabase
         .from("caller_queues")
@@ -109,7 +122,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         .from("manager_product_assignments")
         .select("manager_id")
         .eq("product_id", product.id);
-      const assignedIds = new Set<string>();
       (cqData as { employee_id: string }[] | null)?.forEach((r) => assignedIds.add(r.employee_id));
       (mpaData as { manager_id: string }[] | null)?.forEach((r) => assignedIds.add(r.manager_id));
       // Apply assignment filter
@@ -118,16 +130,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       } else if (assignmentFilter === "NOT_ASSIGNED") {
         profiles = profiles.filter((p) => !assignedIds.has(p.id));
       }
-      // Load city assignments for this product
-      const { data: cityAssigns } = await supabase
-        .from("employee_product_cities")
-        .select("employee_id, city_id, city:product_cities!city_id(city_name)")
-        .eq("product_id", product.id);
-      const cityMap: Record<string, string[]> = {};
-      (cityAssigns as { employee_id: string; city_id: string; city: { city_name: string } }[] | null)?.forEach((a) => {
-        if (!cityMap[a.employee_id]) cityMap[a.employee_id] = [];
-        if (a.city?.city_name) cityMap[a.employee_id].push(a.city.city_name);
-      });
       setEmployees(profiles.map((p) => ({ ...p, assigned_cities: cityMap[p.id] || [] })));
     }
     setLoading(false);
