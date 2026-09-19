@@ -18,11 +18,21 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, MapPin,
+  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, MapPin, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -43,6 +53,9 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [detailEmployee, setDetailEmployee] = useState<(Profile & { assigned_cities?: string[] }) | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<Profile | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [fullName, setFullName] = useState("");
@@ -232,6 +245,35 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     setSaving(false);
   };
 
+  const openDelete = (p: Profile) => {
+    setDeleteTarget(p);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+        action: "delete",
+        user_id: deleteTarget.id,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to delete employee", variant: "destructive" });
+        return;
+      }
+      toast({ title: `${deleteTarget.full_name} permanently deleted` });
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Delete failed", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const toggleCity = (cid: string) => {
     setSelectedCityIds((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
   };
@@ -391,6 +433,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailEmployee(p)} title="View"><Eye className="h-4 w-4" /></Button>
                       {isAdmin && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditFromRow(p)} title="Edit"><Pencil className="h-4 w-4" /></Button>}
                       {isAdmin && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openReset(p)} title="Reset password"><KeyRound className="h-4 w-4" /></Button>}
+                      {isAdmin && p.role !== "ADMIN" && p.id !== profile?.id && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => openDelete(p)} title="Delete permanently">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -457,6 +504,32 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete {deleteTarget?.full_name} and their related CRM records? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</>
+              ) : (
+                "Delete Permanently"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
