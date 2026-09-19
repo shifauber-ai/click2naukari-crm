@@ -47,6 +47,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [assignmentFilter, setAssignmentFilter] = useState("ALL");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -97,7 +98,26 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     if (error) {
       toast({ title: "Failed to load employees", variant: "destructive" });
     } else {
-      const profiles = (data as Profile[]) || [];
+      let profiles = (data as Profile[]) || [];
+      // Fetch all employee IDs assigned to this product via caller_queues
+      const { data: cqData } = await supabase
+        .from("caller_queues")
+        .select("employee_id")
+        .eq("product_id", product.id);
+      // Fetch all manager IDs assigned to this product via manager_product_assignments
+      const { data: mpaData } = await supabase
+        .from("manager_product_assignments")
+        .select("manager_id")
+        .eq("product_id", product.id);
+      const assignedIds = new Set<string>();
+      (cqData as { employee_id: string }[] | null)?.forEach((r) => assignedIds.add(r.employee_id));
+      (mpaData as { manager_id: string }[] | null)?.forEach((r) => assignedIds.add(r.manager_id));
+      // Apply assignment filter
+      if (assignmentFilter === "ASSIGNED") {
+        profiles = profiles.filter((p) => assignedIds.has(p.id));
+      } else if (assignmentFilter === "NOT_ASSIGNED") {
+        profiles = profiles.filter((p) => !assignedIds.has(p.id));
+      }
       // Load city assignments for this product
       const { data: cityAssigns } = await supabase
         .from("employee_product_cities")
@@ -111,7 +131,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       setEmployees(profiles.map((p) => ({ ...p, assigned_cities: cityMap[p.id] || [] })));
     }
     setLoading(false);
-  }, [search, roleFilter, statusFilter, product.id, toast]);
+  }, [search, roleFilter, statusFilter, assignmentFilter, product.id, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -287,7 +307,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     return <span className="inline-flex rounded-md bg-info/10 px-2 py-0.5 text-xs font-medium text-info-foreground">Employee</span>;
   };
 
-  const hasActiveFilters = search || roleFilter !== "ALL" || statusFilter !== "ALL";
+  const hasActiveFilters = search || roleFilter !== "ALL" || statusFilter !== "ALL" || assignmentFilter !== "ALL";
 
   const formFields = () => (
     <div className="space-y-3">
@@ -375,8 +395,16 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
             <SelectItem value="INACTIVE">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={assignmentFilter} onValueChange={setAssignmentFilter}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Assignment" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Employees</SelectItem>
+            <SelectItem value="ASSIGNED">Assigned to {product.name}</SelectItem>
+            <SelectItem value="NOT_ASSIGNED">Not Assigned to {product.name}</SelectItem>
+          </SelectContent>
+        </Select>
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setRoleFilter("ALL"); setStatusFilter("ALL"); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setRoleFilter("ALL"); setStatusFilter("ALL"); setAssignmentFilter("ALL"); }}>
             Clear
           </Button>
         )}
