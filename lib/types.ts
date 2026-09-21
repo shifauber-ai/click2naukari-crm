@@ -429,6 +429,20 @@ export interface ManagerProductAssignment {
 }
 
 export type TargetPeriodType = "DAILY" | "WEEKLY";
+export type TargetValueType = "COUNT" | "AMOUNT";
+
+export interface TargetMetric {
+  id: string;
+  product_id: string;
+  name: string;
+  key: string;
+  value_type: TargetValueType;
+  display_order: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface EmployeeTarget {
   id: string;
@@ -436,6 +450,7 @@ export interface EmployeeTarget {
   product_id: string;
   city_id: string | null;
   target_type: string;
+  target_metric_id: string | null;
   target_value: number;
   period_type: TargetPeriodType;
   start_date: string;
@@ -446,4 +461,5 @@ export interface EmployeeTarget {
   updated_at: string;
   employee?: Profile | null;
   product?: Product | null;
+  metric?: TargetMetric | null;
 }

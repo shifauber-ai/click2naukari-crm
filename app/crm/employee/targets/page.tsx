@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useEmployeeContext } from "@/lib/employee-context";
 import { supabase } from "@/lib/supabase/client";
-import type { EmployeeTarget, ProductCity } from "@/lib/types";
-import { getTargetTypeConfig, PERIOD_LABELS, isAmountTarget } from "@/lib/target-config";
+import type { EmployeeTarget, TargetMetric, ProductCity } from "@/lib/types";
+import { PERIOD_LABELS, isAmountMetric, fetchActiveMetrics } from "@/lib/target-config";
 import { calculateAchievement, type AchievementResult } from "@/lib/target-achievement";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { format } from "date-fns";
 
 interface TargetWithAchievement extends EmployeeTarget {
   achievement: AchievementResult;
+  metric: TargetMetric | null;
 }
 
 interface CityGroup {
@@ -31,20 +32,25 @@ export default function EmployeeTargetsPage() {
     if (!profile?.id || !product) return;
     setLoading(true);
 
-    const { data } = await supabase
-      .from("employee_targets")
-      .select("*, city:product_cities!city_id(id, city_name, is_active)")
-      .eq("employee_id", profile.id)
-      .eq("product_id", product.id)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false });
+    const [targetsResp, metricsList] = await Promise.all([
+      supabase
+        .from("employee_targets")
+        .select("*, city:product_cities!city_id(id, city_name, is_active), metric:target_metrics!target_metric_id(*)")
+        .eq("employee_id", profile.id)
+        .eq("product_id", product.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+      fetchActiveMetrics(product.id),
+    ]);
 
-    const rawTargets = (data as (EmployeeTarget & { city: ProductCity | null })[]) || [];
+    const rawTargets = (targetsResp.data as (EmployeeTarget & { city: ProductCity | null; metric: TargetMetric | null })[]) || [];
+    const metricMap = new Map<string, TargetMetric>();
+    metricsList.forEach((m) => metricMap.set(m.id, m));
 
     const withAchievement: TargetWithAchievement[] = [];
     for (const t of rawTargets) {
-      const achievement = await calculateAchievement(t, product);
-      withAchievement.push({ ...t, achievement });
+      const achievement = await calculateAchievement(t, product, t.metric);
+      withAchievement.push({ ...t, achievement, metric: t.metric || metricMap.get(t.target_metric_id || "") || null });
     }
 
     const cityMap = new Map<string, CityGroup>();
@@ -100,9 +106,7 @@ export default function EmployeeTargetsPage() {
       ) : (
         <div className="space-y-5">
           {groups.map((group, gi) => {
-            const periodLabel = group.targets[0]
-              ? PERIOD_LABELS[group.targets[0].period_type]
-              : "";
+            const periodLabel = group.targets[0] ? PERIOD_LABELS[group.targets[0].period_type] : "";
             const dateRange = group.targets[0]
               ? `${format(new Date(group.targets[0].start_date), "dd MMM")} — ${format(new Date(group.targets[0].end_date), "dd MMM yyyy")}`
               : "";
@@ -116,20 +120,15 @@ export default function EmployeeTargetsPage() {
                         <MapPin className="mr-1 h-3 w-3" /> {group.city.city_name}
                       </Badge>
                     )}
-                    <Badge variant="outline" className="border-slate-200 text-slate-600">
-                      {periodLabel}
-                    </Badge>
-                    <Badge variant="outline" className="border-slate-200 text-slate-600">
-                      {dateRange}
-                    </Badge>
+                    <Badge variant="outline" className="border-slate-200 text-slate-600">{periodLabel}</Badge>
+                    <Badge variant="outline" className="border-slate-200 text-slate-600">{dateRange}</Badge>
                   </div>
 
                   <div className="space-y-3">
                     {group.targets.map((t) => {
-                      const tc = getTargetTypeConfig(product, t.target_type);
-                      const isAmt = isAmountTarget(t.target_type);
-                      const fmt = (n: number) =>
-                        isAmt ? `₹${n.toLocaleString("en-IN")}` : String(n);
+                      const isAmt = isAmountMetric(t.metric) || t.target_type === "OLA_COLLECTION";
+                      const label = t.metric?.name || t.target_type;
+                      const fmt = (n: number) => (isAmt ? `₹${n.toLocaleString("en-IN")}` : String(n));
                       const pct = t.achievement.progressPct;
                       const barColor =
                         pct >= 100 ? "bg-emerald-500" :
@@ -140,9 +139,7 @@ export default function EmployeeTargetsPage() {
                         <div key={t.id} className="rounded-lg border border-slate-100 p-3">
                           <div className="mb-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-slate-700">
-                                {tc?.label || t.target_type}
-                              </span>
+                              <span className="text-sm font-semibold text-slate-700">{label}</span>
                               {pct >= 100 && (
                                 <Badge className="bg-emerald-100 text-emerald-700 text-xs">
                                   <CheckCircle2 className="mr-0.5 h-3 w-3" /> Achieved

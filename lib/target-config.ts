@@ -1,41 +1,5 @@
-import type { Product } from "@/lib/types";
-
-export interface TargetTypeConfig {
-  key: string;
-  label: string;
-  metric: "lead_count" | "id_done_count" | "payment_amount";
-  platformFilter?: string | null;
-  cityFilter?: string | null;
-  idDoneField?: "uber_id_done" | "ola_id_done" | "rapido_id_done" | null;
-  description: string;
-  isAmount?: boolean;
-}
-
-export const CAR_TARGET_TYPES: TargetTypeConfig[] = [
-  { key: "MUMBAI_ULP", label: "Mumbai ULP", metric: "id_done_count", cityFilter: "Mumbai", idDoneField: "uber_id_done", description: "Uber ID Done in Mumbai" },
-  { key: "PUNE_ULP", label: "Pune ULP", metric: "id_done_count", cityFilter: "Pune", idDoneField: "uber_id_done", description: "Uber ID Done in Pune" },
-  { key: "MUMBAI_OLA", label: "Mumbai Ola", metric: "id_done_count", cityFilter: "Mumbai", idDoneField: "ola_id_done", description: "Ola ID Done in Mumbai" },
-  { key: "PUNE_OLA", label: "Pune Ola", metric: "id_done_count", cityFilter: "Pune", idDoneField: "ola_id_done", description: "Ola ID Done in Pune" },
-  { key: "OLA_COLLECTION", label: "Ola Collection", metric: "payment_amount", platformFilter: "Ola", description: "Payment collection amount", isAmount: true },
-  { key: "RAPIDO", label: "Rapido", metric: "id_done_count", platformFilter: "Rapido", idDoneField: "rapido_id_done", description: "Rapido ID Done leads" },
-  { key: "FT", label: "FT", metric: "lead_count", description: "Total leads created" },
-];
-
-export const BIKE_TARGET_TYPES: TargetTypeConfig[] = [
-  { key: "ULP", label: "ULP", metric: "id_done_count", idDoneField: "uber_id_done", description: "Uber ID Done leads" },
-  { key: "FT", label: "FT", metric: "lead_count", description: "Total leads created" },
-];
-
-export const TEMPO_TARGET_TYPES: TargetTypeConfig[] = [
-  { key: "ULP", label: "ULP", metric: "id_done_count", idDoneField: "uber_id_done", description: "Uber ID Done leads" },
-  { key: "FT", label: "FT", metric: "lead_count", description: "Total leads created" },
-];
-
-export const AUTO_TARGET_TYPES: TargetTypeConfig[] = [
-  { key: "ULP", label: "ULP", metric: "id_done_count", idDoneField: "uber_id_done", description: "Uber ID Done leads" },
-  { key: "RAPIDO", label: "Rapido", metric: "id_done_count", platformFilter: "Rapido", idDoneField: "rapido_id_done", description: "Rapido ID Done leads" },
-  { key: "FT", label: "FT", metric: "lead_count", description: "Total leads created" },
-];
+import type { Product, TargetMetric } from "@/lib/types";
+import { supabase } from "@/lib/supabase/client";
 
 export function classifyProductCode(code: string, name: string) {
   const c = code.toUpperCase();
@@ -49,39 +13,15 @@ export function classifyProductCode(code: string, name: string) {
   };
 }
 
-export function getTargetTypesForProduct(product: Product): TargetTypeConfig[] {
-  const { isCar, isBike, isTempo, isAuto } = classifyProductCode(product.code, product.name);
-  if (isCar) return CAR_TARGET_TYPES;
-  if (isBike) return BIKE_TARGET_TYPES;
-  if (isTempo) return TEMPO_TARGET_TYPES;
-  if (isAuto) return AUTO_TARGET_TYPES;
-  return [];
-}
-
 export function shouldShowTargetTab(product: Product): boolean {
   const { isCar, isBike, isTempo, isAuto } = classifyProductCode(product.code, product.name);
   return isCar || isBike || isTempo || isAuto;
-}
-
-export function getTargetTypeConfig(product: Product, targetType: string): TargetTypeConfig | undefined {
-  return getTargetTypesForProduct(product).find((t) => t.key === targetType);
 }
 
 export const PERIOD_LABELS: Record<string, string> = {
   DAILY: "Today",
   WEEKLY: "Weekly",
 };
-
-export function getTargetDateRange(
-  startDate: string,
-  endDate: string,
-  periodType: string
-): { start: string; end: string } {
-  if (periodType === "DAILY") {
-    return { start: startDate + "T00:00:00", end: startDate + "T23:59:59" };
-  }
-  return { start: startDate + "T00:00:00", end: endDate + "T23:59:59" };
-}
 
 export function computeDefaultDates(periodType: string): { start: string; end: string } {
   const today = new Date();
@@ -103,6 +43,47 @@ export function computeDefaultDates(periodType: string): { start: string; end: s
   return { start: todayStr, end: todayStr };
 }
 
-export function isAmountTarget(targetType: string): boolean {
-  return targetType === "OLA_COLLECTION";
+export function getTargetDateRange(
+  startDate: string,
+  endDate: string,
+  periodType: string
+): { start: string; end: string } {
+  if (periodType === "DAILY") {
+    return { start: startDate + "T00:00:00", end: startDate + "T23:59:59" };
+  }
+  return { start: startDate + "T00:00:00", end: endDate + "T23:59:59" };
+}
+
+export function isAmountMetric(metric: TargetMetric | null | undefined): boolean {
+  return metric?.value_type === "AMOUNT";
+}
+
+export function slugifyKey(name: string): string {
+  return name
+    .toUpperCase()
+    .trim()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export async function fetchActiveMetrics(productId: string): Promise<TargetMetric[]> {
+  const { data, error } = await supabase
+    .from("target_metrics")
+    .select("*")
+    .eq("product_id", productId)
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+  if (error) return [];
+  return (data as TargetMetric[]) || [];
+}
+
+export async function fetchAllMetrics(productId: string): Promise<TargetMetric[]> {
+  const { data, error } = await supabase
+    .from("target_metrics")
+    .select("*")
+    .eq("product_id", productId)
+    .order("is_active", { ascending: false })
+    .order("display_order", { ascending: true });
+  if (error) return [];
+  return (data as TargetMetric[]) || [];
 }

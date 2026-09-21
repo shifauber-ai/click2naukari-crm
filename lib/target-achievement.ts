@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
-import type { Product, EmployeeTarget } from "@/lib/types";
-import { getTargetTypeConfig, getTargetDateRange } from "@/lib/target-config";
+import type { Product, EmployeeTarget, TargetMetric } from "@/lib/types";
+import { getTargetDateRange } from "@/lib/target-config";
 
 export interface AchievementResult {
   achieved: number;
@@ -10,17 +10,16 @@ export interface AchievementResult {
 
 export async function calculateAchievement(
   target: EmployeeTarget,
-  product: Product
+  product: Product,
+  metric?: TargetMetric | null
 ): Promise<AchievementResult> {
-  const config = getTargetTypeConfig(product, target.target_type);
-  if (!config) return { achieved: 0, remaining: target.target_value, progressPct: 0 };
-
   const { start, end } = getTargetDateRange(target.start_date, target.end_date, target.period_type);
-
   let achieved = 0;
 
-  if (config.metric === "payment_amount") {
-    let q = supabase
+  const isAmount = metric?.value_type === "AMOUNT" || target.target_type === "OLA_COLLECTION";
+
+  if (isAmount) {
+    const { data } = await supabase
       .from("payment_records")
       .select("amount, payment_status")
       .eq("employee_id", target.employee_id)
@@ -28,9 +27,10 @@ export async function calculateAchievement(
       .gte("created_at", start)
       .lte("created_at", end)
       .in("payment_status", ["COMPLETED", "SUCCESS", "SUCCESSFUL"]);
-    const { data } = await q;
     achieved = (data || []).reduce((sum, r) => sum + Number(r.amount || 0), 0);
   } else {
+    const metricKey = metric?.key || target.target_type;
+
     let q = supabase
       .from("leads")
       .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done")
@@ -39,22 +39,29 @@ export async function calculateAchievement(
       .gte("created_at", start)
       .lte("created_at", end);
 
-    if (config.platformFilter) {
-      q = q.ilike("platform", config.platformFilter);
-    }
-    if (config.cityFilter) {
-      q = q.ilike("city", config.cityFilter);
+    if (metricKey === "RAPIDO") {
+      q = q.ilike("platform", "Rapido");
     }
 
     const { data } = await q;
     const leads = data || [];
 
-    if (config.metric === "id_done_count") {
-      if (config.idDoneField) {
-        achieved = leads.filter((l) => l[config.idDoneField!] === true).length;
+    if (metricKey === "ULP" || metricKey === "MUMBAI_ULP" || metricKey === "PUNE_ULP") {
+      if (metricKey === "MUMBAI_ULP") {
+        achieved = leads.filter((l) => l.uber_id_done === true && l.city?.toLowerCase() === "mumbai").length;
+      } else if (metricKey === "PUNE_ULP") {
+        achieved = leads.filter((l) => l.uber_id_done === true && l.city?.toLowerCase() === "pune").length;
       } else {
-        achieved = leads.filter((l) => l.status === "ID_DONE").length;
+        achieved = leads.filter((l) => l.uber_id_done === true).length;
       }
+    } else if (metricKey === "MUMBAI_OLA") {
+      achieved = leads.filter((l) => l.ola_id_done === true && l.city?.toLowerCase() === "mumbai").length;
+    } else if (metricKey === "PUNE_OLA") {
+      achieved = leads.filter((l) => l.ola_id_done === true && l.city?.toLowerCase() === "pune").length;
+    } else if (metricKey === "RAPIDO") {
+      achieved = leads.filter((l) => l.rapido_id_done === true).length;
+    } else if (metricKey === "FT") {
+      achieved = leads.length;
     } else {
       achieved = leads.length;
     }
