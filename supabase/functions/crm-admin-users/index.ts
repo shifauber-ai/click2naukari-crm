@@ -126,10 +126,36 @@ Deno.serve(async (req: Request) => {
 
     if (action === "update") {
       if (!body.user_id) return json({ error: "user_id required" }, 400);
+
+      // Safety: never allow updating the caller's own account
+      if (body.user_id === callerId) {
+        return json({ error: "You cannot edit your own account from here" }, 400);
+      }
+
+      // If email is changing, update the auth user's email first
+      if (body.email !== undefined && body.email !== "") {
+        // Fetch current profile to compare email
+        const { data: currentProfile } = await adminClient
+          .from("profiles")
+          .select("email")
+          .eq("id", body.user_id)
+          .maybeSingle();
+        if (currentProfile && currentProfile.email !== body.email) {
+          const { error: authEmailErr } = await adminClient.auth.admin.updateUserById(
+            body.user_id,
+            { email: body.email, email_confirm: true }
+          );
+          if (authEmailErr) {
+            return json({ error: `Failed to update auth email: ${authEmailErr.message}` }, 400);
+          }
+        }
+      }
+
       const updates: Record<string, unknown> = {};
       if (body.full_name !== undefined) updates.full_name = body.full_name;
       if (body.phone !== undefined) updates.phone = body.phone;
       if (body.role !== undefined) updates.role = body.role;
+      if (body.email !== undefined && body.email !== "") updates.email = body.email;
       if (Object.keys(updates).length === 0) {
         return json({ error: "Nothing to update" }, 400);
       }
@@ -159,7 +185,13 @@ Deno.serve(async (req: Request) => {
         entity_id: body.user_id,
         metadata: updates,
       });
-      return json({ ok: true });
+      // Return the updated profile so caller can verify
+      const { data: updated } = await adminClient
+        .from("profiles")
+        .select("*")
+        .eq("id", body.user_id)
+        .maybeSingle();
+      return json({ ok: true, profile: updated });
     }
 
     if (action === "set_active") {

@@ -32,7 +32,7 @@ import { EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, MapPin, Trash2,
+  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, EyeOff, MapPin, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -73,6 +73,8 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
 
   const [editTargetId, setEditTargetId] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const isAdmin = profile?.role === "ADMIN";
 
@@ -145,12 +147,14 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     setRole("EMPLOYEE"); setIsActive(true);
     setSelectedCityIds(new Set());
     setSelectedProductIds(new Set([product.id]));
+    setShowPassword(false);
     setCreateOpen(true);
   };
 
   const openEditFromRow = (p: Profile & { assigned_cities?: string[] }) => {
     setEditTargetId(p.id);
     setFullName(p.full_name);
+    setEmail(p.email);
     setPhone(p.phone || "");
     setRole(p.role);
     setIsActive(p.is_active);
@@ -178,15 +182,17 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
-    const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
-      action: "create",
-      email, password, full_name: fullName, phone, role,
-      product_ids: productIds,
-    });
-    if (!ok) {
-      toast({ title: error || "Failed to create employee", variant: "destructive" });
-    } else {
+    try {
+      const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
+      const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
+        action: "create",
+        email, password, full_name: fullName, phone, role,
+        product_ids: productIds,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to create employee", variant: "destructive" });
+        return;
+      }
       // Save city assignments for this product
       const newUserId = (data as { user_id: string })?.user_id;
       if (newUserId && selectedCityIds.size > 0) {
@@ -198,23 +204,28 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       toast({ title: `${role === "ADMIN" ? "Admin" : role === "MANAGER" ? "Manager" : "Employee"} account created` });
       setCreateOpen(false);
       load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create employee", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
-    const { ok, error } = await callEdgeFunction("crm-admin-users", {
-      action: "update",
-      user_id: editTargetId,
-      full_name: fullName, phone, role,
-      product_ids: productIds,
-    });
-    if (!ok) {
-      toast({ title: error || "Failed to update", variant: "destructive" });
-    } else {
+    try {
+      const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+        action: "update",
+        user_id: editTargetId,
+        email, full_name: fullName, phone, role,
+        product_ids: productIds,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to update", variant: "destructive" });
+        return;
+      }
       // Sync city assignments for this product
       if (editTargetId) {
         await supabase.from("employee_product_cities")
@@ -229,8 +240,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       toast({ title: "Employee updated" });
       setEditOpen(false);
       load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to update", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const toggleActive = async (p: Profile) => {
@@ -248,6 +262,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const openReset = (p: Profile) => {
     setResetTarget(p);
     setNewPassword("");
+    setShowResetPassword(false);
     setResetOpen(true);
   };
 
@@ -255,16 +270,21 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     e.preventDefault();
     if (!resetTarget) return;
     setSaving(true);
-    const { ok, error } = await callEdgeFunction("crm-admin-users", {
-      action: "reset_password", user_id: resetTarget.id, password: newPassword,
-    });
-    if (!ok) {
-      toast({ title: error || "Failed to reset password", variant: "destructive" });
-    } else {
+    try {
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+        action: "reset_password", user_id: resetTarget.id, password: newPassword,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to reset password", variant: "destructive" });
+        return;
+      }
       toast({ title: "Password reset successfully" });
       setResetOpen(false);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to reset password", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const openDelete = (p: Profile) => {
@@ -311,12 +331,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
 
   const hasActiveFilters = search || roleFilter !== "ALL" || statusFilter !== "ALL" || assignmentFilter !== "ALL";
 
-  const formFields = () => (
-    <div className="space-y-3">
-      <div><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
-      <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-      <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
-      <div><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+  const sharedFields = () => (
+    <>
+      <div><Label>Full Name</Label><Input name="emp-full-name" autoComplete="off" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
+      <div><Label>Email</Label><Input name="emp-email" type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+      <div><Label>Phone</Label><Input name="emp-phone" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
       <div>
         <Label>Role</Label>
         <Select value={role} onValueChange={(v) => setRole(v as Role)}>
@@ -358,6 +377,30 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         ) : (
           <p className="text-sm text-muted-foreground mt-1">No cities configured for {product.name} yet.</p>
         )}
+      </div>
+    </>
+  );
+
+  const createFields = () => (
+    <div className="space-y-3">
+      {sharedFields()}
+      <div>
+        <Label>Password</Label>
+        <div className="relative">
+          <Input name="emp-new-password" type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="pr-10" />
+          <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const editFields = () => (
+    <div className="space-y-3">
+      {sharedFields()}
+      <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+        <p className="text-sm text-muted-foreground">Password is managed securely. Use the "Reset Password" button in the employee list to set a new password.</p>
       </div>
     </div>
   );
@@ -481,8 +524,8 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Employee — {product.name}</DialogTitle><DialogDescription>Create a new user. Product is automatically set to {product.name}.</DialogDescription></DialogHeader>
-          <form onSubmit={handleCreate}>
-            {formFields()}
+          <form onSubmit={handleCreate} autoComplete="off">
+            {createFields()}
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Creating..." : "Create"}</Button>
@@ -495,8 +538,8 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Employee — {product.name}</DialogTitle><DialogDescription>Update user details and city assignments for {product.name}</DialogDescription></DialogHeader>
-          <form onSubmit={handleEdit}>
-            {formFields()}
+          <form onSubmit={handleEdit} autoComplete="off">
+            {editFields()}
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
@@ -565,8 +608,16 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Reset Password</DialogTitle><DialogDescription>Set a new password for {resetTarget?.full_name}</DialogDescription></DialogHeader>
-          <form onSubmit={handleReset} className="space-y-3">
-            <div><Label>New Password</Label><Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></div>
+          <form onSubmit={handleReset} className="space-y-3" autoComplete="off">
+            <div>
+              <Label>New Password</Label>
+              <div className="relative">
+                <Input name="emp-reset-password" type={showResetPassword ? "text" : "password"} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="pr-10" />
+                <button type="button" onClick={() => setShowResetPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
+                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setResetOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>{saving ? "Resetting..." : "Reset Password"}</Button>
