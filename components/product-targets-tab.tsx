@@ -30,6 +30,11 @@ interface CityRow { id: string; city_name: string; is_active: boolean; }
 interface EmployeeTargetRow extends EmployeeTarget {
   employee?: Profile | null;
 }
+interface CallerOption {
+  id: string;
+  full_name: string;
+  isActive: boolean;
+}
 
 interface GridRow {
   employeeId: string;
@@ -46,7 +51,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
   const targetTypes = getTargetTypesForProduct(product);
 
   const [cities, setCities] = useState<CityRow[]>([]);
-  const [employees, setEmployees] = useState<Profile[]>([]);
+  const [employees, setEmployees] = useState<CallerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ saved: number; updated: number; skipped: number; errors: number } | null>(null);
@@ -73,19 +78,31 @@ export function ProductTargetsTab({ product }: { product: Product }) {
   }, [product.id]);
 
   const loadEmployees = useCallback(async () => {
+    if (!selectedCityId) {
+      setEmployees([]);
+      return;
+    }
     const { data } = await supabase
       .from("caller_queues")
-      .select("employee:profiles!employee_id(*)")
+      .select("is_active, employee:profiles!employee_id(id, full_name)")
       .eq("product_id", product.id)
-      .eq("is_active", true);
-    const empMap = new Map<string, Profile>();
-    (data as unknown as { employee: Profile }[] | null)?.forEach((r) => {
+      .eq("city_id", selectedCityId);
+    const empMap = new Map<string, CallerOption>();
+    (data as unknown as { is_active: boolean; employee: { id: string; full_name: string } | null }[] | null)?.forEach((r) => {
       if (r.employee && !empMap.has(r.employee.id)) {
-        empMap.set(r.employee.id, r.employee);
+        empMap.set(r.employee.id, {
+          id: r.employee.id,
+          full_name: r.employee.full_name,
+          isActive: r.is_active,
+        });
       }
     });
-    setEmployees(Array.from(empMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name)));
-  }, [product.id]);
+    setEmployees(
+      Array.from(empMap.values()).sort((a, b) =>
+        a.full_name.localeCompare(b.full_name)
+      )
+    );
+  }, [product.id, selectedCityId]);
 
   const loadExistingTargets = useCallback(async () => {
     if (!selectedCityId || !startDate) return;
@@ -132,11 +149,16 @@ export function ProductTargetsTab({ product }: { product: Product }) {
 
   useEffect(() => {
     loadCities();
-    loadEmployees();
-  }, [loadCities, loadEmployees]);
+  }, [loadCities]);
 
   useEffect(() => {
-    if (employees.length > 0 && selectedCityId) {
+    if (selectedCityId) {
+      loadEmployees();
+    }
+  }, [selectedCityId, loadEmployees]);
+
+  useEffect(() => {
+    if (selectedCityId) {
       buildGrid();
     }
   }, [employees, selectedCityId, period, startDate, endDate, buildGrid]);
@@ -436,10 +458,10 @@ export function ProductTargetsTab({ product }: { product: Product }) {
         <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Loading target sheet...</span>
         </div>
-      ) : employees.length === 0 ? (
-        <EmptyState icon={Target} title="No employees assigned" description="Assign employees to this product's caller queue first." />
       ) : !selectedCityId ? (
         <EmptyState icon={Target} title="No city selected" description="Select a city to manage targets." />
+      ) : employees.length === 0 ? (
+        <EmptyState icon={Target} title="No callers in queue" description={`No callers are assigned to ${product.name} for ${selectedCity?.city_name || "this city"} in the Caller Queue.`} />
       ) : (
         <Card className="border-border/60">
           <CardContent className="p-0">
@@ -474,7 +496,9 @@ export function ProductTargetsTab({ product }: { product: Product }) {
                             </SelectTrigger>
                             <SelectContent>
                               {employees.map((e) => (
-                                <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
+                                <SelectItem key={e.id} value={e.id}>
+                                  {e.full_name}{e.isActive ? "" : " — Inactive"}
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -531,7 +555,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
       )}
 
       {/* Add row button */}
-      {!loading && employees.length > 0 && selectedCityId && (
+      {!loading && selectedCityId && employees.length > 0 && (
         <Button variant="outline" size="sm" className="gap-2" onClick={addRow}>
           <Plus className="h-4 w-4" /> Add Row
         </Button>
