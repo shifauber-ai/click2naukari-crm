@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Product, Profile, EmployeeTarget, TargetPeriodType } from "@/lib/types";
 import {
   getTargetTypesForProduct,
-  getTargetTypeConfig,
   PERIOD_LABELS,
   computeDefaultDates,
+  isAmountTarget,
 } from "@/lib/target-config";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -17,45 +17,60 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState, StatCard } from "@/components/page-parts";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/page-parts";
 import {
-  Target, Plus, Pencil, Power, Loader2, CheckCircle2, XCircle,
+  Target, Plus, Trash2, Loader2, Save, ClipboardPaste,
+  CheckCircle2, AlertCircle, TableProperties,
 } from "lucide-react";
 import { format } from "date-fns";
 
-interface TargetRow extends EmployeeTarget {
+interface CityRow { id: string; city_name: string; is_active: boolean; }
+interface EmployeeTargetRow extends EmployeeTarget {
   employee?: Profile | null;
 }
+
+interface GridRow {
+  employeeId: string;
+  employeeName: string;
+  values: Record<string, string>;
+  existingTargets: Record<string, EmployeeTargetRow>;
+}
+
+type PeriodKey = "DAILY" | "WEEKLY";
 
 export function ProductTargetsTab({ product }: { product: Product }) {
   const { profile } = useAuth();
   const { toast } = useToast();
   const targetTypes = getTargetTypesForProduct(product);
 
-  const [targets, setTargets] = useState<TargetRow[]>([]);
+  const [cities, setCities] = useState<CityRow[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<TargetRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ saved: number; updated: number; skipped: number; errors: number } | null>(null);
 
-  const [form, setForm] = useState({
-    employeeId: "",
-    targetType: "",
-    targetValue: "",
-    periodType: "DAILY" as TargetPeriodType,
-    startDate: "",
-    endDate: "",
-  });
+  const [period, setPeriod] = useState<PeriodKey>("DAILY");
+  const [selectedCityId, setSelectedCityId] = useState<string>("");
+  const [startDate, setStartDate] = useState(computeDefaultDates("DAILY").start);
+  const [endDate, setEndDate] = useState(computeDefaultDates("DAILY").end);
+
+  const [gridRows, setGridRows] = useState<GridRow[]>([]);
+  const pasteAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  const loadCities = useCallback(async () => {
+    const { data } = await supabase
+      .from("product_cities")
+      .select("id, city_name, is_active")
+      .eq("product_id", product.id)
+      .order("city_name");
+    const active = ((data as CityRow[]) || []).filter((c) => c.is_active);
+    setCities(active);
+    if (active.length > 0 && !selectedCityId) {
+      setSelectedCityId(active[0].id);
+    }
+  }, [product.id]);
 
   const loadEmployees = useCallback(async () => {
     const { data } = await supabase
@@ -72,295 +87,455 @@ export function ProductTargetsTab({ product }: { product: Product }) {
     setEmployees(Array.from(empMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name)));
   }, [product.id]);
 
-  const loadTargets = useCallback(async () => {
-    setLoading(true);
+  const loadExistingTargets = useCallback(async () => {
+    if (!selectedCityId || !startDate) return;
+    const end = period === "DAILY" ? startDate : endDate;
     const { data } = await supabase
       .from("employee_targets")
       .select("*, employee:profiles!employee_id(full_name, email)")
       .eq("product_id", product.id)
-      .order("created_at", { ascending: false });
-    setTargets((data as TargetRow[]) || []);
+      .eq("city_id", selectedCityId)
+      .eq("period_type", period)
+      .eq("start_date", startDate)
+      .eq("end_date", end);
+    return (data as EmployeeTargetRow[]) || [];
+  }, [product.id, selectedCityId, period, startDate, endDate]);
+
+  const buildGrid = useCallback(async () => {
+    setLoading(true);
+    const existing = await loadExistingTargets();
+    const existingMap: Record<string, Record<string, EmployeeTargetRow>> = {};
+    existing?.forEach((t) => {
+      if (!t.employee_id) return;
+      if (!existingMap[t.employee_id]) existingMap[t.employee_id] = {};
+      existingMap[t.employee_id][t.target_type] = t;
+    });
+
+    const rows: GridRow[] = employees.map((e) => {
+      const empTargets = existingMap[e.id] || {};
+      const values: Record<string, string> = {};
+      for (const tt of targetTypes) {
+        const existing_t = empTargets[tt.key];
+        values[tt.key] = existing_t ? String(existing_t.target_value) : "";
+      }
+      return {
+        employeeId: e.id,
+        employeeName: e.full_name,
+        values,
+        existingTargets: empTargets,
+      };
+    });
+    setGridRows(rows);
+    setSaveResult(null);
     setLoading(false);
-  }, [product.id]);
+  }, [employees, targetTypes, loadExistingTargets]);
 
   useEffect(() => {
+    loadCities();
     loadEmployees();
-    loadTargets();
-  }, [loadEmployees, loadTargets]);
+  }, [loadCities, loadEmployees]);
 
-  const openCreate = () => {
-    setEditing(null);
-    const dates = computeDefaultDates("DAILY");
-    setForm({
-      employeeId: "",
-      targetType: targetTypes[0]?.key || "",
-      targetValue: "",
-      periodType: "DAILY",
-      startDate: dates.start,
-      endDate: dates.end,
+  useEffect(() => {
+    if (employees.length > 0 && selectedCityId) {
+      buildGrid();
+    }
+  }, [employees, selectedCityId, period, startDate, endDate, buildGrid]);
+
+  const onPeriodChange = (p: PeriodKey) => {
+    const dates = computeDefaultDates(p);
+    setPeriod(p);
+    setStartDate(dates.start);
+    setEndDate(dates.end);
+  };
+
+  const updateCellValue = (rowIdx: number, targetTypeKey: string, value: string) => {
+    setGridRows((rows) => {
+      const next = [...rows];
+      next[rowIdx] = {
+        ...next[rowIdx],
+        values: { ...next[rowIdx].values, [targetTypeKey]: value },
+      };
+      return next;
     });
-    setDialogOpen(true);
   };
 
-  const openEdit = (t: TargetRow) => {
-    setEditing(t);
-    setForm({
-      employeeId: t.employee_id,
-      targetType: t.target_type,
-      targetValue: String(t.target_value),
-      periodType: t.period_type,
-      startDate: t.start_date,
-      endDate: t.end_date,
+  const addRow = () => {
+    setGridRows((rows) => [
+      ...rows,
+      { employeeId: "", employeeName: "", values: {}, existingTargets: {} },
+    ]);
+  };
+
+  const removeRow = (idx: number) => {
+    setGridRows((rows) => rows.filter((_, i) => i !== idx));
+  };
+
+  const onEmployeeSelect = (idx: number, empId: string) => {
+    const emp = employees.find((e) => e.id === empId);
+    setGridRows((rows) => {
+      const next = [...rows];
+      next[idx] = { ...next[idx], employeeId: empId, employeeName: emp?.full_name || "" };
+      return next;
     });
-    setDialogOpen(true);
   };
 
-  const onPeriodChange = (period: TargetPeriodType) => {
-    const dates = computeDefaultDates(period);
-    setForm((f) => ({ ...f, periodType: period, startDate: dates.start, endDate: dates.end }));
+  const handlePaste = () => {
+    const text = pasteAreaRef.current?.value || "";
+    if (!text.trim()) {
+      toast({ title: "Nothing to paste", variant: "destructive" });
+      return;
+    }
+    const lines = text.trim().split(/\r?\n/);
+    const newRows: GridRow[] = [];
+    for (const line of lines) {
+      const cells = line.split("\t");
+      const name = (cells[0] || "").trim();
+      if (!name) continue;
+      const emp = employees.find((e) => e.full_name.toLowerCase() === name.toLowerCase());
+      const values: Record<string, string> = {};
+      targetTypes.forEach((tt, i) => {
+        values[tt.key] = (cells[i + 1] || "").trim();
+      });
+      newRows.push({
+        employeeId: emp?.id || "",
+        employeeName: name,
+        values,
+        existingTargets: {},
+      });
+    }
+    if (newRows.length === 0) {
+      toast({ title: "No valid rows parsed from clipboard", variant: "destructive" });
+      return;
+    }
+    setGridRows(newRows);
+    if (pasteAreaRef.current) pasteAreaRef.current.value = "";
+    toast({ title: `Pasted ${newRows.length} rows` });
   };
 
-  const save = async () => {
-    if (!form.employeeId || !form.targetType || !form.targetValue || !form.startDate) {
-      toast({ title: "Please fill all fields", variant: "destructive" });
-      return;
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (pasteAreaRef.current) pasteAreaRef.current.value = text;
+      handlePaste();
+    } catch {
+      toast({ title: "Clipboard access denied. Paste manually into the text area.", variant: "destructive" });
     }
-    if (form.periodType === "CUSTOM" && !form.endDate) {
-      toast({ title: "End date is required for Custom period", variant: "destructive" });
-      return;
-    }
+  };
 
-    const value = parseFloat(form.targetValue);
-    if (isNaN(value) || value < 0) {
-      toast({ title: "Target value must be a valid number", variant: "destructive" });
+  const saveAll = async () => {
+    const end = period === "DAILY" ? startDate : endDate;
+    let saved = 0, updated = 0, skipped = 0, errors = 0;
+
+    const validRows = gridRows.filter((r) => r.employeeId);
+    if (validRows.length === 0) {
+      toast({ title: "No valid rows with employees selected", variant: "destructive" });
       return;
     }
-
-    const endDate = form.periodType === "DAILY" ? form.startDate : form.endDate;
 
     setSaving(true);
-    const payload = {
-      employee_id: form.employeeId,
-      product_id: product.id,
-      target_type: form.targetType,
-      target_value: value,
-      period_type: form.periodType,
-      start_date: form.startDate,
-      end_date: endDate,
-      is_active: true,
-    };
-
-    if (editing) {
-      const { error } = await supabase
-        .from("employee_targets")
-        .update({
-          target_type: payload.target_type,
-          target_value: payload.target_value,
-          period_type: payload.period_type,
-          start_date: payload.start_date,
-          end_date: payload.end_date,
-        })
-        .eq("id", editing.id);
-      if (error) {
-        toast({ title: error.message, variant: "destructive" });
-      } else {
-        toast({ title: "Target updated successfully" });
-        setDialogOpen(false);
-        loadTargets();
-      }
-    } else {
-      const { error } = await supabase.from("employee_targets").insert({
-        ...payload,
-        created_by: profile?.id,
-      });
-      if (error) {
-        if (error.code === "23505") {
-          toast({ title: "An active target already exists for this employee, type, and period", variant: "destructive" });
-        } else {
-          toast({ title: error.message, variant: "destructive" });
+    for (const row of validRows) {
+      for (const tt of targetTypes) {
+        const rawVal = row.values[tt.key];
+        if (rawVal === undefined || rawVal === "") {
+          continue;
         }
-      } else {
-        toast({ title: "Target created successfully" });
-        setDialogOpen(false);
-        loadTargets();
+        const numVal = parseFloat(rawVal);
+        if (isNaN(numVal) || numVal < 0) {
+          errors++;
+          continue;
+        }
+
+        const existing = row.existingTargets[tt.key];
+        const payload = {
+          employee_id: row.employeeId,
+          product_id: product.id,
+          city_id: selectedCityId,
+          target_type: tt.key,
+          target_value: numVal,
+          period_type: period,
+          start_date: startDate,
+          end_date: end,
+          is_active: true,
+        };
+
+        if (existing) {
+          const { error } = await supabase
+            .from("employee_targets")
+            .update({ target_value: numVal, is_active: true })
+            .eq("id", existing.id);
+          if (error) errors++;
+          else updated++;
+        } else {
+          const { error } = await supabase
+            .from("employee_targets")
+            .insert({ ...payload, created_by: profile?.id });
+          if (error) {
+            if (error.code === "23505") {
+              const { error: upErr } = await supabase
+                .from("employee_targets")
+                .update({ target_value: numVal, is_active: true })
+                .eq("employee_id", row.employeeId)
+                .eq("product_id", product.id)
+                .eq("city_id", selectedCityId)
+                .eq("target_type", tt.key)
+                .eq("period_type", period)
+                .eq("start_date", startDate);
+              if (upErr) errors++;
+              else updated++;
+            } else {
+              errors++;
+            }
+          } else {
+            saved++;
+          }
+        }
       }
+      skipped++;
     }
+
+    setSaveResult({ saved, updated, skipped: validRows.length - saved - updated + skipped, errors });
     setSaving(false);
+    toast({
+      title: `Save complete: ${saved} new, ${updated} updated, ${errors} errors`,
+      variant: errors > 0 ? "destructive" : "default",
+    });
+    buildGrid();
   };
 
-  const toggleActive = async (t: TargetRow) => {
-    const { error } = await supabase
-      .from("employee_targets")
-      .update({ is_active: !t.is_active })
-      .eq("id", t.id);
-    if (error) {
-      toast({ title: error.message, variant: "destructive" });
-    } else {
-      toast({ title: t.is_active ? "Target deactivated" : "Target activated" });
-      loadTargets();
-    }
-  };
+  const colTotals: Record<string, number> = {};
+  targetTypes.forEach((tt) => {
+    colTotals[tt.key] = gridRows.reduce((sum, r) => {
+      const v = parseFloat(r.values[tt.key] || "");
+      return sum + (isNaN(v) ? 0 : v);
+    }, 0);
+  });
 
-  const activeCount = targets.filter((t) => t.is_active).length;
-  const inactiveCount = targets.length - activeCount;
+  const selectedCity = cities.find((c) => c.id === selectedCityId);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold tracking-tight">{product.name} Targets</h2>
-          <p className="text-sm text-muted-foreground">Set and manage performance targets for assigned employees</p>
+          <h2 className="text-lg font-bold tracking-tight">{product.name} Target Sheet</h2>
+          <p className="text-sm text-muted-foreground">Bulk target entry — edit cells like a spreadsheet</p>
         </div>
-        <Button onClick={openCreate} size="sm" className="gap-2">
-          <Plus className="h-4 w-4" /> Add Target
-        </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard label="Total Targets" value={targets.length} icon={Target} tone="default" />
-        <StatCard label="Active" value={activeCount} icon={CheckCircle2} tone="success" />
-        <StatCard label="Inactive" value={inactiveCount} icon={XCircle} tone="danger" />
+      {/* Controls */}
+      <Card className="border-border/60">
+        <CardContent className="flex flex-wrap items-end gap-4 p-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Period</Label>
+            <Select value={period} onValueChange={(v) => onPeriodChange(v as PeriodKey)}>
+              <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DAILY">Today</SelectItem>
+                <SelectItem value="WEEKLY">Weekly</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">City</Label>
+            <Select value={selectedCityId} onValueChange={setSelectedCityId}>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Select city" /></SelectTrigger>
+              <SelectContent>
+                {cities.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.city_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Start Date</Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-[150px]"
+            />
+          </div>
+
+          {period === "WEEKLY" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">End Date</Label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-[150px]"
+              />
+            </div>
+          )}
+
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={handlePasteFromClipboard}>
+              <ClipboardPaste className="h-4 w-4" /> Paste from Clipboard
+            </Button>
+            <Button size="sm" className="gap-2" onClick={saveAll} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save All Targets
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Header info */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Badge variant="outline" className="border-border/60">
+          <Target className="mr-1 h-3.5 w-3.5" /> {product.name}
+        </Badge>
+        {selectedCity && (
+          <Badge variant="outline" className="border-border/60">{selectedCity.city_name}</Badge>
+        )}
+        <Badge variant="outline" className="border-border/60">{PERIOD_LABELS[period]}</Badge>
+        <Badge variant="outline" className="border-border/60">
+          {format(new Date(startDate), "dd MMM yyyy")}
+          {period === "WEEKLY" && ` — ${format(new Date(endDate), "dd MMM yyyy")}`}
+        </Badge>
       </div>
 
+      {/* Save result */}
+      {saveResult && (
+        <div className="flex flex-wrap gap-3 rounded-lg border border-border/60 bg-card p-3">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+            <CheckCircle2 className="h-4 w-4" /> Saved: {saveResult.saved}
+          </span>
+          <span className="flex items-center gap-1.5 text-sm font-medium text-blue-600">
+            <CheckCircle2 className="h-4 w-4" /> Updated: {saveResult.updated}
+          </span>
+          {saveResult.errors > 0 && (
+            <span className="flex items-center gap-1.5 text-sm font-medium text-destructive">
+              <AlertCircle className="h-4 w-4" /> Errors: {saveResult.errors}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Paste area */}
+      <Card className="border-border/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">Paste from Excel</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <textarea
+            ref={pasteAreaRef}
+            className="w-full rounded-lg border border-border/60 bg-background p-3 font-mono text-xs"
+            rows={4}
+            placeholder={`Paste tab-separated data here:\nCaller Name\tULP\tFT\nNeha Sharma\t30\t20\nPramila\t30\t20`}
+          />
+          <Button variant="outline" size="sm" className="gap-2" onClick={handlePaste}>
+            <TableProperties className="h-4 w-4" /> Parse Pasted Data
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Target Grid */}
       {loading ? (
         <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Loading targets...</span>
+          <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Loading target sheet...</span>
         </div>
-      ) : targets.length === 0 ? (
-        <EmptyState icon={Target} title="No targets set" description="Create a target to track employee performance for this product." />
+      ) : employees.length === 0 ? (
+        <EmptyState icon={Target} title="No employees assigned" description="Assign employees to this product's caller queue first." />
+      ) : !selectedCityId ? (
+        <EmptyState icon={Target} title="No city selected" description="Select a city to manage targets." />
       ) : (
         <Card className="border-border/60">
-          <CardHeader><CardTitle className="text-base">Target List</CardTitle></CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Target Type</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>End Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {targets.map((t) => {
-                  const tc = getTargetTypeConfig(product, t.target_type);
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium">{t.employee?.full_name || "—"}</TableCell>
-                      <TableCell>{tc?.label || t.target_type}</TableCell>
-                      <TableCell className="font-semibold">
-                        {t.target_type === "OLA_COLLECTION" ? `₹${t.target_value.toLocaleString("en-IN")}` : t.target_value}
-                      </TableCell>
-                      <TableCell>{PERIOD_LABELS[t.period_type] || t.period_type}</TableCell>
-                      <TableCell>{format(new Date(t.start_date), "dd MMM yyyy")}</TableCell>
-                      <TableCell>{format(new Date(t.end_date), "dd MMM yyyy")}</TableCell>
-                      <TableCell>
-                        <Badge variant={t.is_active ? "default" : "secondary"} className={t.is_active ? "bg-success text-success-foreground" : ""}>
-                          {t.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(t)} title="Edit">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleActive(t)} title={t.is_active ? "Deactivate" : "Activate"}>
-                            <Power className={`h-3.5 w-3.5 ${t.is_active ? "text-success" : "text-muted-foreground"}`} />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/30">
+                    <th className="sticky left-0 z-10 min-w-[180px] bg-muted/30 px-3 py-2.5 text-left font-semibold">
+                      Caller Name
+                    </th>
+                    {targetTypes.map((tt) => (
+                      <th key={tt.key} className="min-w-[100px] px-3 py-2.5 text-center font-semibold">
+                        {tt.label}
+                      </th>
+                    ))}
+                    <th className="w-[50px] px-2 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {gridRows.map((row, idx) => (
+                    <tr key={idx} className="border-b border-border/40 hover:bg-muted/10">
+                      <td className="sticky left-0 z-10 bg-card px-3 py-1.5">
+                        {row.employeeId ? (
+                          <span className="font-medium">{row.employeeName}</span>
+                        ) : (
+                          <Select
+                            value={row.employeeId}
+                            onValueChange={(v) => onEmployeeSelect(idx, v)}
+                          >
+                            <SelectTrigger className="h-8 w-full">
+                              <SelectValue placeholder="Select employee" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {employees.map((e) => (
+                                <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </td>
+                      {targetTypes.map((tt) => (
+                        <td key={tt.key} className="px-1.5 py-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            step={isAmountTarget(tt.key) ? "100" : "1"}
+                            value={row.values[tt.key] || ""}
+                            onChange={(e) => updateCellValue(idx, tt.key, e.target.value)}
+                            placeholder="—"
+                            className={`h-8 w-full rounded-md border border-transparent bg-transparent px-2 text-center text-sm outline-none transition-colors hover:border-border/60 focus:border-primary focus:bg-background ${
+                              isAmountTarget(tt.key) ? "font-semibold" : ""
+                            }`}
+                          />
+                        </td>
+                      ))}
+                      <td className="px-2 py-1.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {gridRows.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-border/60 bg-muted/20 font-semibold">
+                      <td className="sticky left-0 z-10 bg-muted/20 px-3 py-2.5">Total</td>
+                      {targetTypes.map((tt) => (
+                        <td key={tt.key} className="px-3 py-2.5 text-center">
+                          {isAmountTarget(tt.key)
+                            ? `₹${(colTotals[tt.key] || 0).toLocaleString("en-IN")}`
+                            : (colTotals[tt.key] || 0)}
+                        </td>
+                      ))}
+                      <td />
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Target" : "Add Target"}</DialogTitle>
-            <DialogDescription>
-              {editing ? "Update target details" : `Create a performance target for ${product.name}`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Employee</Label>
-              <Select value={form.employeeId} onValueChange={(v) => setForm((f) => ({ ...f, employeeId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {employees.length === 0 && (
-                <p className="text-xs text-muted-foreground">No active employees assigned to this product.</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Target Type</Label>
-              <Select value={form.targetType} onValueChange={(v) => setForm((f) => ({ ...f, targetType: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select target type" /></SelectTrigger>
-                <SelectContent>
-                  {targetTypes.map((t) => (
-                    <SelectItem key={t.key} value={t.key}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Target Value</Label>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={form.targetValue}
-                onChange={(e) => setForm((f) => ({ ...f, targetValue: e.target.value }))}
-                placeholder="Enter target value"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Period</Label>
-                <Select value={form.periodType} onValueChange={(v) => onPeriodChange(v as TargetPeriodType)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="DAILY">Daily</SelectItem>
-                    <SelectItem value="WEEKLY">Weekly</SelectItem>
-                    <SelectItem value="MONTHLY">Monthly</SelectItem>
-                    <SelectItem value="CUSTOM">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Start Date</Label>
-                <Input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
-              </div>
-            </div>
-            {form.periodType === "CUSTOM" && (
-              <div className="space-y-2">
-                <Label>End Date</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={save} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {editing ? "Update" : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Add row button */}
+      {!loading && employees.length > 0 && selectedCityId && (
+        <Button variant="outline" size="sm" className="gap-2" onClick={addRow}>
+          <Plus className="h-4 w-4" /> Add Row
+        </Button>
+      )}
     </div>
   );
 }

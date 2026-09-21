@@ -428,12 +428,13 @@ export interface ManagerProductAssignment {
   product?: Product | null;
 }
 
-export type TargetPeriodType = "DAILY" | "WEEKLY" | "MONTHLY" | "CUSTOM";
+export type TargetPeriodType = "DAILY" | "WEEKLY";
 
 export interface EmployeeTarget {
   id: string;
   employee_id: string;
   product_id: string;
+  city_id: string | null;
   target_type: string;
   target_value: number;
   period_type: TargetPeriodType;
