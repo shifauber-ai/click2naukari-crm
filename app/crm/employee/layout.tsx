@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, Users, Calendar, Star, CheckCircle2,
   AlertTriangle, BarChart3, Phone, CreditCard, Bell,
-  Menu, LogOut, ChevronDown, Building2, X, PhoneCall, Tag,
+  Menu, LogOut, ChevronDown, Building2, X, PhoneCall, Tag, Target,
 } from "lucide-react";
 import { format } from "date-fns";
 import { EmployeeProductContext } from "@/lib/employee-context";
@@ -155,6 +155,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     { href: "/crm/employee/reports", label: "Reports", icon: BarChart3 },
     { href: "/crm/employee/call-history", label: "Call History", icon: Phone },
   );
+  navItems.push({ href: "/crm/employee/targets", label: "My Targets", icon: Target });
 
   const isActive = (href: string) =>
     href === "/crm/employee" ? pathname === "/crm/employee" : pathname.startsWith(href);

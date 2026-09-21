@@ -13,18 +13,20 @@ import { ProductImportExportTab } from "@/components/product-import-export-tab";
 import { ProductPaymentTab } from "@/components/product-payment-tab";
 import { ProductEmployeeTab } from "@/components/product-employee-tab";
 import { ProductQRTab } from "@/components/product-qr-tab";
+import { ProductTargetsTab } from "@/components/product-targets-tab";
+import { shouldShowTargetTab } from "@/lib/target-config";
 import { HCLeadsTab } from "@/components/hc-leads-tab";
 import { HCCityTab } from "@/components/hc-city-tab";
 import { PageHeader, EmptyState } from "@/components/page-parts";
 import { cn } from "@/lib/utils";
 import {
   Phone, Wallet, PhoneCall, Smartphone, BarChart3, MapPin,
-  BookMarked, Upload, Users, QrCode, CheckCircle2, type LucideIcon,
+  BookMarked, Upload, Users, QrCode, CheckCircle2, Target, type LucideIcon,
 } from "lucide-react";
 
 export type ProductTab =
   | "leads" | "id-done" | "payment" | "callers-queue" | "platforms"
-  | "reports" | "city" | "directory" | "import-export" | "employee" | "qr";
+  | "reports" | "city" | "directory" | "import-export" | "employee" | "qr" | "targets";
 
 interface TabDef { key: ProductTab; label: string; icon: LucideIcon; }
 
@@ -48,6 +50,7 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
     { key: "city", label: "City", icon: MapPin },
     { key: "import-export", label: "Import / Export", icon: Upload },
     { key: "employee", label: "Employee", icon: Users },
+    ...(shouldShowTargetTab(product) ? [{ key: "targets" as ProductTab, label: "Target", icon: Target }] : []),
   ];
 
   return (
@@ -89,6 +92,7 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
       {activeTab === "city" && <ProductCityTab product={product} />}
       {activeTab === "reports" && <ProductReportsTab product={product} />}
       {activeTab === "employee" && <ProductEmployeeTab product={product} />}
+      {activeTab === "targets" && shouldShowTargetTab(product) && <ProductTargetsTab product={product} />}
     </div>
   );
 }
@@ -106,6 +110,7 @@ function TabPlaceholder({ tab, productName }: { tab: ProductTab; productName: st
     "employee": { title: "Employee", desc: `Manage employees assigned to ${productName}`, icon: Users },
     "qr": { title: "QR", desc: `Manage payment QR codes for ${productName}`, icon: QrCode },
     "id-done": { title: "ID Done", desc: `Leads with ID Done status for ${productName}`, icon: CheckCircle2 },
+    "targets": { title: "Target", desc: `Manage employee performance targets for ${productName}`, icon: Target },
   };
   const info = labels[tab];
   return <EmptyState icon={info.icon} title={`${info.title} — Coming Soon`} description={info.desc} />;
