@@ -170,18 +170,53 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     setSearch(""); setStatusFilter("ALL"); setQueueFilter("ALL"); setPriorityFilter("ALL"); setCityFilter("ALL");
   };
 
-  // Get active employees not already in queue
-  const [allEmployees, setAllEmployees] = useState<Profile[]>([]);
+  // Employees assigned to this product with their city assignments.
+  // Keyed by employee_id -> { profile, cityIds: Set<city_id> }
+  const [productAssignments, setProductAssignments] = useState<
+    Map<string, { profile: Profile; cityIds: Set<string> }>
+  >(new Map());
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("is_active", true).order("full_name");
-      setAllEmployees((data as Profile[]) || []);
+      const { data } = await supabase
+        .from("employee_product_cities")
+        .select("employee_id, city_id, employee:profiles!employee_id(*)")
+        .eq("product_id", product.id);
+      const map = new Map<string, { profile: Profile; cityIds: Set<string> }>();
+      (data as unknown as { employee_id: string; city_id: string; employee: Profile }[] | null)?.forEach((r) => {
+        if (!r.employee) return;
+        const existing = map.get(r.employee_id);
+        if (existing) {
+          if (r.city_id) existing.cityIds.add(r.city_id);
+        } else {
+          map.set(r.employee_id, {
+            profile: r.employee,
+            cityIds: new Set(r.city_id ? [r.city_id] : []),
+          });
+        }
+      });
+      setProductAssignments(map);
     })();
-  }, []);
+  }, [product.id]);
 
-  const availableEmployees = allEmployees.filter(
-    (e) => !queue.some((q) => q.employee_id === e.id)
-  );
+  // Available employees for the Add Caller dropdown, filtered by product + selected city.
+  // An employee is eligible if they are assigned to this product AND (when a specific city
+  // is selected) assigned to that city. Employees already in the queue for the same
+  // product + city are excluded.
+  const availableEmployees = (() => {
+    const selectedCityId = addCityId !== "__none__" ? addCityId : null;
+    const result: Profile[] = [];
+    productAssignments.forEach(({ profile, cityIds }) => {
+      if (selectedCityId && !cityIds.has(selectedCityId)) return;
+      const alreadyInQueue = queue.some(
+        (q) =>
+          q.employee_id === profile.id &&
+          ((q.city_id ?? null) === (selectedCityId ?? null))
+      );
+      if (alreadyInQueue) return;
+      result.push(profile);
+    });
+    return result.sort((a, b) => a.full_name.localeCompare(b.full_name));
+  })();
 
   // ===== Add caller =====
   const handleAdd = async (e: React.FormEvent) => {
@@ -556,28 +591,28 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Add Caller to {product.name} Queue</DialogTitle>
-            <DialogDescription>Select an active employee to add to this product's caller queue.</DialogDescription>
+            <DialogDescription>Select an employee assigned to this product (and city, if chosen) to add to the caller queue.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAdd} className="space-y-3">
             <div>
-              <Label>Caller</Label>
-              <Select value={addEmpId} onValueChange={setAddEmpId}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {availableEmployees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>City (optional — leave blank for product-wide)</Label>
-              <Select value={addCityId} onValueChange={setAddCityId}>
+              <Select value={addCityId} onValueChange={(v) => { setAddCityId(v); setAddEmpId(""); }}>
                 <SelectTrigger><SelectValue placeholder="Product-wide" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Product-wide</SelectItem>
                   {productCities.map((c) => <SelectItem key={c.id} value={c.id}>{c.city_name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="mt-1 text-xs text-muted-foreground">Same caller can be added to multiple city queues separately.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Only employees assigned to the selected city will be listed. Same caller can be added to multiple city queues separately.</p>
+            </div>
+            <div>
+              <Label>Caller</Label>
+              <Select value={addEmpId} onValueChange={setAddEmpId}>
+                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                <SelectContent>
+                  {availableEmployees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}{!e.is_active ? " — Inactive" : ""}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Priority (lower = higher priority)</Label>
