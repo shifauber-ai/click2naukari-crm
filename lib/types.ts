@@ -427,22 +427,3 @@ export interface ManagerProductAssignment {
   created_at: string;
   product?: Product | null;
 }
-
-export type TargetPeriodType = "DAILY" | "WEEKLY" | "MONTHLY" | "CUSTOM";
-
-export interface EmployeeTarget {
-  id: string;
-  employee_id: string;
-  product_id: string;
-  target_type: string;
-  target_value: number;
-  period_type: TargetPeriodType;
-  start_date: string;
-  end_date: string | null;
-  is_active: boolean;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  employee?: Profile | null;
-  product?: Product | null;
-}
