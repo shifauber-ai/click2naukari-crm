@@ -52,8 +52,6 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization") || "";
     const token = authHeader.replace("Bearer ", "");
 
-    console.log("[crm-admin-users] supabaseUrl:", supabaseUrl, "action incoming");
-
     // Verify the caller's session and role using the anon-key client.
     const callerClient = createClient(supabaseUrl, anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -62,10 +60,8 @@ Deno.serve(async (req: Request) => {
     const { data: callerData, error: callerErr } =
       await callerClient.auth.getUser();
     if (callerErr || !callerData.user) {
-      console.error("[crm-admin-users] getUser error:", callerErr?.message);
       return json({ error: "Unauthorized" }, 401);
     }
-    console.log("[crm-admin-users] caller:", callerData.user.id);
     const callerId = callerData.user.id;
     const { data: callerProfile } = await callerClient
       .from("profiles")
@@ -82,7 +78,6 @@ Deno.serve(async (req: Request) => {
 
     const body: ActionRequest = await req.json();
     const action = body.action;
-    console.log("[crm-admin-users] action:", action, "user_id:", body.user_id);
 
     if (action === "create") {
       if (!body.email || !body.password || !body.full_name) {
@@ -231,37 +226,29 @@ Deno.serve(async (req: Request) => {
 
     if (action === "reset_password") {
       if (!body.user_id || !body.password) {
-        return json({ success: false, error: "user_id and password required" }, 400);
+        return json({ error: "user_id and password required" }, 400);
       }
       if (body.password.length < 6) {
-        return json({ success: false, error: "Password must be at least 6 characters" }, 400);
+        return json({ error: "Password must be at least 6 characters" }, 400);
       }
-
-      console.log("[reset_password] target user_id:", body.user_id);
 
       // Verify the target user exists in Supabase Auth before updating
       const { data: targetUser, error: lookupErr } =
         await adminClient.auth.admin.getUserById(body.user_id);
       if (lookupErr || !targetUser.user) {
-        console.error("[reset_password] getUserById error:", lookupErr?.message);
         return json(
-          { success: false, error: `Target user not found in Auth: ${lookupErr?.message || "no user returned"}` },
+          { error: `Target user not found in Auth: ${lookupErr?.message || "no user returned"}` },
           404
         );
       }
 
-      console.log("[reset_password] target user found, updating password");
-
-      const { data: updateData, error: updateErr } = await adminClient.auth.admin.updateUserById(
+      const { error: updateErr } = await adminClient.auth.admin.updateUserById(
         body.user_id,
         { password: body.password }
       );
       if (updateErr) {
-        console.error("[reset_password] updateUserById error:", updateErr.message);
-        return json({ success: false, error: updateErr.message }, 400);
+        return json({ error: updateErr.message }, 400);
       }
-
-      console.log("[reset_password] password updated successfully");
 
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
