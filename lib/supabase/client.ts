@@ -68,16 +68,20 @@ export const supabaseConfigError =
     ? 'Supabase configuration is missing or invalid. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your deployment environment.'
     : null;
 
-export const supabaseUrl = (supabaseUrlRaw as string) || 'https://placeholder.supabase.co';
-export const supabaseAnonKey = (supabaseAnonKeyRaw as string) || 'placeholder-key';
+export const supabaseUrl = (supabaseUrlRaw as string) || '';
+export const supabaseAnonKey = (supabaseAnonKeyRaw as string) || '';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase = createClient(
+  supabaseUrl || 'https://invalid.supabase.co',
+  supabaseAnonKey || 'invalid-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
 
 /**
  * Tests network reachability of the Supabase Auth endpoint.
@@ -121,6 +125,9 @@ export function classifyAuthError(error: { message?: string; code?: string }, co
   const code = error.code || '';
 
   if (context === 'auth') {
+    if (!supabaseUrlRaw || !supabaseAnonKeyRaw) {
+      return 'Supabase is not configured. The environment variables NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are missing. Please redeploy the site after setting them.';
+    }
     if (msg.includes('failed to fetch') || msg.includes('networkrequestfailed') || msg.includes('network error') || msg.includes('load failed') || msg.includes('fetch')) {
       return 'Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.';
     }
