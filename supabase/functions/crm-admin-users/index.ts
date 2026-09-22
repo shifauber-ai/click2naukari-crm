@@ -271,7 +271,7 @@ Deno.serve(async (req: Request) => {
       // Safety: cannot delete another admin
       const { data: targetProfile } = await adminClient
         .from("profiles")
-        .select("role")
+        .select("role, email, full_name")
         .eq("id", body.user_id)
         .maybeSingle();
       if (!targetProfile) {
@@ -281,42 +281,72 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Cannot delete an admin account" }, 400);
       }
 
-      // Write audit log before deletion
+      // Write audit log BEFORE deletion (actor_id will be SET NULL after,
+      // but we store the actor identity in metadata for traceability).
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
         action: "EMPLOYEE_DELETE",
         entity: "profile",
         entity_id: body.user_id,
-        metadata: { permanent_delete: true },
+        metadata: { permanent_delete: true, deleted_email: targetProfile.email, deleted_name: targetProfile.full_name },
       });
 
-      // Delete the profile row first.
-      // CASCADE removes: caller_devices, caller_queues, employee_product_cities,
-      // manager_product_assignments, notifications, whatsapp_accounts.
-      // SET NULL detaches: leads.current_caller_id, leads.created_by,
-      // lead_assignments.*, lead_status_history.*, issues.employee_id,
-      // call_history.caller_id, payment_records.*, scheduled_transitions.current_caller_id,
-      // directory_entries.employee_id, sims.employee_id, etc.
-      const { error: profileErr } = await adminClient
-        .from("profiles")
-        .delete()
-        .eq("id", body.user_id);
-      if (profileErr) return json({ error: profileErr.message }, 400);
-
-      // Delete the auth user so they can no longer log in
+      // 1. Delete the Supabase Auth user FIRST.
+      //    If this fails, the profile row still exists and the employee
+      //    can still log in — no partial state.
       const { error: authErr } = await adminClient.auth.admin.deleteUser(
         body.user_id
       );
       if (authErr) {
-        // Profile is already deleted; the auth user may not exist.
-        // Report but don't fail the whole operation.
-        return json({
-          ok: true,
-          warning: `Profile deleted but auth user removal failed: ${authErr.message}`,
-        });
+        // If the auth user doesn't exist, continue — the profile may be orphaned.
+        // "User not found" is not a fatal error here.
+        const msg = authErr.message || "";
+        if (!msg.toLowerCase().includes("not found") && !msg.toLowerCase().includes("does not exist")) {
+          return json({ error: `Failed to delete auth user: ${msg}` }, 400);
+        }
       }
 
-      return json({ ok: true });
+      // 2. Clean up employee-owned records that use SET NULL or NO ACTION.
+      //    These won't cascade, so we delete them explicitly to remove
+      //    employee-specific data. Company-owned data (leads) is preserved —
+      //    only the employee reference is set to NULL by the FK.
+
+      // Employee-owned call history
+      await adminClient.from("call_history").delete().eq("caller_id", body.user_id);
+
+      // Employee-owned issues
+      await adminClient.from("issues").delete().eq("employee_id", body.user_id);
+
+      // Employee-owned payment records
+      await adminClient.from("payment_records").delete().eq("employee_id", body.user_id);
+
+      // Employee-owned other_hero_leads
+      await adminClient.from("other_hero_leads").delete().eq("employee_id", body.user_id);
+
+      // Lead assignments created by this employee (actor)
+      await adminClient.from("lead_assignments").delete().eq("actor_id", body.user_id);
+
+      // Lead status history created by this employee
+      await adminClient.from("lead_status_history").delete().eq("actor_id", body.user_id);
+      await adminClient.from("lead_status_history").delete().eq("employee_id", body.user_id);
+
+      // Lead platform status completed by this employee
+      await adminClient.from("lead_platform_status").delete().eq("completed_by", body.user_id);
+
+      // 3. Delete the profile row.
+      //    CASCADE automatically removes: caller_devices, caller_queues,
+      //    employee_product_cities, employee_targets (employee_id),
+      //    manager_product_assignments, notifications, whatsapp_accounts.
+      //    SET NULL automatically detaches: leads.current_caller_id,
+      //    leads.created_by, audit_logs.actor_id, hero_ids.employee_id,
+      //    directory_entries.employee_id, sims.employee_id, etc.
+      const { error: profileErr } = await adminClient
+        .from("profiles")
+        .delete()
+        .eq("id", body.user_id);
+      if (profileErr) return json({ error: `Failed to delete profile: ${profileErr.message}` }, 400);
+
+      return json({ ok: true, message: "Employee permanently deleted" });
     }
 
     return json({ error: "Unknown action" }, 400);
