@@ -2,7 +2,7 @@
 // Admin creates/deactivates/resets employee (and admin) accounts.
 // Uses the service-role key (server-side only) so it can call auth.admin.
 // The browser never sees the service-role key.
-// redeploy trigger: fix apikey header in caller
+// redeploy trigger: verify reset_password flow
 
 import { createClient } from "npm:@supabase/supabase-js@2.58.0";
 
