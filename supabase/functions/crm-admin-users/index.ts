@@ -228,11 +228,28 @@ Deno.serve(async (req: Request) => {
       if (!body.user_id || !body.password) {
         return json({ error: "user_id and password required" }, 400);
       }
-      const { error } = await adminClient.auth.admin.updateUserById(
+      if (body.password.length < 6) {
+        return json({ error: "Password must be at least 6 characters" }, 400);
+      }
+
+      // Verify the target user exists in Supabase Auth before updating
+      const { data: targetUser, error: lookupErr } =
+        await adminClient.auth.admin.getUserById(body.user_id);
+      if (lookupErr || !targetUser.user) {
+        return json(
+          { error: `Target user not found in Auth: ${lookupErr?.message || "no user returned"}` },
+          404
+        );
+      }
+
+      const { error: updateErr } = await adminClient.auth.admin.updateUserById(
         body.user_id,
         { password: body.password }
       );
-      if (error) return json({ error: error.message }, 400);
+      if (updateErr) {
+        return json({ error: updateErr.message }, 400);
+      }
+
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
         action: "PASSWORD_RESET",
@@ -240,7 +257,7 @@ Deno.serve(async (req: Request) => {
         entity_id: body.user_id,
         metadata: {},
       });
-      return json({ ok: true });
+      return json({ success: true, message: "Password updated successfully" });
     }
 
     if (action === "delete") {

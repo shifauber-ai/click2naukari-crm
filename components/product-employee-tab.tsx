@@ -66,6 +66,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [role, setRole] = useState<Role>("EMPLOYEE");
   const [isActive, setIsActive] = useState(true);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [productCities, setProductCities] = useState<CityRow[]>([]);
   const [selectedCityIds, setSelectedCityIds] = useState<Set<string>>(new Set());
@@ -262,6 +263,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const openReset = (p: Profile) => {
     setResetTarget(p);
     setNewPassword("");
+    setConfirmPassword("");
     setShowResetPassword(false);
     setResetOpen(true);
   };
@@ -269,19 +271,31 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTarget) return;
+    if (newPassword.length < 6) {
+      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+      const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
         action: "reset_password", user_id: resetTarget.id, password: newPassword,
       });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[ResetPassword] target:", resetTarget.id, "response ok:", ok, "data:", { ...((data as Record<string, unknown>) || {}), password: undefined });
+      }
       if (!ok) {
-        toast({ title: error || "Failed to reset password", variant: "destructive" });
+        toast({ title: `Reset failed: ${error || "Unknown error"}`, variant: "destructive" });
         return;
       }
-      toast({ title: "Password reset successfully" });
+      toast({ title: "Password updated successfully" });
       setResetOpen(false);
     } catch (err) {
-      toast({ title: err instanceof Error ? err.message : "Failed to reset password", variant: "destructive" });
+      const msg = err instanceof Error ? err.message : "Failed to reset password";
+      toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -612,11 +626,15 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
             <div>
               <Label>New Password</Label>
               <div className="relative">
-                <Input name="emp-reset-password" type={showResetPassword ? "text" : "password"} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="pr-10" />
+                <Input name="emp-reset-password" type={showResetPassword ? "text" : "password"} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} className="pr-10" />
                 <button type="button" onClick={() => setShowResetPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
                   {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+            </div>
+            <div>
+              <Label>Confirm Password</Label>
+              <Input name="emp-reset-confirm" type={showResetPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setResetOpen(false)}>Cancel</Button>

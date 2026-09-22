@@ -19,12 +19,29 @@ export async function callEdgeFunction(
       },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      return { ok: false, error: data.error || `Request failed (${res.status})` };
+
+    const text = await res.text();
+    let data: unknown;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      return {
+        ok: false,
+        error: `Edge function returned non-JSON response (HTTP ${res.status})`,
+      };
     }
+
+    if (!res.ok) {
+      const errMsg =
+        (data as { error?: string; message?: string })?.error ||
+        (data as { message?: string })?.message ||
+        `Request failed (HTTP ${res.status})`;
+      return { ok: false, error: errMsg, data };
+    }
+
     return { ok: true, data };
-  } catch {
-    return { ok: false, error: "Network error" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Network error";
+    return { ok: false, error: msg };
   }
 }
