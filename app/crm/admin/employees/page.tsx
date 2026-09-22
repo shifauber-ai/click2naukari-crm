@@ -77,6 +77,7 @@ export default function EmployeesPage() {
   const [role, setRole] = useState<Role>("EMPLOYEE");
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -124,6 +125,7 @@ export default function EmployeesPage() {
   const openReset = (p: Profile) => {
     setResetTarget(p);
     setNewPassword("");
+    setConfirmPassword("");
     setResetOpen(true);
   };
 
@@ -215,19 +217,40 @@ export default function EmployeesPage() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTarget) return;
-    setSaving(true);
-    const { ok, error } = await callEdgeFunction("crm-admin-users", {
-      action: "reset_password",
-      user_id: resetTarget.id,
-      password: newPassword,
-    });
-    if (!ok) {
-      toast({ title: error || "Failed to reset password", variant: "destructive" });
-    } else {
-      toast({ title: "Password reset successfully" });
-      setResetOpen(false);
+    if (newPassword.length < 6) {
+      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      return;
     }
-    setSaving(false);
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      console.log("[RESET_START] targetUserId:", resetTarget.id, "targetEmail:", resetTarget.email);
+      const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
+        action: "reset_password",
+        user_id: resetTarget.id,
+        password: newPassword,
+      });
+      console.log("[RESET_RESPONSE] ok:", ok, "data:", data);
+      if (!ok) {
+        toast({ title: `Reset failed: ${error || "Unknown error"}`, variant: "destructive" });
+        return;
+      }
+      if (!(data as { success?: boolean })?.success) {
+        toast({ title: `Reset failed: ${(data as { error?: string })?.error || "Edge function did not confirm success"}`, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Password updated successfully" });
+      setResetOpen(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reset password";
+      console.error("[RESET_ERROR]", msg);
+      toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -545,7 +568,17 @@ export default function EmployeesPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                minLength={8}
+                minLength={6}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm Password</Label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
               />
             </div>
             <DialogFooter>

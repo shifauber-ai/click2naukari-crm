@@ -281,20 +281,24 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     }
     setSaving(true);
     try {
+      console.log("[RESET_START] targetUserId:", resetTarget.id, "targetEmail:", resetTarget.email);
       const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
         action: "reset_password", user_id: resetTarget.id, password: newPassword,
       });
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[ResetPassword] target:", resetTarget.id, "response ok:", ok, "data:", { ...((data as Record<string, unknown>) || {}), password: undefined });
-      }
+      console.log("[RESET_RESPONSE] ok:", ok, "data:", data);
       if (!ok) {
         toast({ title: `Reset failed: ${error || "Unknown error"}`, variant: "destructive" });
+        return;
+      }
+      if (!(data as { success?: boolean })?.success) {
+        toast({ title: `Reset failed: ${(data as { error?: string })?.error || "Edge function did not confirm success"}`, variant: "destructive" });
         return;
       }
       toast({ title: "Password updated successfully" });
       setResetOpen(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to reset password";
+      console.error("[RESET_ERROR]", msg);
       toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
     } finally {
       setSaving(false);
