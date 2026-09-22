@@ -84,8 +84,39 @@ Deno.serve(async (req: Request) => {
       }
       const validRoles = ["ADMIN", "MANAGER", "EMPLOYEE"];
       const role = validRoles.includes(body.role || "") ? (body.role as string) : "EMPLOYEE";
+      const createEmail = body.email.trim().toLowerCase();
+
+      // Safety: never allow creating a user with the caller's own email
+      if (createEmail === callerData.user.email?.toLowerCase()) {
+        return json({ error: "You cannot create an account with your own email" }, 400);
+      }
+
+      // Check if a profile already exists with this email to avoid duplicates
+      const { data: existingProfile } = await adminClient
+        .from("profiles")
+        .select("id, email")
+        .ilike("email", createEmail)
+        .maybeSingle();
+      if (existingProfile) {
+        return json({ error: "An employee with this email already exists" }, 400);
+      }
+
+      // Check if an orphaned auth user exists with this email (from a prior
+      // deletion where the auth user wasn't removed). If so, remove it so the
+      // new creation can succeed.
+      const { data: userList } = await adminClient.auth.admin.listUsers();
+      const orphan = (userList?.users || []).find(
+        (u) => u.email?.toLowerCase() === createEmail
+      );
+      if (orphan) {
+        await adminClient.auth.admin.deleteUser(orphan.id);
+      }
+
+      // Create a brand-new auth user with the form's email and password.
+      // The service-role adminClient is completely separate from the caller's
+      // session — this cannot modify the admin's credentials.
       const { data, error } = await adminClient.auth.admin.createUser({
-        email: body.email,
+        email: createEmail,
         password: body.password,
         email_confirm: true,
         user_metadata: { full_name: body.full_name, role },
@@ -93,9 +124,21 @@ Deno.serve(async (req: Request) => {
       if (error) {
         return json({ error: error.message }, 400);
       }
+
+      const newUserId = data.user.id;
+
+      // Safety: verify the new user's ID is not the caller's ID
+      if (newUserId === callerId) {
+        // This should never happen, but if it does, delete the user
+        // immediately to prevent session contamination.
+        await adminClient.auth.admin.deleteUser(newUserId);
+        return json({ error: "Created user matched caller ID — aborted for safety" }, 500);
+      }
+
+      // Create the profile row with the NEW user's auth ID
       await adminClient.rpc("bootstrap_profile", {
-        p_user_id: data.user.id,
-        p_email: body.email,
+        p_user_id: newUserId,
+        p_email: createEmail,
         p_full_name: body.full_name,
         p_role: role,
       });
@@ -103,25 +146,24 @@ Deno.serve(async (req: Request) => {
         await adminClient
           .from("profiles")
           .update({ phone: body.phone })
-          .eq("id", data.user.id);
+          .eq("id", newUserId);
       }
       // Assign products if manager
       if (role === "MANAGER" && body.product_ids && body.product_ids.length > 0) {
         const inserts = body.product_ids.map((pid) => ({
-          manager_id: data.user.id,
+          manager_id: newUserId,
           product_id: pid,
         }));
         await adminClient.from("manager_product_assignments").insert(inserts);
       }
-      // Also deactivate caller queue entries when deactivating
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
         action: "EMPLOYEE_CREATE",
         entity: "profile",
-        entity_id: data.user.id,
-        metadata: { email: body.email, role, full_name: body.full_name },
+        entity_id: newUserId,
+        metadata: { email: createEmail, role, full_name: body.full_name },
       });
-      return json({ user_id: data.user.id, email: body.email });
+      return json({ user_id: newUserId, email: createEmail });
     }
 
     if (action === "update") {
