@@ -7,6 +7,13 @@ export const HC_STATUS_LABELS: Record<HCLeadStatus, string> = {
   RINGING: "Ringing",
 };
 
+export type HCFormStatus = "PENDING" | "TAG_FORM";
+export const HC_FORM_STATUSES: HCFormStatus[] = ["PENDING", "TAG_FORM"];
+export const HC_FORM_LABELS: Record<HCFormStatus, string> = {
+  PENDING: "Pending",
+  TAG_FORM: "Tag Form",
+};
+
 export type LeadStatus =
   | "NEW"
   | "RINGING"
@@ -131,6 +138,7 @@ export interface Lead {
   uber_id_done?: boolean;
   ola_id_done?: boolean;
   rapido_id_done?: boolean;
+  form_status?: string;
   product?: Product;
   current_caller?: Profile | null;
 }

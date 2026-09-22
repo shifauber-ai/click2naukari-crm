@@ -33,7 +33,7 @@ export async function calculateAchievement(
 
     let q = supabase
       .from("leads")
-      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done")
+      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status")
       .eq("current_caller_id", target.employee_id)
       .eq("product_id", target.product_id)
       .gte("created_at", start)
@@ -46,7 +46,37 @@ export async function calculateAchievement(
     const { data } = await q;
     const leads = data || [];
 
-    if (metricKey === "ULP" || metricKey === "MUMBAI_ULP" || metricKey === "PUNE_ULP") {
+    if (metricKey === "TAG_ADDED") {
+      const cityId = target.city_id;
+      let cityFilter = "";
+      if (cityId) {
+        const { data: cityData } = await supabase
+          .from("product_cities")
+          .select("city_name")
+          .eq("id", cityId)
+          .maybeSingle();
+        cityFilter = (cityData as { city_name: string } | null)?.city_name || "";
+      }
+      achieved = leads.filter((l) =>
+        l.status === "TAG_ADDED" &&
+        (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase())
+      ).length;
+    } else if (metricKey === "TAG_FORM") {
+      const cityId = target.city_id;
+      let cityFilter = "";
+      if (cityId) {
+        const { data: cityData } = await supabase
+          .from("product_cities")
+          .select("city_name")
+          .eq("id", cityId)
+          .maybeSingle();
+        cityFilter = (cityData as { city_name: string } | null)?.city_name || "";
+      }
+      achieved = leads.filter((l) =>
+        (l as { form_status?: string }).form_status === "TAG_FORM" &&
+        (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase())
+      ).length;
+    } else if (metricKey === "ULP" || metricKey === "MUMBAI_ULP" || metricKey === "PUNE_ULP") {
       if (metricKey === "MUMBAI_ULP") {
         achieved = leads.filter((l) => l.uber_id_done === true && l.city?.toLowerCase() === "mumbai").length;
       } else if (metricKey === "PUNE_ULP") {

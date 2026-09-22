@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import {
-  Product, Profile, Lead, HCLeadStatus, HC_LEAD_STATUSES, HC_STATUS_LABELS, CallerQueue,
+  Product, Profile, Lead, HCLeadStatus, HC_LEAD_STATUSES, HC_STATUS_LABELS,
+  HCFormStatus, HC_FORM_STATUSES, HC_FORM_LABELS, CallerQueue,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +65,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingFormId, setUpdatingFormId] = useState<string | null>(null);
   const [detailLead, setDetailLead] = useState<LeadWithCaller | null>(null);
   const [assignLead, setAssignLead] = useState<LeadWithCaller | null>(null);
   const [assignCallerId, setAssignCallerId] = useState("");
@@ -184,6 +186,21 @@ export function HCLeadsTab({ product }: { product: Product }) {
       loadStats();
     }
     setUpdatingId(null);
+  };
+
+  const handleFormChange = async (leadId: string, newForm: HCFormStatus) => {
+    setUpdatingFormId(leadId);
+    const { error } = await supabase
+      .from("leads")
+      .update({ form_status: newForm, updated_at: new Date().toISOString() })
+      .eq("id", leadId);
+    if (error) {
+      toast({ title: "Failed to update form status. Please try again.", variant: "destructive" });
+    } else {
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, form_status: newForm } : l)));
+      toast({ title: `Form updated to ${HC_FORM_LABELS[newForm]}` });
+    }
+    setUpdatingFormId(null);
   };
 
   const handleCall = async (lead: LeadWithCaller) => {
@@ -377,6 +394,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <TableHead>License No</TableHead>
                 <TableHead>Last Trip</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Form</TableHead>
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Call</TableHead>
                 {canManage && <TableHead className="text-right">Actions</TableHead>}
@@ -406,6 +424,18 @@ export function HCLeadsTab({ product }: { product: Product }) {
                       <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {HC_LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{HC_STATUS_LABELS[s]}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={(lead.form_status as HCFormStatus) || "PENDING"}
+                      onValueChange={(v) => handleFormChange(lead.id, v as HCFormStatus)}
+                      disabled={updatingFormId === lead.id}
+                    >
+                      <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {HC_FORM_STATUSES.map((f) => <SelectItem key={f} value={f}>{HC_FORM_LABELS[f]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </TableCell>
@@ -523,6 +553,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <DetailRow label="Product" value="AUTO" />
                 <DetailRow label="City" value={detailLead.city || "—"} />
                 <DetailRow label="Status" value={HC_STATUS_LABELS[detailLead.status as HCLeadStatus] || detailLead.status} />
+                <DetailRow label="Form" value={HC_FORM_LABELS[(detailLead.form_status as HCFormStatus) || "PENDING"] || detailLead.form_status || "Pending"} />
                 <DetailRow label="Caller" value={detailLead.current_caller?.full_name || "Unassigned"} />
                 <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
                 <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM, HH:mm") : "—"} />

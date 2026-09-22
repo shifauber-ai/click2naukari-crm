@@ -23,6 +23,7 @@ import {
   BarChart3, Users, PhoneCall, CheckCircle2, Phone, XCircle, AlertCircle,
   Download, Loader2, Wallet,
 } from "lucide-react";
+import { classifyProductCode } from "@/lib/target-config";
 import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
 
 type RangeKey = "today" | "week" | "month" | "custom";
@@ -48,10 +49,10 @@ export function ProductReportsTab({ product }: { product: Product }) {
   const [activeCities, setActiveCities] = useState<CityRow[]>([]);
 
   // Summary stats
-  const [stats, setStats] = useState({ total: 0, assigned: 0, calls: 0, interested: 0, callback: 0, idDone: 0, notInterested: 0, issues: 0, otherHero: 0 });
+  const [stats, setStats] = useState({ total: 0, assigned: 0, calls: 0, interested: 0, callback: 0, idDone: 0, notInterested: 0, issues: 0, otherHero: 0, tagAdded: 0, tagForm: 0 });
 
   // Performance data
-  const [employeePerf, setEmployeePerf] = useState<{ name: string; leads: number; calls: number; interested: number; callback: number; idDone: number; notInterested: number; otherHero: number; issues: number }[]>([]);
+  const [employeePerf, setEmployeePerf] = useState<{ name: string; leads: number; calls: number; interested: number; callback: number; idDone: number; notInterested: number; otherHero: number; issues: number; tagAdded: number; tagForm: number }[]>([]);
   const [platformPerf, setPlatformPerf] = useState<{ name: string; total: number; interested: number; callback: number; idDone: number; notInterested: number; otherHero: number }[]>([]);
   const [cityPerf, setCityPerf] = useState<{ name: string; total: number; idDone: number; interested: number; callback: number; notInterested: number }[]>([]);
   const [statusDist, setStatusDist] = useState<{ name: string; value: number }[]>([]);
@@ -63,6 +64,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
   const [paymentStats, setPaymentStats] = useState({ total: 0, successful: 0, failed: 0, pending: 0 });
   const [paymentEmployeePerf, setPaymentEmployeePerf] = useState<{ name: string; total: number; successful: number; failed: number; pending: number }[]>([]);
   const isCar = product.code === "CAR" || product.name.toLowerCase() === "car";
+  const { isHC } = classifyProductCode(product.code, product.name);
 
   useEffect(() => {
     (async () => {
@@ -106,7 +108,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
     };
 
     const [leadData, callData, leadAssignData] = await Promise.all([
-      buildLeadQuery("id, status, platform, city, current_caller_id, created_at, current_caller:profiles!current_caller_id(full_name)"),
+      buildLeadQuery("id, status, platform, city, current_caller_id, created_at, form_status, current_caller:profiles!current_caller_id(full_name)"),
       supabase.from("call_history").select("call_status, caller_id, caller:profiles!caller_id(full_name), call_timestamp")
         .eq("product_id", product.id).gte("call_timestamp", fromIso).lte("call_timestamp", toIso),
       supabase.from("leads").select("id, current_caller_id, current_caller:profiles!current_caller_id(full_name)")
@@ -129,14 +131,16 @@ export function ProductReportsTab({ product }: { product: Product }) {
       notInterested: countStatus("NOT_INTERESTED"),
       issues: countStatus("DOC_VEHICLE_ISSUE"),
       otherHero: countStatus("OTHER_HERO"),
+      tagAdded: leads.filter((l) => l.status === "TAG_ADDED").length,
+      tagForm: leads.filter((l) => (l as { form_status?: string }).form_status === "TAG_FORM").length,
     });
 
     // Employee performance
-    const eMap: Record<string, { name: string; leads: number; calls: number; interested: number; callback: number; idDone: number; notInterested: number; otherHero: number; issues: number }> = {};
+    const eMap: Record<string, { name: string; leads: number; calls: number; interested: number; callback: number; idDone: number; notInterested: number; otherHero: number; issues: number; tagAdded: number; tagForm: number }> = {};
     leads.forEach((l) => {
       const id = l.current_caller_id as string;
       if (!id) return;
-      if (!eMap[id]) eMap[id] = { name: (l.current_caller as { full_name: string } | null)?.full_name || "Unknown", leads: 0, calls: 0, interested: 0, callback: 0, idDone: 0, notInterested: 0, otherHero: 0, issues: 0 };
+      if (!eMap[id]) eMap[id] = { name: (l.current_caller as { full_name: string } | null)?.full_name || "Unknown", leads: 0, calls: 0, interested: 0, callback: 0, idDone: 0, notInterested: 0, otherHero: 0, issues: 0, tagAdded: 0, tagForm: 0 };
       eMap[id].leads++;
       if (l.status === "INTERESTED") eMap[id].interested++;
       if (l.status === "CALLBACK") eMap[id].callback++;
@@ -144,11 +148,13 @@ export function ProductReportsTab({ product }: { product: Product }) {
       if (l.status === "NOT_INTERESTED") eMap[id].notInterested++;
       if (l.status === "OTHER_HERO") eMap[id].otherHero++;
       if (l.status === "DOC_VEHICLE_ISSUE") eMap[id].issues++;
+      if (l.status === "TAG_ADDED") eMap[id].tagAdded++;
+      if ((l as { form_status?: string }).form_status === "TAG_FORM") eMap[id].tagForm++;
     });
     calls.forEach((c) => {
       const id = c.caller_id as string;
       if (!id) return;
-      if (!eMap[id]) eMap[id] = { name: (c.caller as { full_name: string } | null)?.full_name || "Unknown", leads: 0, calls: 0, interested: 0, callback: 0, idDone: 0, notInterested: 0, otherHero: 0, issues: 0 };
+      if (!eMap[id]) eMap[id] = { name: (c.caller as { full_name: string } | null)?.full_name || "Unknown", leads: 0, calls: 0, interested: 0, callback: 0, idDone: 0, notInterested: 0, otherHero: 0, issues: 0, tagAdded: 0, tagForm: 0 };
       eMap[id].calls++;
     });
     setEmployeePerf(Object.values(eMap).sort((a, b) => b.leads - a.leads));
@@ -361,8 +367,17 @@ export function ProductReportsTab({ product }: { product: Product }) {
             <StatCard label="Total Leads" value={stats.total} icon={Users} tone="default" />
             <StatCard label="Assigned" value={stats.assigned} icon={Users} tone="primary" />
             <StatCard label="Calls" value={stats.calls} icon={PhoneCall} tone="info" />
-            <StatCard label="Interested" value={stats.interested} icon={CheckCircle2} tone="success" />
-            <StatCard label="Callback" value={stats.callback} icon={Phone} tone="warning" />
+            {isHC ? (
+              <>
+                <StatCard label="Tag Added" value={stats.tagAdded} icon={CheckCircle2} tone="success" />
+                <StatCard label="Tag Form" value={stats.tagForm} icon={CheckCircle2} tone="primary" />
+              </>
+            ) : (
+              <>
+                <StatCard label="Interested" value={stats.interested} icon={CheckCircle2} tone="success" />
+                <StatCard label="Callback" value={stats.callback} icon={Phone} tone="warning" />
+              </>
+            )}
             <StatCard label="ID Done" value={stats.idDone} icon={CheckCircle2} tone="success" />
             <StatCard label="Not Interested" value={stats.notInterested} icon={XCircle} tone="danger" />
             <StatCard label="Other Hero" value={stats.otherHero} icon={AlertCircle} tone="default" />
@@ -410,15 +425,14 @@ export function ProductReportsTab({ product }: { product: Product }) {
             <CardContent className="overflow-x-auto">
               {employeePerf.length > 0 ? (
                 <Table>
-                  <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Assigned Leads</TableHead><TableHead>Calls</TableHead><TableHead>Interested</TableHead><TableHead>Callback</TableHead><TableHead>ID Done</TableHead><TableHead>Not Interested</TableHead><TableHead>Other Hero</TableHead><TableHead>Issues</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Assigned Leads</TableHead><TableHead>Calls</TableHead>{isHC ? <><TableHead>Tag Added</TableHead><TableHead>Tag Form</TableHead></> : <><TableHead>Interested</TableHead><TableHead>Callback</TableHead></>}<TableHead>ID Done</TableHead><TableHead>Not Interested</TableHead><TableHead>Other Hero</TableHead><TableHead>Issues</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {employeePerf.map((e, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium">{e.name}</TableCell>
                         <TableCell>{e.leads}</TableCell>
                         <TableCell>{e.calls}</TableCell>
-                        <TableCell className="text-success-foreground">{e.interested}</TableCell>
-                        <TableCell className="text-warning-foreground">{e.callback}</TableCell>
+                        {isHC ? <><TableCell className="text-success-foreground">{e.tagAdded}</TableCell><TableCell className="text-primary">{e.tagForm}</TableCell></> : <><TableCell className="text-success-foreground">{e.interested}</TableCell><TableCell className="text-warning-foreground">{e.callback}</TableCell></>}
                         <TableCell className="text-success-foreground">{e.idDone}</TableCell>
                         <TableCell className="text-destructive">{e.notInterested}</TableCell>
                         <TableCell>{e.otherHero}</TableCell>
