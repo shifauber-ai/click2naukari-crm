@@ -11,7 +11,7 @@ export async function callEdgeFunction(
   }
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
       method: "POST",
       headers: {

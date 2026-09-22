@@ -101,20 +101,11 @@ Deno.serve(async (req: Request) => {
         return json({ error: "An employee with this email already exists" }, 400);
       }
 
-      // Check if an orphaned auth user exists with this email (from a prior
-      // deletion where the auth user wasn't removed). If so, remove it so the
-      // new creation can succeed.
-      const { data: userList } = await adminClient.auth.admin.listUsers();
-      const orphan = (userList?.users || []).find(
-        (u) => u.email?.toLowerCase() === createEmail
-      );
-      if (orphan) {
-        await adminClient.auth.admin.deleteUser(orphan.id);
-      }
-
       // Create a brand-new auth user with the form's email and password.
       // The service-role adminClient is completely separate from the caller's
       // session — this cannot modify the admin's credentials.
+      // If the email already exists in auth.users (orphaned from a prior
+      // deletion), Supabase returns a clear error we surface to the user.
       const { data, error } = await adminClient.auth.admin.createUser({
         email: createEmail,
         password: body.password,
@@ -129,33 +120,49 @@ Deno.serve(async (req: Request) => {
 
       // Safety: verify the new user's ID is not the caller's ID
       if (newUserId === callerId) {
-        // This should never happen, but if it does, delete the user
-        // immediately to prevent session contamination.
         await adminClient.auth.admin.deleteUser(newUserId);
         return json({ error: "Created user matched caller ID — aborted for safety" }, 500);
       }
 
-      // Create the profile row with the NEW user's auth ID
-      await adminClient.rpc("bootstrap_profile", {
+      // Create the profile row with the NEW user's auth ID.
+      // If this fails, clean up the orphaned auth user.
+      const { error: profileErr } = await adminClient.rpc("bootstrap_profile", {
         p_user_id: newUserId,
         p_email: createEmail,
         p_full_name: body.full_name,
         p_role: role,
       });
+      if (profileErr) {
+        await adminClient.auth.admin.deleteUser(newUserId);
+        return json({ error: `Failed to create profile: ${profileErr.message}` }, 400);
+      }
+
       if (body.phone) {
-        await adminClient
+        const { error: phoneErr } = await adminClient
           .from("profiles")
           .update({ phone: body.phone })
           .eq("id", newUserId);
+        if (phoneErr) {
+          await adminClient.auth.admin.deleteUser(newUserId);
+          return json({ error: `Failed to set phone: ${phoneErr.message}` }, 400);
+        }
       }
+
       // Assign products if manager
       if (role === "MANAGER" && body.product_ids && body.product_ids.length > 0) {
         const inserts = body.product_ids.map((pid) => ({
           manager_id: newUserId,
           product_id: pid,
         }));
-        await adminClient.from("manager_product_assignments").insert(inserts);
+        const { error: assignErr } = await adminClient
+          .from("manager_product_assignments")
+          .insert(inserts);
+        if (assignErr) {
+          await adminClient.auth.admin.deleteUser(newUserId);
+          return json({ error: `Failed to assign products: ${assignErr.message}` }, 400);
+        }
       }
+
       await adminClient.from("audit_logs").insert({
         actor_id: callerId,
         action: "EMPLOYEE_CREATE",
@@ -163,7 +170,7 @@ Deno.serve(async (req: Request) => {
         entity_id: newUserId,
         metadata: { email: createEmail, role, full_name: body.full_name },
       });
-      return json({ user_id: newUserId, email: createEmail });
+      return json({ success: true, user_id: newUserId, email: createEmail });
     }
 
     if (action === "update") {

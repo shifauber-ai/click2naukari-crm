@@ -188,13 +188,20 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         toast({ title: error || "Failed to create employee", variant: "destructive" });
         return;
       }
+      const newUserId = (data as { user_id?: string; success?: boolean })?.user_id;
+      if (!newUserId) {
+        toast({ title: "Employee creation succeeded but no user ID was returned", variant: "destructive" });
+        return;
+      }
       // Save city assignments for this product
-      const newUserId = (data as { user_id: string })?.user_id;
-      if (newUserId && selectedCityIds.size > 0) {
+      if (selectedCityIds.size > 0) {
         const cityInserts = Array.from(selectedCityIds).map((cid) => ({
           employee_id: newUserId, product_id: product.id, city_id: cid, is_active: true,
         }));
-        await supabase.from("employee_product_cities").insert(cityInserts);
+        const { error: cityErr } = await supabase.from("employee_product_cities").insert(cityInserts);
+        if (cityErr) {
+          toast({ title: `Account created, but city assignment failed: ${cityErr.message}`, variant: "destructive" });
+        }
       }
       toast({ title: `${role === "ADMIN" ? "Admin" : role === "MANAGER" ? "Manager" : "Employee"} account created` });
       setCreateOpen(false);

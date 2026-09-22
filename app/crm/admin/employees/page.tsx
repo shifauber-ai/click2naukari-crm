@@ -120,22 +120,27 @@ export default function EmployeesPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const { ok, error } = await callEdgeFunction("crm-admin-users", {
-      action: "create",
-      email,
-      password,
-      full_name: fullName,
-      phone,
-      role,
-    });
-    if (!ok) {
-      toast({ title: error || "Failed to create employee", variant: "destructive" });
-    } else {
+    try {
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+        action: "create",
+        email,
+        password,
+        full_name: fullName,
+        phone,
+        role,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to create employee", variant: "destructive" });
+        return;
+      }
       toast({ title: `${role === "ADMIN" ? "Admin" : "Employee"} account created` });
       setCreateOpen(false);
       load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create employee", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleEdit = async (e: React.FormEvent) => {
