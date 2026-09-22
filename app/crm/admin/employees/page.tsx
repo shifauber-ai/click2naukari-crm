@@ -52,6 +52,8 @@ import {
   KeyRound,
   Pencil,
   Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -77,6 +79,8 @@ export default function EmployeesPage() {
   const [role, setRole] = useState<Role>("EMPLOYEE");
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -124,6 +128,8 @@ export default function EmployeesPage() {
   const openReset = (p: Profile) => {
     setResetTarget(p);
     setNewPassword("");
+    setConfirmPassword("");
+    setShowResetPassword(false);
     setResetOpen(true);
   };
 
@@ -215,19 +221,39 @@ export default function EmployeesPage() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTarget) return;
-    setSaving(true);
-    const { ok, error } = await callEdgeFunction("crm-admin-users", {
-      action: "reset_password",
-      user_id: resetTarget.id,
-      password: newPassword,
-    });
-    if (!ok) {
-      toast({ title: error || "Failed to reset password", variant: "destructive" });
-    } else {
-      toast({ title: "Password reset successfully" });
-      setResetOpen(false);
+    if (!newPassword) {
+      toast({ title: "New password is required", variant: "destructive" });
+      return;
     }
-    setSaving(false);
+    if (newPassword.length < 6) {
+      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+        action: "reset_password",
+        user_id: resetTarget.id,
+        password: newPassword,
+      });
+      if (!ok) {
+        toast({ title: error || "Failed to reset password", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Password updated successfully" });
+      setResetOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reset password";
+      toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -530,22 +556,47 @@ export default function EmployeesPage() {
 
       {/* Reset password dialog */}
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
             <DialogDescription>
               Set a new password for {resetTarget?.email}.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleReset} className="space-y-4">
-            <div className="space-y-2">
+          <form onSubmit={handleReset} className="space-y-3" autoComplete="off">
+            <div>
               <Label>New Password</Label>
+              <div className="relative">
+                <Input
+                  name="emp-reset-password"
+                  type={showResetPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <Label>Confirm Password</Label>
               <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                name="emp-reset-confirm"
+                type={showResetPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                minLength={8}
+                minLength={6}
               />
             </div>
             <DialogFooter>
@@ -558,7 +609,7 @@ export default function EmployeesPage() {
               </Button>
               <Button type="submit" disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Reset Password
+                {saving ? "Updating..." : "Update Password"}
               </Button>
             </DialogFooter>
           </form>

@@ -281,18 +281,17 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     }
     setSaving(true);
     try {
-      const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
+      const { ok, error } = await callEdgeFunction("crm-admin-users", {
         action: "reset_password", user_id: resetTarget.id, password: newPassword,
       });
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[ResetPassword] target:", resetTarget.id, "response ok:", ok, "data:", { ...((data as Record<string, unknown>) || {}), password: undefined });
-      }
       if (!ok) {
         toast({ title: `Reset failed: ${error || "Unknown error"}`, variant: "destructive" });
         return;
       }
       toast({ title: "Password updated successfully" });
       setResetOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to reset password";
       toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
@@ -638,7 +637,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setResetOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Resetting..." : "Reset Password"}</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Updating..." : "Update Password"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
