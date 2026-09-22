@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { supabase, supabaseConfigError, supabaseUrl, checkSupabaseConnectivity, classifyAuthError } from "@/lib/supabase/client";
+import { supabase, supabaseConfigError, classifyAuthError } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,17 +45,10 @@ function LoginForm() {
         return;
       }
 
-      // Step 2: Pre-check connectivity to give a specific error before
-      // attempting sign-in (distinguishes network vs. auth-credential errors)
-      const connectivity = await checkSupabaseConnectivity();
-      if (!connectivity.ok) {
-        setError(connectivity.detail);
-        console.error("[Login] Supabase connectivity check failed:", connectivity.reason, connectivity.detail);
-        return;
-      }
-      console.log("[Login] Supabase Auth reachable, HTTP", connectivity.status);
-
-      // Step 3: Attempt sign-in
+      // Step 2: Attempt sign-in directly — the Supabase JS client handles
+      // connectivity internally. A separate pre-check fetch was causing
+      // false "Failed to fetch" errors (AbortSignal.timeout not supported
+      // in some browsers, browser extensions blocking raw fetch, etc.).
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
