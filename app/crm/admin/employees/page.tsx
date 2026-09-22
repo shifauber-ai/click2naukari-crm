@@ -396,7 +396,7 @@ export default function EmployeesPage() {
               these credentials.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleCreate} className="space-y-4" autoComplete="off">
             <div className="space-y-2">
               <Label htmlFor="c-name">Full Name</Label>
               <Input
@@ -410,7 +410,9 @@ export default function EmployeesPage() {
               <Label htmlFor="c-email">Email</Label>
               <Input
                 id="c-email"
+                name="emp-new-email"
                 type="email"
+                autoComplete="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -420,7 +422,9 @@ export default function EmployeesPage() {
               <Label htmlFor="c-pass">Initial Password</Label>
               <Input
                 id="c-pass"
+                name="emp-new-password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
