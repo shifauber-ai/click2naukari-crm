@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { callEdgeFunction } from "@/lib/edge";
 import { Profile, Role } from "@/lib/types";
@@ -55,6 +56,7 @@ import {
 import { format } from "date-fns";
 
 export default function EmployeesPage() {
+  const router = useRouter();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -119,9 +121,10 @@ export default function EmployeesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[CREATE_START] employees page");
     setSaving(true);
     try {
-      const { ok, error } = await callEdgeFunction("crm-admin-users", {
+      const { ok, error, data } = await callEdgeFunction("crm-admin-users", {
         action: "create",
         email,
         password,
@@ -130,13 +133,27 @@ export default function EmployeesPage() {
         role,
       });
       if (!ok) {
+        console.log("[CREATE_ERROR]", error);
+        if (error && error.includes("session has expired")) {
+          toast({ title: "Your admin session has expired. Please login again.", variant: "destructive" });
+          router.push("/crm/login?redirect=/crm/admin/employees");
+          return;
+        }
         toast({ title: error || "Failed to create employee", variant: "destructive" });
         return;
       }
+      const success = (data as { success?: boolean; user_id?: string })?.success;
+      if (!success) {
+        console.log("[CREATE_ERROR] no success flag in response", data);
+        toast({ title: "Failed to create employee — unexpected response", variant: "destructive" });
+        return;
+      }
+      console.log("[CREATE_SUCCESS]", (data as { user_id?: string })?.user_id);
       toast({ title: `${role === "ADMIN" ? "Admin" : "Employee"} account created` });
       setCreateOpen(false);
       load();
     } catch (err) {
+      console.log("[CREATE_ERROR]", err);
       toast({ title: err instanceof Error ? err.message : "Failed to create employee", variant: "destructive" });
     } finally {
       setSaving(false);

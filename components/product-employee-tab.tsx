@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { callEdgeFunction } from "@/lib/edge";
 import { Product, Profile, Role } from "@/lib/types";
@@ -39,6 +40,7 @@ import { format } from "date-fns";
 interface CityRow { id: string; city_name: string; is_active: boolean; }
 
 export function ProductEmployeeTab({ product }: { product: Product }) {
+  const router = useRouter();
   const { profile } = useAuth();
   const { toast } = useToast();
 
@@ -176,6 +178,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[CREATE_START] product-employee-tab");
     setSaving(true);
     try {
       const productIds = role === "MANAGER" ? Array.from(selectedProductIds) : [product.id];
@@ -185,12 +188,20 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         product_ids: productIds,
       });
       if (!ok) {
+        console.log("[CREATE_ERROR]", error);
+        if (error && error.includes("session has expired")) {
+          toast({ title: "Your admin session has expired. Please login again.", variant: "destructive" });
+          router.push("/crm/login?redirect=/crm/admin");
+          return;
+        }
         toast({ title: error || "Failed to create employee", variant: "destructive" });
         return;
       }
-      const newUserId = (data as { user_id?: string; success?: boolean })?.user_id;
-      if (!newUserId) {
-        toast({ title: "Employee creation succeeded but no user ID was returned", variant: "destructive" });
+      const success = (data as { success?: boolean })?.success;
+      const newUserId = (data as { user_id?: string })?.user_id;
+      if (!success || !newUserId) {
+        console.log("[CREATE_ERROR] no success/user_id in response", data);
+        toast({ title: "Failed to create employee — unexpected response", variant: "destructive" });
         return;
       }
       // Save city assignments for this product
@@ -203,10 +214,12 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
           toast({ title: `Account created, but city assignment failed: ${cityErr.message}`, variant: "destructive" });
         }
       }
+      console.log("[CREATE_SUCCESS]", newUserId);
       toast({ title: `${role === "ADMIN" ? "Admin" : role === "MANAGER" ? "Manager" : "Employee"} account created` });
       setCreateOpen(false);
       load();
     } catch (err) {
+      console.log("[CREATE_ERROR]", err);
       toast({ title: err instanceof Error ? err.message : "Failed to create employee", variant: "destructive" });
     } finally {
       setSaving(false);

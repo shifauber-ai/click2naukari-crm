@@ -1,17 +1,40 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from "./supabase/client";
 
+async function getValidSessionToken(): Promise<string | null> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.access_token) {
+    console.log("[callEdgeFunction] SESSION_FOUND");
+    return sessionData.session.access_token;
+  }
+
+  console.log("[callEdgeFunction] SESSION_MISSING, attempting refresh");
+  const { data: refreshData, error: refreshErr } =
+    await supabase.auth.refreshSession();
+  if (refreshErr) {
+    console.log("[callEdgeFunction] SESSION_REFRESH_FAILED", refreshErr.message);
+    return null;
+  }
+  if (refreshData.session?.access_token) {
+    console.log("[callEdgeFunction] SESSION_REFRESHED");
+    return refreshData.session.access_token;
+  }
+
+  console.log("[callEdgeFunction] SESSION_STILL_MISSING after refresh");
+  return null;
+}
+
 export async function callEdgeFunction(
   name: string,
   body: unknown
 ): Promise<{ ok: boolean; data?: unknown; error?: string }> {
-  const { data: session } = await supabase.auth.getSession();
-  const token = session.session?.access_token;
+  const token = await getValidSessionToken();
   if (!token) {
-    return { ok: false, error: "Not authenticated" };
+    return { ok: false, error: "Your admin session has expired. Please login again." };
   }
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
+    console.log(`[callEdgeFunction] EDGE_REQUEST ${name}`);
     const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
       method: "POST",
       headers: {
@@ -29,11 +52,14 @@ export async function callEdgeFunction(
     try {
       data = text ? JSON.parse(text) : {};
     } catch {
+      console.log(`[callEdgeFunction] EDGE_RESPONSE non-JSON HTTP ${res.status}`);
       return {
         ok: false,
         error: `Edge function returned non-JSON response (HTTP ${res.status})`,
       };
     }
+
+    console.log(`[callEdgeFunction] EDGE_RESPONSE HTTP ${res.status}`);
 
     if (!res.ok) {
       const errMsg =
