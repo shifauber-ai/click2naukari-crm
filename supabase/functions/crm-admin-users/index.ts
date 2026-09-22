@@ -232,9 +232,16 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Password must be at least 6 characters" }, 400);
       }
 
+      // The caller (admin) and target (employee) are different users.
+      // Never use the caller's ID as the password-reset target.
+      const targetUserId = body.user_id;
+      if (targetUserId === callerId) {
+        return json({ error: "Use the account settings page to change your own password." }, 400);
+      }
+
       // Verify the target user exists in Supabase Auth before updating
       const { data: targetUser, error: lookupErr } =
-        await adminClient.auth.admin.getUserById(body.user_id);
+        await adminClient.auth.admin.getUserById(targetUserId);
       if (lookupErr || !targetUser.user) {
         return json(
           { error: `Target user not found in Auth: ${lookupErr?.message || "no user returned"}` },
@@ -243,7 +250,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const { error: updateErr } = await adminClient.auth.admin.updateUserById(
-        body.user_id,
+        targetUserId,
         { password: body.password }
       );
       if (updateErr) {
@@ -254,7 +261,7 @@ Deno.serve(async (req: Request) => {
         actor_id: callerId,
         action: "PASSWORD_RESET",
         entity: "profile",
-        entity_id: body.user_id,
+        entity_id: targetUserId,
         metadata: {},
       });
       return json({ success: true, message: "Password updated successfully" });

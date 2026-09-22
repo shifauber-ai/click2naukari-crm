@@ -233,6 +233,10 @@ export default function EmployeesPage() {
       toast({ title: "Passwords do not match", variant: "destructive" });
       return;
     }
+    if (resetTarget.id === currentProfile?.id) {
+      toast({ title: "Use the account settings page to change your own password.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const { ok, error } = await callEdgeFunction("crm-admin-users", {
@@ -244,8 +248,9 @@ export default function EmployeesPage() {
         toast({ title: error || "Failed to reset password", variant: "destructive" });
         return;
       }
-      toast({ title: "Password updated successfully" });
+      toast({ title: `Password updated for ${resetTarget.full_name}` });
       setResetOpen(false);
+      setResetTarget(null);
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
