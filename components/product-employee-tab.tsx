@@ -32,7 +32,7 @@ import { EmptyState } from "@/components/page-parts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Users, Search, Plus, Pencil, Loader2, KeyRound, Eye, EyeOff, MapPin, Trash2,
+  Users, Search, Plus, Pencil, Loader2, Eye, EyeOff, MapPin, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -52,8 +52,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [detailEmployee, setDetailEmployee] = useState<(Profile & { assigned_cities?: string[] }) | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
-  const [resetTarget, setResetTarget] = useState<Profile | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -65,8 +63,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>("EMPLOYEE");
   const [isActive, setIsActive] = useState(true);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [productCities, setProductCities] = useState<CityRow[]>([]);
   const [selectedCityIds, setSelectedCityIds] = useState<Set<string>>(new Set());
@@ -75,8 +71,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
 
   const [editTargetId, setEditTargetId] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showResetPassword, setShowResetPassword] = useState(false);
-
   const isAdmin = profile?.role === "ADMIN";
 
   useEffect(() => {
@@ -260,54 +254,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     }
   };
 
-  const openReset = (p: Profile) => {
-    setResetTarget(p);
-    setNewPassword("");
-    setConfirmPassword("");
-    setShowResetPassword(false);
-    setResetOpen(true);
-  };
-
-  const handleReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetTarget) {
-      toast({ title: "Unable to identify selected employee.", variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: "Passwords do not match", variant: "destructive" });
-      return;
-    }
-    if (resetTarget.id === profile?.id) {
-      toast({ title: "Use the account settings page to change your own password.", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const { ok, error } = await callEdgeFunction("crm-admin-users", {
-        action: "reset_password", user_id: resetTarget.id, password: newPassword,
-      });
-      if (!ok) {
-        toast({ title: `Reset failed: ${error || "Unknown error"}`, variant: "destructive" });
-        return;
-      }
-      toast({ title: `Password updated for ${resetTarget.full_name}` });
-      setResetOpen(false);
-      setResetTarget(null);
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reset password";
-      toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const openDelete = (p: Profile) => {
     setDeleteTarget(p);
     setDeleteOpen(true);
@@ -421,7 +367,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     <div className="space-y-3">
       {sharedFields()}
       <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-        <p className="text-sm text-muted-foreground">Password is managed securely. Use the "Reset Password" button in the employee list to set a new password.</p>
+        <p className="text-sm text-muted-foreground">Passwords are set during account creation and cannot be changed from here.</p>
       </div>
     </div>
   );
@@ -526,7 +472,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
                     <div className="flex items-center justify-end gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailEmployee(p)} title="View"><Eye className="h-4 w-4" /></Button>
                       {isAdmin && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditFromRow(p)} title="Edit"><Pencil className="h-4 w-4" /></Button>}
-                      {isAdmin && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openReset(p)} title="Reset password"><KeyRound className="h-4 w-4" /></Button>}
                       {isAdmin && p.role !== "ADMIN" && p.id !== profile?.id && (
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => openDelete(p)} title="Delete permanently">
                           <Trash2 className="h-4 w-4" />
@@ -625,31 +570,6 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reset Password Dialog */}
-      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Reset Password</DialogTitle><DialogDescription>Set a new password for {resetTarget?.full_name}</DialogDescription></DialogHeader>
-          <form onSubmit={handleReset} className="space-y-3" autoComplete="off">
-            <div>
-              <Label>New Password</Label>
-              <div className="relative">
-                <Input name="emp-reset-password" type={showResetPassword ? "text" : "password"} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} className="pr-10" />
-                <button type="button" onClick={() => setShowResetPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
-                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <Label>Confirm Password</Label>
-              <Input name="emp-reset-confirm" type={showResetPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setResetOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Updating..." : "Update Password"}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -1,8 +1,7 @@
 // Edge function for admin user management.
-// Admin creates/deactivates/resets employee (and admin) accounts.
+// Admin creates/deactivates/deletes employee (and admin) accounts.
 // Uses the service-role key (server-side only) so it can call auth.admin.
 // The browser never sees the service-role key.
-// redeploy trigger: verify reset_password flow
 
 import { createClient } from "npm:@supabase/supabase-js@2.58.0";
 
@@ -14,7 +13,7 @@ const corsHeaders = {
 };
 
 interface ActionRequest {
-  action: "create" | "update" | "reset_password" | "set_active" | "delete";
+  action: "create" | "update" | "set_active" | "delete";
   email?: string;
   password?: string;
   full_name?: string;
@@ -222,49 +221,6 @@ Deno.serve(async (req: Request) => {
         metadata: { is_active: body.is_active },
       });
       return json({ ok: true });
-    }
-
-    if (action === "reset_password") {
-      if (!body.user_id || !body.password) {
-        return json({ error: "user_id and password required" }, 400);
-      }
-      if (body.password.length < 6) {
-        return json({ error: "Password must be at least 6 characters" }, 400);
-      }
-
-      // The caller (admin) and target (employee) are different users.
-      // Never use the caller's ID as the password-reset target.
-      const targetUserId = body.user_id;
-      if (targetUserId === callerId) {
-        return json({ error: "Use the account settings page to change your own password." }, 400);
-      }
-
-      // Verify the target user exists in Supabase Auth before updating
-      const { data: targetUser, error: lookupErr } =
-        await adminClient.auth.admin.getUserById(targetUserId);
-      if (lookupErr || !targetUser.user) {
-        return json(
-          { error: `Target user not found in Auth: ${lookupErr?.message || "no user returned"}` },
-          404
-        );
-      }
-
-      const { error: updateErr } = await adminClient.auth.admin.updateUserById(
-        targetUserId,
-        { password: body.password }
-      );
-      if (updateErr) {
-        return json({ error: updateErr.message }, 400);
-      }
-
-      await adminClient.from("audit_logs").insert({
-        actor_id: callerId,
-        action: "PASSWORD_RESET",
-        entity: "profile",
-        entity_id: targetUserId,
-        metadata: {},
-      });
-      return json({ success: true, message: "Password updated successfully" });
     }
 
     if (action === "delete") {

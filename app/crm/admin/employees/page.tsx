@@ -49,11 +49,8 @@ import {
   Plus,
   Search,
   Loader2,
-  KeyRound,
   Pencil,
   Trash2,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -64,12 +61,10 @@ export default function EmployeesPage() {
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
-  const [resetTarget, setResetTarget] = useState<Profile | null>(null);
   const { profile: currentProfile } = useAuth();
 
   const [fullName, setFullName] = useState("");
@@ -78,9 +73,6 @@ export default function EmployeesPage() {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>("EMPLOYEE");
   const [saving, setSaving] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showResetPassword, setShowResetPassword] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -123,14 +115,6 @@ export default function EmployeesPage() {
     setPhone(p.phone || "");
     setRole(p.role);
     setEditOpen(true);
-  };
-
-  const openReset = (p: Profile) => {
-    setResetTarget(p);
-    setNewPassword("");
-    setConfirmPassword("");
-    setShowResetPassword(false);
-    setResetOpen(true);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -215,49 +199,6 @@ export default function EmployeesPage() {
       toast({ title: err instanceof Error ? err.message : "Delete failed", variant: "destructive" });
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handleReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetTarget) return;
-    if (!newPassword) {
-      toast({ title: "New password is required", variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: "Passwords do not match", variant: "destructive" });
-      return;
-    }
-    if (resetTarget.id === currentProfile?.id) {
-      toast({ title: "Use the account settings page to change your own password.", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const { ok, error } = await callEdgeFunction("crm-admin-users", {
-        action: "reset_password",
-        user_id: resetTarget.id,
-        password: newPassword,
-      });
-      if (!ok) {
-        toast({ title: error || "Failed to reset password", variant: "destructive" });
-        return;
-      }
-      toast({ title: `Password updated for ${resetTarget.full_name}` });
-      setResetOpen(false);
-      setResetTarget(null);
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reset password";
-      toast({ title: `Reset failed: ${msg}`, variant: "destructive" });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -361,15 +302,6 @@ export default function EmployeesPage() {
                         title="Edit"
                       >
                         <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => openReset(p)}
-                        title="Reset password"
-                      >
-                        <KeyRound className="h-4 w-4" />
                       </Button>
                       {p.role !== "ADMIN" && p.id !== currentProfile?.id && (
                         <Button
@@ -563,67 +495,6 @@ export default function EmployeesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reset password dialog */}
-      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>
-              Set a new password for {resetTarget?.email}.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleReset} className="space-y-3" autoComplete="off">
-            <div>
-              <Label>New Password</Label>
-              <div className="relative">
-                <Input
-                  name="emp-reset-password"
-                  type={showResetPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowResetPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
-                >
-                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <Label>Confirm Password</Label>
-              <Input
-                name="emp-reset-confirm"
-                type={showResetPassword ? "text" : "password"}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setResetOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {saving ? "Updating..." : "Update Password"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
