@@ -581,20 +581,29 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         imported, status: "COMPLETED",
       }).eq("id", batchId);
 
-      // HC: auto-assign imported leads to active callers
-      if (isHC && imported > 0) {
+      // Auto-assign imported leads to active callers in the product's Caller Queue
+      if (imported > 0) {
         try {
-          const { data: assignResult } = await supabase.rpc("hc_bulk_auto_assign", {
+          const { data: assignResult, error: assignErr } = await supabase.rpc("bulk_auto_assign_imported_leads", {
             p_product_id: product.id,
           });
+          if (assignErr) throw assignErr;
           const result = assignResult as { assigned: number; admin_review: number } | null;
           if (result) {
-            toast({ title: `Import Completed: ${imported} Leads Imported, ${result.assigned} auto-assigned${result.admin_review > 0 ? `, ${result.admin_review} to Admin Review` : ""}` });
+            const dupInfo = internalDup + existingDup > 0 ? `, ${internalDup + existingDup} Duplicate Records` : "";
+            const failInfo = invalid + failedInsert > 0 ? `, ${invalid + failedInsert} Failed Records` : "";
+            toast({
+              title: `Import Completed: ${imported} Leads Imported${dupInfo}${failInfo}, ${result.assigned} auto-assigned${result.admin_review > 0 ? `, ${result.admin_review} to Admin Review` : ""}`,
+            });
           } else {
             toast({ title: `Import Completed: ${imported} Leads Imported` });
           }
-        } catch {
-          toast({ title: `Import Completed: ${imported} Leads Imported (auto-assign pending)` });
+        } catch (assignError) {
+          const assignMsg = assignError instanceof Error ? assignError.message : String(assignError);
+          toast({
+            title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid + failedInsert} Failed Records. Auto-assign failed: ${assignMsg}`,
+            variant: "destructive",
+          });
         }
       } else {
         toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid + failedInsert} Failed Records` });
