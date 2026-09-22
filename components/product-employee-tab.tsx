@@ -270,13 +270,20 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resetTarget) return;
+    if (!resetTarget) {
+      toast({ title: "Unable to identify selected employee.", variant: "destructive" });
+      return;
+    }
     if (newPassword.length < 6) {
       toast({ title: "Password must be at least 6 characters", variant: "destructive" });
       return;
     }
     if (newPassword !== confirmPassword) {
       toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    if (resetTarget.id === profile?.id) {
+      toast({ title: "Use the account settings page to change your own password.", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -288,8 +295,9 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         toast({ title: `Reset failed: ${error || "Unknown error"}`, variant: "destructive" });
         return;
       }
-      toast({ title: "Password updated successfully" });
+      toast({ title: `Password updated for ${resetTarget.full_name}` });
       setResetOpen(false);
+      setResetTarget(null);
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
