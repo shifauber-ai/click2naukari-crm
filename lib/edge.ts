@@ -1,6 +1,4 @@
-import { supabase } from "./supabase/client";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+import { supabase, supabaseUrl, supabaseAnonKey } from "./supabase/client";
 
 export async function callEdgeFunction(
   name: string,
@@ -17,6 +15,7 @@ export async function callEdgeFunction(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
       },
       body: JSON.stringify(body),
     });
