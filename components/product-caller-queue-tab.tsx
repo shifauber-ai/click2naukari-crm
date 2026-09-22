@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { Product, Profile, CallerQueue, LEAD_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/types";
+import { Product, Profile, CallerQueue } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +45,14 @@ interface WorkloadStats {
   adminReview: number;
 }
 
+interface GroupedCaller {
+  employee: Profile;
+  rows: QueueRow[];
+  cityNames: string[];
+  isActive: boolean;
+  minPriority: number;
+}
+
 export function ProductCallerQueueTab({ product }: { product: Product }) {
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -59,30 +67,29 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   const [queueFilter, setQueueFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
 
-  // Summary stats
   const [totalCallers, setTotalCallers] = useState(0);
   const [activeCallers, setActiveCallers] = useState(0);
   const [inactiveCallers, setInactiveCallers] = useState(0);
   const [queueMembers, setQueueMembers] = useState(0);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Dialogs
   const [addOpen, setAddOpen] = useState(false);
   const [removeRow, setRemoveRow] = useState<QueueRow | null>(null);
   const [deactivateRow, setDeactivateRow] = useState<QueueRow | null>(null);
-  const [editRow, setEditRow] = useState<QueueRow | null>(null);
+  const [editGroup, setEditGroup] = useState<GroupedCaller | null>(null);
   const [detailRow, setDetailRow] = useState<QueueRow | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Add form
   const [addEmpId, setAddEmpId] = useState("");
   const [addPriority, setAddPriority] = useState("100");
-  const [addCityId, setAddCityId] = useState("__none__");
+  const [addCityIds, setAddCityIds] = useState<Set<string>>(new Set());
 
   // Edit form
   const [editPriority, setEditPriority] = useState("100");
+  const [editCityIds, setEditCityIds] = useState<Set<string>>(new Set());
+  const [editIsActive, setEditIsActive] = useState(true);
 
-  // Detail data
   const [detailWorkload, setDetailWorkload] = useState<WorkloadStats | null>(null);
   const [detailAssignments, setDetailAssignments] = useState<{ product_id: string; is_active: boolean; priority: number }[]>([]);
   const [detailLastCall, setDetailLastCall] = useState<string | null>(null);
@@ -93,7 +100,6 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
 
-  // Load all products + product cities
   useEffect(() => {
     (async () => {
       const [{ data: prods }, { data: cities }] = await Promise.all([
@@ -170,8 +176,6 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     setSearch(""); setStatusFilter("ALL"); setQueueFilter("ALL"); setPriorityFilter("ALL"); setCityFilter("ALL");
   };
 
-  // Employees assigned to this product with their city assignments.
-  // Keyed by employee_id -> { profile, cityIds: Set<city_id> }
   const [productAssignments, setProductAssignments] = useState<
     Map<string, { profile: Profile; cityIds: Set<string> }>
   >(new Map());
@@ -198,72 +202,111 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     })();
   }, [product.id]);
 
-  // Available employees for the Add Caller dropdown, filtered by product + selected city.
-  // An employee is eligible if they are assigned to this product AND (when a specific city
-  // is selected) assigned to that city. Employees already in the queue for the same
-  // product + city are excluded.
+  // Available employees for Add: assigned to this product AND assigned to ALL selected cities.
+  // Exclude employees already in the queue for the exact same set of cities (to avoid exact duplicates).
   const availableEmployees = (() => {
-    const selectedCityId = addCityId !== "__none__" ? addCityId : null;
     const result: Profile[] = [];
     productAssignments.forEach(({ profile, cityIds }) => {
-      if (selectedCityId && !cityIds.has(selectedCityId)) return;
-      const alreadyInQueue = queue.some(
-        (q) =>
-          q.employee_id === profile.id &&
-          ((q.city_id ?? null) === (selectedCityId ?? null))
-      );
-      if (alreadyInQueue) return;
+      for (const cid of Array.from(addCityIds)) {
+        if (!cityIds.has(cid)) return;
+      }
       result.push(profile);
     });
     return result.sort((a, b) => a.full_name.localeCompare(b.full_name));
   })();
 
-  // ===== Add caller =====
+  // Group queue rows by employee for display
+  const groupedCallers: GroupedCaller[] = (() => {
+    const map = new Map<string, GroupedCaller>();
+    for (const row of queue) {
+      if (!row.employee) continue;
+      const existing = map.get(row.employee_id);
+      if (existing) {
+        existing.rows.push(row);
+        if (row.city_name) existing.cityNames.push(row.city_name);
+        if (!row.is_active) existing.isActive = false;
+        existing.minPriority = Math.min(existing.minPriority, row.priority);
+      } else {
+        map.set(row.employee_id, {
+          employee: row.employee,
+          rows: [row],
+          cityNames: row.city_name ? [row.city_name] : [],
+          isActive: row.is_active,
+          minPriority: row.priority,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.minPriority - b.minPriority);
+  })();
+
+  const toggleAddCity = (cid: string) => {
+    setAddCityIds((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
+    setAddEmpId("");
+  };
+
+  // ===== Add caller (multi-city) =====
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addEmpId) return;
     setSaving(true);
-    // Check for duplicate (same product + employee + city)
-    let dupQuery = supabase
-      .from("caller_queues")
-      .select("id")
-      .eq("product_id", product.id)
-      .eq("employee_id", addEmpId);
-    if (addCityId && addCityId !== "__none__") dupQuery = dupQuery.eq("city_id", addCityId);
-    else dupQuery = dupQuery.is("city_id", null);
-    const { data: existing } = await dupQuery.maybeSingle();
-    if (existing) {
-      toast({ title: "Caller is already assigned to this product/city queue.", variant: "destructive" });
-      setSaving(false);
-      return;
-    }
-    const { data, error } = await supabase
-      .from("caller_queues")
-      .insert({
+    try {
+      // Determine which city entries to create
+      const citiesToCreate = addCityIds.size > 0 ? Array.from(addCityIds) : [null];
+      // Check for existing duplicates
+      for (const cid of citiesToCreate) {
+        let dupQuery = supabase
+          .from("caller_queues")
+          .select("id")
+          .eq("product_id", product.id)
+          .eq("employee_id", addEmpId);
+        if (cid) dupQuery = dupQuery.eq("city_id", cid);
+        else dupQuery = dupQuery.is("city_id", null);
+        const { data: existing } = await dupQuery.maybeSingle();
+        if (existing) {
+          const cityName = cid ? productCities.find((c) => c.id === cid)?.city_name : "product-wide";
+          toast({ title: `Caller already assigned to ${cityName}.`, variant: "destructive" });
+          setSaving(false);
+          return;
+        }
+      }
+
+      const insertRows = citiesToCreate.map((cid) => ({
         product_id: product.id,
         employee_id: addEmpId,
         priority: parseInt(addPriority, 10) || 100,
         is_active: true,
-        city_id: addCityId && addCityId !== "__none__" ? addCityId : null,
-      })
-      .select("*, employee:profiles(*), city:product_cities!city_id(city_name)")
-      .single();
-    if (error) {
-      toast({ title: "Caller could not be added. Please try again.", variant: "destructive" });
-    } else {
-      const newRow = data as QueueRow & { city?: { city_name: string } | null };
-      setQueue((prev) => [...prev, { ...newRow, city_name: newRow.city?.city_name || null }].sort((a, b) => a.priority - b.priority));
-      toast({ title: "Caller added to queue" });
-      setAddOpen(false);
-      setAddEmpId("");
-      setAddPriority("100");
-      setAddCityId("__none__");
-      loadStats();
+        city_id: cid,
+      }));
+
+      const { data, error } = await supabase
+        .from("caller_queues")
+        .insert(insertRows)
+        .select("*, employee:profiles(*), city:product_cities!city_id(city_name)");
+
+      if (error) {
+        toast({ title: "Caller could not be added. Please try again.", variant: "destructive" });
+      } else {
+        const newRows = ((data as (QueueRow & { city?: { city_name: string } | null })[]) || []).map((r) => ({
+          ...r,
+          city_name: r.city?.city_name || null,
+        }));
+        setQueue((prev) => [...prev, ...newRows].sort((a, b) => a.priority - b.priority));
+        const cityCount = citiesToCreate.length;
+        toast({ title: `Caller added to ${cityCount} ${cityCount !== 1 ? "queues" : "queue"}` });
+        setAddOpen(false);
+        setAddEmpId("");
+        setAddPriority("100");
+        setAddCityIds(new Set());
+        loadStats();
+      }
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to add caller", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
-  // ===== Remove caller =====
+  // ===== Remove caller (single row) =====
   const handleRemove = async () => {
     if (!removeRow) return;
     const { error } = await supabase
@@ -283,7 +326,6 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   // ===== Toggle active =====
   const handleToggle = async (row: QueueRow) => {
     if (!row.is_active) {
-      // Activating — do directly
       const { error } = await supabase
         .from("caller_queues")
         .update({ is_active: true, updated_at: new Date().toISOString() })
@@ -296,7 +338,6 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         loadStats();
       }
     } else {
-      // Deactivating — show confirmation
       setDeactivateRow(row);
     }
   };
@@ -324,7 +365,6 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     const swapIdx = idx + direction;
     if (swapIdx < 0 || swapIdx >= sortedQueue.length) return;
     const swapRow = sortedQueue[swapIdx];
-    // Swap priorities
     await Promise.all([
       supabase.from("caller_queues").update({ priority: swapRow.priority, updated_at: new Date().toISOString() }).eq("id", row.id),
       supabase.from("caller_queues").update({ priority: row.priority, updated_at: new Date().toISOString() }).eq("id", swapRow.id),
@@ -339,30 +379,107 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     });
   };
 
-  // ===== Edit priority =====
-  const openEdit = (row: QueueRow) => {
-    setEditRow(row);
-    setEditPriority(String(row.priority));
+  // ===== Edit (manage cities) =====
+  const openEdit = (group: GroupedCaller) => {
+    setEditGroup(group);
+    setEditPriority(String(group.minPriority));
+    setEditIsActive(group.isActive);
+    const existingCityIds = new Set<string>();
+    for (const row of group.rows) {
+      if (row.city_id) existingCityIds.add(row.city_id);
+    }
+    setEditCityIds(existingCityIds);
+  };
+
+  const toggleEditCity = (cid: string) => {
+    setEditCityIds((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
   };
 
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editRow) return;
+    if (!editGroup) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("caller_queues")
-      .update({ priority: parseInt(editPriority, 10) || 100, updated_at: new Date().toISOString() })
-      .eq("id", editRow.id);
-    if (error) {
-      toast({ title: "Failed to update priority.", variant: "destructive" });
-    } else {
-      setQueue((prev) => [...prev]
-        .map((r) => r.id === editRow.id ? { ...r, priority: parseInt(editPriority, 10) || 100 } : r)
-        .sort((a, b) => a.priority - b.priority));
-      toast({ title: "Priority updated" });
-      setEditRow(null);
+    try {
+      const empId = editGroup.employee.id;
+      const newPriority = parseInt(editPriority, 10) || 100;
+
+      // Determine desired city set (empty = product-wide)
+      const desiredCities: (string | null)[] = editCityIds.size > 0 ? Array.from(editCityIds) : [null];
+
+      // Existing city assignments for this employee+product
+      const existingRows = editGroup.rows;
+      const existingCityMap = new Map<string, QueueRow>();
+      for (const row of existingRows) {
+        const key = row.city_id || "__null__";
+        existingCityMap.set(key, row);
+      }
+
+      // Cities to add (in desired but not in existing)
+      const toAdd: { city_id: string | null }[] = [];
+      for (const cid of desiredCities) {
+        const key = cid || "__null__";
+        if (!existingCityMap.has(key)) {
+          toAdd.push({ city_id: cid });
+        }
+      }
+
+      // Cities to remove (in existing but not in desired)
+      const toRemove: string[] = [];
+      for (const [key, row] of Array.from(existingCityMap.entries())) {
+        const cid = key === "__null__" ? null : key;
+        const stillWanted = desiredCities.some((d) => (d || "__null__") === (cid || "__null__"));
+        if (!stillWanted) {
+          toRemove.push(row.id);
+        }
+      }
+
+      // Execute changes
+      const ops: Promise<unknown>[] = [];
+
+      // Update all existing rows with new priority + active state
+      for (const row of existingRows) {
+        ops.push(
+          Promise.resolve(
+            supabase
+              .from("caller_queues")
+              .update({ priority: newPriority, is_active: editIsActive, updated_at: new Date().toISOString() })
+              .eq("id", row.id)
+          )
+        );
+      }
+
+      // Remove unselected cities
+      if (toRemove.length > 0) {
+        ops.push(Promise.resolve(supabase.from("caller_queues").delete().in("id", toRemove)));
+      }
+
+      // Add new cities
+      if (toAdd.length > 0) {
+        ops.push(
+          Promise.resolve(
+            supabase.from("caller_queues").insert(
+              toAdd.map((c) => ({
+                product_id: product.id,
+                employee_id: empId,
+                priority: newPriority,
+                is_active: editIsActive,
+                city_id: c.city_id,
+              }))
+            )
+          )
+        );
+      }
+
+      await Promise.all(ops);
+      toast({ title: "Caller updated successfully" });
+      setEditGroup(null);
+      load();
+      loadStats();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to update caller", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   // ===== Detail drawer =====
@@ -406,7 +523,6 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   };
 
   const sortedQueue = [...queue].sort((a, b) => a.priority - b.priority);
-  const productMap = new Map(allProducts.map((p) => [p.id, p]));
 
   return (
     <div className="space-y-5">
@@ -414,10 +530,10 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-bold tracking-tight">{product.name} Caller Queue</h2>
-          <p className="text-sm text-muted-foreground">Manage caller assignment, priority and product queues</p>
+          <p className="text-sm text-muted-foreground">Manage caller assignment, priority, city and product queues</p>
         </div>
         {canManage && (
-          <Button onClick={() => setAddOpen(true)} disabled={availableEmployees.length === 0}>
+          <Button onClick={() => setAddOpen(true)} disabled={availableEmployees.length === 0 && addCityIds.size === 0 ? false : availableEmployees.length === 0}>
             <Plus className="mr-2 h-4 w-4" /> Add Caller
           </Button>
         )}
@@ -482,10 +598,10 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         )}
       </div>
 
-      {/* Table */}
+      {/* Table — grouped by employee */}
       {loading ? (
         <QueueSkeleton />
-      ) : sortedQueue.length === 0 ? (
+      ) : groupedCallers.length === 0 ? (
         <EmptyState
           icon={PhoneCall}
           title={hasActiveFilters ? "No callers match your filters" : "No callers assigned"}
@@ -499,7 +615,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Caller</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>City</TableHead>
+                <TableHead>Cities</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Queue</TableHead>
                 <TableHead>Priority</TableHead>
@@ -509,62 +625,70 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedQueue.map((row, idx) => (
-                <TableRow key={row.id}>
+              {groupedCallers.map((group, idx) => (
+                <TableRow key={group.employee.id}>
                   <TableCell className="text-sm text-muted-foreground font-medium">{idx + 1}</TableCell>
-                  <TableCell className="font-medium cursor-pointer hover:text-primary" onClick={() => openDetail(row)}>
-                    {row.employee?.full_name || "Unknown"}
-                    {!row.employee?.is_active && <span className="ml-2 text-xs text-warning-foreground">(emp inactive)</span>}
+                  <TableCell className="font-medium cursor-pointer hover:text-primary" onClick={() => openDetail(group.rows[0])}>
+                    {group.employee.full_name || "Unknown"}
+                    {!group.employee.is_active && <span className="ml-2 text-xs text-warning-foreground">(emp inactive)</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{row.employee?.email || "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{group.employee.email || "—"}</TableCell>
                   <TableCell className="text-sm">
-                    {row.city_name ? (
-                      <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary"><MapPin className="h-3 w-3" />{row.city_name}</span>
-                    ) : <span className="text-muted-foreground text-xs">Product-wide</span>}
+                    <div className="flex flex-wrap gap-1">
+                      {group.cityNames.length > 0 ? (
+                        group.cityNames.map((cn) => (
+                          <span key={cn} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                            <MapPin className="h-3 w-3" />{cn}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Product-wide</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {canManage ? (
-                        <Switch checked={row.is_active} onCheckedChange={() => handleToggle(row)} />
+                        <Switch checked={group.isActive} onCheckedChange={() => handleToggle(group.rows[0])} />
                       ) : (
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${row.is_active ? "bg-success/20 text-success-foreground" : "bg-muted text-muted-foreground"}`}>
-                          {row.is_active ? "Active" : "Inactive"}
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${group.isActive ? "bg-success/20 text-success-foreground" : "bg-muted text-muted-foreground"}`}>
+                          {group.isActive ? "Active" : "Inactive"}
                         </span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${row.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                      {row.is_active ? "In Queue" : "Not In Queue"}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${group.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      {group.isActive ? "In Queue" : "Not In Queue"}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <span className={`font-medium ${row.priority < 50 ? "text-destructive" : row.priority > 100 ? "text-muted-foreground" : "text-foreground"}`}>
-                      {row.priority < 50 ? "High" : row.priority > 100 ? "Low" : "Medium"} ({row.priority})
+                    <span className={`font-medium ${group.minPriority < 50 ? "text-destructive" : group.minPriority > 100 ? "text-muted-foreground" : "text-foreground"}`}>
+                      {group.minPriority < 50 ? "High" : group.minPriority > 100 ? "Low" : "Medium"} ({group.minPriority})
                     </span>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <LeadCountBadge employeeId={row.employee_id} productId={product.id} />
+                    <LeadCountBadge employeeId={group.employee.id} productId={product.id} />
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {row.updated_at ? format(new Date(row.updated_at), "dd MMM yyyy") : "—"}
+                    {group.rows[0].updated_at ? format(new Date(group.rows[0].updated_at), "dd MMM yyyy") : "—"}
                   </TableCell>
                   {canManage && (
                     <TableCell>
                       <div className="flex items-center justify-end gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(row)} title="View">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(group.rows[0])} title="View">
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)} title="Edit Priority">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(group)} title="Edit Cities & Priority">
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => movePriority(row, -1)} disabled={idx === 0} title="Move Up">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => movePriority(group.rows[0], -1)} disabled={idx === 0} title="Move Up">
                           <ArrowUp className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => movePriority(row, 1)} disabled={idx === sortedQueue.length - 1} title="Move Down">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => movePriority(group.rows[0], 1)} disabled={idx === groupedCallers.length - 1} title="Move Down">
                           <ArrowDown className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setRemoveRow(row)} title="Remove">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setRemoveRow(group.rows[0])} title="Remove">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -578,32 +702,43 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       )}
 
       {/* Rotation info */}
-      {sortedQueue.length > 0 && (
+      {groupedCallers.length > 0 && (
         <div className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
           <p className="text-sm text-muted-foreground">
-            Leads are assigned to caller #1 first. On Ringing (1 min) or Interested / Call Back (48h), the lead moves to the next active caller. Rotation never wraps from the last caller back to #1.
+            Leads are assigned to city-specific callers first. If no city-specific caller is available, product-wide callers are used. On Ringing (1 min) or Interested / Call Back (48h), the lead rotates to the next active caller in the same city pool.
           </p>
         </div>
       )}
 
-      {/* ===== Add Caller Dialog ===== */}
+      {/* ===== Add Caller Dialog (multi-city) ===== */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Caller to {product.name} Queue</DialogTitle>
-            <DialogDescription>Select an employee assigned to this product (and city, if chosen) to add to the caller queue.</DialogDescription>
+            <DialogDescription>Select an employee and one or more cities. A separate queue entry is created for each city.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAdd} className="space-y-3">
             <div>
-              <Label>City (optional — leave blank for product-wide)</Label>
-              <Select value={addCityId} onValueChange={(v) => { setAddCityId(v); setAddEmpId(""); }}>
-                <SelectTrigger><SelectValue placeholder="Product-wide" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Product-wide</SelectItem>
-                  {productCities.map((c) => <SelectItem key={c.id} value={c.id}>{c.city_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">Only employees assigned to the selected city will be listed. Same caller can be added to multiple city queues separately.</p>
+              <Label>Cities {addCityIds.size === 0 ? "(none selected = product-wide)" : `(${addCityIds.size} selected)`}</Label>
+              {productCities.length > 0 ? (
+                <div className="mt-2 space-y-2 rounded-lg border border-border/60 p-3 max-h-[180px] overflow-y-auto">
+                  {productCities.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <Checkbox checked={addCityIds.has(c.id)} onCheckedChange={() => toggleAddCity(c.id)} id={`add-city-${c.id}`} />
+                      <Label htmlFor={`add-city-${c.id}`} className="text-sm font-normal cursor-pointer flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />{c.city_name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">No cities configured for {product.name}. The caller will be assigned product-wide.</p>
+              )}
+              {addCityIds.size > 0 && (
+                <Button type="button" variant="ghost" size="sm" className="mt-1 h-7 text-xs" onClick={() => setAddCityIds(new Set())}>
+                  Clear all cities
+                </Button>
+              )}
             </div>
             <div>
               <Label>Caller</Label>
@@ -613,6 +748,9 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                   {availableEmployees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}{!e.is_active ? " — Inactive" : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {addCityIds.size > 0 && availableEmployees.length === 0 && (
+                <p className="mt-1 text-xs text-warning-foreground">No employees assigned to all selected cities. Add city assignments in the Employee tab first.</p>
+              )}
             </div>
             <div>
               <Label>Priority (lower = higher priority)</Label>
@@ -621,7 +759,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || !addEmpId}>{saving ? "Adding..." : "Add Caller"}</Button>
+              <Button type="submit" disabled={saving || !addEmpId}>{saving ? "Adding..." : `Add Caller${addCityIds.size > 1 ? ` (${addCityIds.size} cities)` : ""}`}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -633,12 +771,15 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
           <DialogHeader>
             <DialogTitle>Remove caller from queue?</DialogTitle>
             <DialogDescription>
-              This caller will no longer receive new leads for {product.name}. Existing lead assignments and call history will remain unchanged.
+              {removeRow?.city_name
+                ? `This removes ${removeRow?.employee?.full_name} from the ${removeRow.city_name} queue. Other city assignments for this caller are not affected.`
+                : `This removes ${removeRow?.employee?.full_name} from the product-wide queue.`}
+              {" "}Existing lead assignments and call history will remain unchanged.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRemoveRow(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleRemove}>Remove Caller</Button>
+            <Button variant="destructive" onClick={handleRemove}>Remove</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -649,7 +790,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
           <DialogHeader>
             <DialogTitle>Deactivate caller?</DialogTitle>
             <DialogDescription>
-              This caller will temporarily stop receiving new leads for {product.name}.
+              This caller will temporarily stop receiving new leads for {deactivateRow?.city_name || "this product-wide queue"}.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -659,22 +800,48 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         </DialogContent>
       </Dialog>
 
-      {/* ===== Edit Priority Dialog ===== */}
-      <Dialog open={!!editRow} onOpenChange={(v) => !v && setEditRow(null)}>
-        <DialogContent className="max-w-sm">
+      {/* ===== Edit Cities & Priority Dialog ===== */}
+      <Dialog open={!!editGroup} onOpenChange={(v) => !v && setEditGroup(null)}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Queue Priority</DialogTitle>
-            <DialogDescription>Set priority for {editRow?.employee?.full_name}</DialogDescription>
+            <DialogTitle>Edit Caller — {editGroup?.employee.full_name}</DialogTitle>
+            <DialogDescription>Add or remove cities. Changes only affect this caller's queue assignments for {product.name}.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditSave} className="space-y-3">
             <div>
-              <Label>Priority (lower = higher priority)</Label>
+              <Label>Cities {editCityIds.size === 0 ? "(none selected = product-wide)" : `(${editCityIds.size} selected)`}</Label>
+              {productCities.length > 0 ? (
+                <div className="mt-2 space-y-2 rounded-lg border border-border/60 p-3 max-h-[200px] overflow-y-auto">
+                  {productCities.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <Checkbox checked={editCityIds.has(c.id)} onCheckedChange={() => toggleEditCity(c.id)} id={`edit-city-${c.id}`} />
+                      <Label htmlFor={`edit-city-${c.id}`} className="text-sm font-normal cursor-pointer flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />{c.city_name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">No cities configured for {product.name}.</p>
+              )}
+              {editCityIds.size > 0 && (
+                <Button type="button" variant="ghost" size="sm" className="mt-1 h-7 text-xs" onClick={() => setEditCityIds(new Set())}>
+                  Clear all cities
+                </Button>
+              )}
+            </div>
+            <div>
+              <Label>Priority (applies to all city entries)</Label>
               <Input type="number" value={editPriority} onChange={(e) => setEditPriority(e.target.value)} />
               <p className="mt-1 text-xs text-muted-foreground">1-49 = High, 50-100 = Medium, 101+ = Low</p>
             </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={editIsActive} onCheckedChange={setEditIsActive} id="edit-active" />
+              <Label htmlFor="edit-active" className="text-sm font-normal cursor-pointer">Active in queue</Label>
+            </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditRow(null)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+              <Button type="button" variant="outline" onClick={() => setEditGroup(null)}>Cancel</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
