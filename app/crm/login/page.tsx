@@ -46,13 +46,19 @@ function LoginForm() {
       }
 
       // Step 2: Attempt sign-in directly — the Supabase JS client handles
-      // connectivity internally. A separate pre-check fetch was causing
-      // false "Failed to fetch" errors (AbortSignal.timeout not supported
-      // in some browsers, browser extensions blocking raw fetch, etc.).
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // connectivity internally. Retry once on transient network errors
+      // (e.g. WiFi handoff) since the second attempt usually succeeds.
+      let signInResult = await supabase.auth.signInWithPassword({ email, password });
+      if (signInResult.error) {
+        const errMsg = (signInResult.error.message || "").toLowerCase();
+        const isTransient = errMsg.includes("failed to fetch") || errMsg.includes("network") || errMsg.includes("load failed");
+        if (isTransient) {
+          console.warn("[Login] Transient network error on attempt 1, retrying...");
+          await new Promise((r) => setTimeout(r, 500));
+          signInResult = await supabase.auth.signInWithPassword({ email, password });
+        }
+      }
+      const { data, error: signInError } = signInResult;
 
       if (signInError) {
         const userMsg = classifyAuthError(signInError, "auth");
@@ -139,9 +145,9 @@ function LoginForm() {
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-        setError("Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.");
+        setError("Network connection issue. Please check your internet connection and try again.");
       } else {
-        setError("An unexpected error occurred during login. Please try again.");
+        setError(`Login error: ${err instanceof Error ? err.message : "Unexpected error"}. Please try again.`);
       }
       console.error("[Login] Unexpected exception:", err);
     } finally {

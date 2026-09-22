@@ -128,19 +128,16 @@ export function classifyAuthError(error: { message?: string; code?: string }, co
     if (!supabaseUrlRaw || !supabaseAnonKeyRaw) {
       return 'Supabase is not configured. The environment variables NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are missing. Please redeploy the site after setting them.';
     }
-    if (msg.includes('failed to fetch') || msg.includes('networkrequestfailed') || msg.includes('network error') || msg.includes('load failed') || msg.includes('fetch')) {
-      return 'Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.';
+    if (msg.includes('failed to fetch') || msg.includes('networkrequestfailed') || msg.includes('network error') || msg.includes('load failed')) {
+      return 'Network connection issue. Please check your internet connection and try again.';
     }
-    if (msg.includes('invalid api key') || msg.includes('invalidapikey') || code === '401') {
-      return 'Authentication configuration error (invalid API key). Please contact your administrator to verify the Supabase project settings.';
-    }
-    if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password') || msg.includes('wrong email')) {
+    if (code === '401' || msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password') || msg.includes('wrong email')) {
       return 'Invalid email or password. Please try again.';
     }
     if (msg.includes('email not confirmed')) {
       return 'Your email has not been confirmed. Please check your inbox for a confirmation link.';
     }
-    if (msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
+    if (code === '429' || msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
       return 'Too many login attempts. Please wait a minute before trying again.';
     }
     if (msg.includes('timeout') || msg.includes('timed out')) {
@@ -150,8 +147,8 @@ export function classifyAuthError(error: { message?: string; code?: string }, co
   }
 
   // Profile errors
-  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('load failed') || msg.includes('fetch')) {
-    return 'Unable to reach the database service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.';
+  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('load failed')) {
+    return 'Network connection issue. Please check your internet connection and try again.';
   }
   if (code === '42501' || code === 'PGRST301') {
     return 'Your account is authenticated, but your CRM profile could not be loaded due to a permissions issue. Please contact your administrator.';

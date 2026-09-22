@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed")) {
-        setError("Unable to reach the authentication service. This could be a network issue or the Supabase project may be paused. Please try again in a moment.");
+        setError("Network connection issue. Please check your internet connection and try again.");
       } else {
         setError("An unexpected error occurred. Please try again.");
       }
