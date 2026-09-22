@@ -27,7 +27,7 @@ import { useAuth } from "@/lib/auth-context";
 import { normalizePhone } from "@/lib/duplicate-utils";
 import {
   Phone, Search, ChevronLeft, ChevronRight, Loader2, Truck,
-  Eye, UserPlus, History, X, Users,
+  Eye, UserPlus, History, X, Users, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -71,6 +71,9 @@ export function HCLeadsTab({ product }: { product: Product }) {
   const [detailCalls, setDetailCalls] = useState<{ call_status: string; direction: string; call_timestamp: string; duration_seconds: number | null }[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deleteLead, setDeleteLead] = useState<LeadWithCaller | null>(null);
 
   const isAdmin = profile?.role === "ADMIN";
   const isManager = profile?.role === "MANAGER";
@@ -241,6 +244,47 @@ export function HCLeadsTab({ product }: { product: Product }) {
   };
   const allSelected = leads.length > 0 && selectedIds.size === leads.length;
 
+  const handleDelete = async () => {
+    if (!deleteLead) return;
+    const { error } = await supabase.rpc("admin_permanent_delete_lead", { p_lead_id: deleteLead.id });
+    if (error) {
+      toast({ title: "Failed to delete lead. Please try again.", variant: "destructive" });
+    } else {
+      setLeads((prev) => prev.filter((l) => l.id !== deleteLead.id));
+      toast({ title: "Lead permanently deleted" });
+      setDeleteLead(null);
+      loadStats();
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    try {
+      const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", { p_lead_ids: ids });
+      if (error) {
+        toast({ title: `Bulk delete failed: ${error.message}`, variant: "destructive" });
+        return;
+      }
+      const result = data as { deleted_count: number; not_found_count: number } | null;
+      const deletedCount = result?.deleted_count ?? ids.length;
+      if (deletedCount === 0) {
+        toast({ title: "No leads were deleted. They may have already been removed.", variant: "destructive" });
+        return;
+      }
+      toast({ title: `${deletedCount} lead${deletedCount !== 1 ? "s" : ""} permanently deleted` });
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      loadStats();
+    } catch (err) {
+      toast({ title: `Bulk delete failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const startIdx = page * pageSize + 1;
   const endIdx = Math.min((page + 1) * pageSize, total);
 
@@ -331,6 +375,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <TableHead>DL No</TableHead>
                 <TableHead>Total Trips</TableHead>
                 <TableHead>License No</TableHead>
+                <TableHead>Last Trip</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Call</TableHead>
@@ -351,6 +396,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                   <TableCell>{lead.dl_no || "—"}</TableCell>
                   <TableCell>{lead.total_trips ?? "—"}</TableCell>
                   <TableCell>{lead.license_no || "—"}</TableCell>
+                  <TableCell>{lead.last_trip_date ? format(new Date(lead.last_trip_date), "dd MMM yyyy") : "—"}</TableCell>
                   <TableCell>
                     <Select
                       value={lead.status as HCLeadStatus}
@@ -378,6 +424,11 @@ export function HCLeadsTab({ product }: { product: Product }) {
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssign(lead)} title="Assign">
                           <UserPlus className="h-3.5 w-3.5" />
                         </Button>
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteLead(lead)} title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   )}
@@ -414,6 +465,46 @@ export function HCLeadsTab({ product }: { product: Product }) {
         </div>
       )}
 
+      {/* ===== Bulk Delete Button ===== */}
+      {canManage && selectedIds.size > 0 && (
+        <div className="flex items-center gap-3">
+          <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedIds.size})
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear Selection</Button>
+        </div>
+      )}
+
+      {/* ===== Single Delete Dialog ===== */}
+      <Dialog open={!!deleteLead} onOpenChange={(v) => !v && setDeleteLead(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Lead?</DialogTitle>
+            <DialogDescription>This will permanently delete "{deleteLead?.name}" and all related records. This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteLead(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete Permanently</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Bulk Delete Dialog ===== */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} selected leads?</DialogTitle>
+            <DialogDescription>This will permanently delete {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} and all related records. This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Deleting..." : "Delete All Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ===== Detail Drawer ===== */}
       <Sheet open={!!detailLead} onOpenChange={(v) => !v && setDetailLead(null)}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
@@ -427,6 +518,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <DetailRow label="DL No" value={detailLead.dl_no || "—"} />
                 <DetailRow label="Total Trips" value={detailLead.total_trips ?? "—"} />
                 <DetailRow label="License No" value={detailLead.license_no || "—"} />
+                <DetailRow label="Last Trip Date" value={detailLead.last_trip_date ? format(new Date(detailLead.last_trip_date), "dd MMM yyyy") : "—"} />
                 <DetailRow label="Platform" value="UBER" />
                 <DetailRow label="Product" value="AUTO" />
                 <DetailRow label="City" value={detailLead.city || "—"} />

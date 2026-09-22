@@ -14,8 +14,8 @@ export function classifyProductCode(code: string, name: string) {
 }
 
 export function shouldShowTargetTab(product: Product): boolean {
-  const { isCar, isBike, isTempo, isAuto } = classifyProductCode(product.code, product.name);
-  return isCar || isBike || isTempo || isAuto;
+  const { isCar, isBike, isTempo, isAuto, isHC } = classifyProductCode(product.code, product.name);
+  return isCar || isBike || isTempo || isAuto || isHC;
 }
 
 export const PERIOD_LABELS: Record<string, string> = {

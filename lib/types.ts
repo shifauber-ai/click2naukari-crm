@@ -126,6 +126,7 @@ export interface Lead {
   dl_no?: string | null;
   total_trips?: number | null;
   license_no?: string | null;
+  last_trip_date?: string | null;
   ringing_started_at?: string | null;
   uber_id_done?: boolean;
   ola_id_done?: boolean;

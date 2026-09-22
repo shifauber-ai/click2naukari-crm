@@ -118,7 +118,7 @@ function TabPlaceholder({ tab, productName }: { tab: ProductTab; productName: st
 
 // HC Dashboard — separate workflow
 export function HCDashboard({ product }: { product: Product }) {
-  type HCTab = "leads" | "caller-queue" | "reports" | "city" | "directory" | "import-export" | "employee";
+  type HCTab = "leads" | "caller-queue" | "reports" | "city" | "directory" | "import-export" | "employee" | "targets";
   const [activeTab, setActiveTab] = useState<HCTab>("leads");
 
   const hcTabs: { key: HCTab; label: string; icon: LucideIcon }[] = [
@@ -129,6 +129,7 @@ export function HCDashboard({ product }: { product: Product }) {
     { key: "directory", label: "Directory", icon: BookMarked },
     { key: "import-export", label: "Import / Export", icon: Upload },
     { key: "employee", label: "Employee Add", icon: Users },
+    { key: "targets", label: "Target", icon: Target },
   ];
 
   return (
@@ -170,6 +171,7 @@ export function HCDashboard({ product }: { product: Product }) {
       {activeTab === "directory" && <ProductDirectoryTab product={product} />}
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={true} />}
       {activeTab === "employee" && <ProductEmployeeTab product={product} />}
+      {activeTab === "targets" && <ProductTargetsTab product={product} />}
     </div>
   );
 }

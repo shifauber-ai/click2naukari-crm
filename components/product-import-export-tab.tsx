@@ -43,6 +43,7 @@ interface ParsedRow {
   dlNo?: string;
   totalTrips?: string;
   licenseNo?: string;
+  lastTripDate?: string;
   rowStatus: RowStatus;
   error: string;
   existingLeadId?: string | null;
@@ -87,6 +88,7 @@ const HC_FIELDS: CRMField[] = [
   { key: "dlNo", label: "DL No", required: false },
   { key: "totalTrips", label: "Total Trips", required: false },
   { key: "licenseNo", label: "License No", required: false },
+  { key: "lastTripDate", label: "Last Trip Date", required: false },
   { key: "city", label: "City", required: false },
 ];
 
@@ -112,6 +114,7 @@ function autoMap(headers: string[], fields: CRMField[]): Mapping {
           city: ["location", "town"],
           platform: ["source_platform", "app"],
           source: ["origin", "channel"],
+          lasttripdate: ["lasttrip", "last_trip_date", "last trip"],
         };
         const syns = synonyms[field.key] || [];
         for (const syn of syns) {
@@ -390,8 +393,14 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         parsedRow.dlNo = mapping.dlNo ? getCol(cells, mapping.dlNo) : "";
         parsedRow.totalTrips = mapping.totalTrips ? getCol(cells, mapping.totalTrips) : "";
         parsedRow.licenseNo = mapping.licenseNo ? getCol(cells, mapping.licenseNo) : "";
+        parsedRow.lastTripDate = mapping.lastTripDate ? getCol(cells, mapping.lastTripDate) : "";
         if (parsedRow.totalTrips && isNaN(Number(parsedRow.totalTrips)))
           return { ...parsedRow, rowStatus: "INVALID", error: "Total Trips must be numeric" };
+        if (parsedRow.lastTripDate && parsedRow.lastTripDate.trim()) {
+          const parsed = new Date(parsedRow.lastTripDate.trim());
+          if (isNaN(parsed.getTime()))
+            return { ...parsedRow, rowStatus: "INVALID", error: `Invalid Last Trip Date: "${parsedRow.lastTripDate}"` };
+        }
       }
       return parsedRow;
     });
@@ -491,6 +500,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
             vehicle_no: row.vehicleNo || null, dl_no: row.dlNo || null,
             total_trips: row.totalTrips ? parseInt(row.totalTrips, 10) : null,
             license_no: row.licenseNo || null,
+            last_trip_date: row.lastTripDate && row.lastTripDate.trim() ? new Date(row.lastTripDate.trim()).toISOString().split("T")[0] : null,
           };
         }
         return {
@@ -655,7 +665,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     const effPlatform = platformOverride !== undefined ? platformOverride : exportPlatform;
     let query = supabase
       .from("leads")
-      .select("id, name, phone, platform, city, source, status, remarks, created_at, updated_at, next_followup_at, assigned_at, last_contact_at, product:products(name), current_caller:profiles!current_caller_id(full_name), product_id")
+      .select("id, name, phone, platform, city, source, status, remarks, created_at, updated_at, next_followup_at, assigned_at, last_contact_at, vehicle_no, dl_no, total_trips, license_no, last_trip_date, product:products(name), current_caller:profiles!current_caller_id(full_name), product_id")
       .eq("product_id", product.id)
       .order("created_at", { ascending: false })
       .limit(10000);
@@ -671,7 +681,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     const { data, error } = await query;
     if (error) { toast({ title: "Export failed. Please try again.", variant: "destructive" }); return null; }
     const header = isHC
-      ? ["Lead ID", "Driver Name", "Phone", "Vehicle No", "DL No", "Total Trips", "License No", "City", "Platform", "Status", "Created", "Updated"]
+      ? ["Lead ID", "Driver Name", "Phone", "Vehicle No", "DL No", "Total Trips", "License No", "Last Trip Date", "City", "Platform", "Status", "Created", "Updated"]
       : ["Lead ID", "Name", "Mobile Number", "Platform", "City", "Product", "Source", "Assigned Caller", "Status", "Sub Status", "Call Count", "Last Call Date", "Next Follow-up Date", "ID Created Date", "Created Date", "Updated Date"];
     const rows = (data as Record<string, unknown>[] | null || []).map((r): (string | number)[] => {
       const created = r.created_at ? format(new Date(r.created_at as string), "yyyy-MM-dd HH:mm") : "";
@@ -680,7 +690,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const prodName = (r.product as { name: string } | null)?.name || product.name;
       const caller = (r.current_caller as { full_name: string } | null)?.full_name || "";
       return isHC
-        ? [String(r.id || ""), String(r.name || ""), String(r.phone || ""), "", "", "", "", String(r.city || ""), String(r.platform || ""), String(r.status || ""), created, updated]
+        ? [String(r.id || ""), String(r.name || ""), String(r.phone || ""), String(r.vehicle_no || ""), String(r.dl_no || ""), String(r.total_trips ?? ""), String(r.license_no || ""), String(r.last_trip_date || ""), String(r.city || ""), String(r.platform || ""), String(r.status || ""), created, updated]
         : [String(r.id || ""), String(r.name || ""), String(r.phone || ""), String(r.platform || ""), String(r.city || ""), prodName, String(r.source || ""), caller, String(r.status || ""), String(r.remarks || ""), "", "", followup, "", created, updated];
     });
     return { header, rows };
@@ -726,7 +736,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
   const downloadTemplate = (format: "csv" | "xlsx") => {
     if (isHC) {
-      const header = ["Driver Name", "Contact", "Vehicle No", "DL No", "Total Trips", "License No", "City"];
+      const header = ["Driver Name", "Contact", "Vehicle No", "DL No", "Total Trips", "License No", "Last Trip Date", "City"];
       if (format === "csv") downloadCSV([header], "hc-import-template.csv");
       else downloadXLSX([header], "Template", "hc-import-template.xlsx");
     } else {
@@ -795,7 +805,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
               <CardContent className="space-y-4">
                 {isHC && (
                   <div className="rounded-lg border border-info/30 bg-info/5 px-4 py-3">
-                    <p className="text-sm text-info-foreground">HC import: Platform is automatically set to Uber. Required: Driver Name, Contact. Optional: Vehicle No, DL No, Total Trips, License No, City.</p>
+                    <p className="text-sm text-info-foreground">HC import: Platform is automatically set to Uber. Required: Driver Name, Contact. Optional: Vehicle No, DL No, Total Trips, License No, Last Trip Date, City.</p>
                   </div>
                 )}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
