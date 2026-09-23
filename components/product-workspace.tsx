@@ -17,6 +17,7 @@ import { ProductTargetsTab } from "@/components/product-targets-tab";
 import { shouldShowTargetTab } from "@/lib/target-config";
 import { HCLeadsTab } from "@/components/hc-leads-tab";
 import { HCCityTab } from "@/components/hc-city-tab";
+import { HCReportsTab } from "@/components/hc-reports-tab";
 import { PageHeader, EmptyState } from "@/components/page-parts";
 import { cn } from "@/lib/utils";
 import {
@@ -166,7 +167,7 @@ export function HCDashboard({ product }: { product: Product }) {
 
       {activeTab === "leads" && <HCLeadsTab product={product} />}
       {activeTab === "caller-queue" && <ProductCallerQueueTab product={product} />}
-      {activeTab === "reports" && <ProductReportsTab product={product} />}
+      {activeTab === "reports" && <HCReportsTab product={product} />}
       {activeTab === "city" && <HCCityTab product={product} />}
       {activeTab === "directory" && <ProductDirectoryTab product={product} />}
       {activeTab === "import-export" && <ProductImportExportTab product={product} isHC={true} />}
