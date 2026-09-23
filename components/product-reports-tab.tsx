@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { classifyProductCode } from "@/lib/target-config";
 import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
+import { TargetProgressSection } from "@/components/target-progress-section";
 
 type RangeKey = "today" | "week" | "month" | "custom";
 
@@ -362,6 +363,9 @@ export function ProductReportsTab({ product }: { product: Product }) {
         <EmptyState icon={BarChart3} title="No data available for selected filters" description="Adjust filters or date range to see report data." />
       ) : (
         <div className="space-y-6">
+          {/* Target Progress */}
+          <TargetProgressSection product={product} />
+
           {/* Summary Cards */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
             <StatCard label="Total Leads" value={stats.total} icon={Users} tone="default" />

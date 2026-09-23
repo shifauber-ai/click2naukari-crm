@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { subDays, startOfWeek, startOfMonth, startOfDay, format } from "date-fns";
 import { Product, Profile } from "@/lib/types";
+import { TargetProgressSection } from "@/components/target-progress-section";
 
 type RangeKey = "today" | "yesterday" | "week" | "month" | "custom" | "all";
 
@@ -437,6 +438,9 @@ export default function AdminReportsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Target Progress Section */}
+          <TargetProgressSection />
 
           {/* Leaderboards */}
           <div className="grid gap-4 lg:grid-cols-2">
