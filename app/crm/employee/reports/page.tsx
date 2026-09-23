@@ -13,6 +13,7 @@ import { TrendingUp, Users, Phone, CheckCircle2 } from "lucide-react";
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import type { Platform } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
+import { TargetProgressSection } from "@/components/target-progress-section";
 
 type Preset = "today" | "yesterday" | "week" | "month" | "custom";
 
@@ -362,6 +363,9 @@ export default function EmployeeReportsPage() {
           </div>
         </>
       )}
+
+      {/* Target Progress */}
+      {product && <TargetProgressSection product={product} />}
     </div>
   );
 }

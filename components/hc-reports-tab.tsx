@@ -20,6 +20,7 @@ import {
   BarChart3, Users, CheckCircle2, FileCheck, Download, Loader2,
 } from "lucide-react";
 import { format, startOfWeek, startOfMonth } from "date-fns";
+import { TargetProgressSection } from "@/components/target-progress-section";
 
 type RangeKey = "week" | "month" | "custom";
 
@@ -224,6 +225,8 @@ export function HCReportsTab({ product }: { product: Product }) {
         <EmptyState icon={BarChart3} title="No HC data available for selected filters" description="Adjust filters or date range to see report data." />
       ) : (
         <div className="space-y-6">
+          <TargetProgressSection product={product} />
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard label="Total HC Leads" value={stats.total} icon={Users} tone="default" />
             <StatCard label="Tag Added" value={stats.tagAdded} icon={CheckCircle2} tone="success" />
