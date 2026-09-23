@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileUidRef.current = null;
       return;
     }
-    const p = data as Profile;
+    const p = { ...data, role: (data.role as string).toUpperCase() } as Profile;
     setProfile(p);
 
     // Load product assignments for managers; admins get all products

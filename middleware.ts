@@ -58,7 +58,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/crm/admin") && profile.role !== "ADMIN" && profile.role !== "MANAGER") {
+  if (pathname.startsWith("/crm/admin") && profile.role !== "admin" && profile.role !== "manager") {
     const url = req.nextUrl.clone();
     url.pathname = "/crm/employee";
     return NextResponse.redirect(url);
@@ -71,7 +71,7 @@ export async function middleware(req: NextRequest) {
     "/crm/admin/audit",
     "/crm/admin/register-admin",
   ];
-  if (profile.role === "MANAGER" && adminOnlyPaths.some((p) => pathname.startsWith(p))) {
+  if (profile.role === "manager" && adminOnlyPaths.some((p) => pathname.startsWith(p))) {
     const url = req.nextUrl.clone();
     url.pathname = "/crm/admin";
     return NextResponse.redirect(url);
