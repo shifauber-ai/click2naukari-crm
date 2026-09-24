@@ -138,6 +138,7 @@ export default function AdminLeadsPage() {
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+  const [statusRemarks, setStatusRemarks] = useState("");
   const [productPlatformsMap, setProductPlatformsMap] = useState<Map<string, { id: string; name: string }[]>>(new Map());
 
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
@@ -338,20 +339,27 @@ export default function AdminLeadsPage() {
       return;
     }
     setPlatformStatusSaving(platformName);
-    const { error } = await supabase.rpc("update_lead_platform_status", {
-      p_lead_id: statusLead.id,
-      p_platform_name: platformName,
-      p_status: selected,
-    });
-    if (error) {
-      toast({ title: error.message, variant: "destructive" });
-    } else {
-      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
-      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
-      setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
-      load();
+    try {
+      const { error } = await supabase.rpc("update_lead_platform_status", {
+        p_lead_id: statusLead.id,
+        p_platform_name: platformName,
+        p_status: selected,
+        p_remarks: statusRemarks.trim(),
+      });
+      if (error) {
+        toast({ title: error.message, variant: "destructive" });
+      } else {
+        toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+        setStatusRemarks("");
+        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
+        setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+        load();
+      }
+    } catch (err) {
+      toast({ title: `Failed to update ${platformName} status: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setPlatformStatusSaving(null);
     }
-    setPlatformStatusSaving(null);
   };
 
   const openHistory = async (lead: Lead) => {
@@ -1185,6 +1193,15 @@ export default function AdminLeadsPage() {
                   </div>
                 </div>
               ))}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Remarks</Label>
+                <Textarea
+                  value={statusRemarks}
+                  onChange={(e) => setStatusRemarks(e.target.value)}
+                  placeholder="Add remarks (optional)"
+                  rows={2}
+                />
+              </div>
               <DialogFooter>
                 <Button
                   type="button"

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -111,11 +112,12 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+  const [statusRemarks, setStatusRemarks] = useState("");
 
   const ALL_PLATFORM_CONFIG = [
-    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK"] },
-    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK"] },
-    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK"] },
+    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED"] },
+    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED"] },
+    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED"] },
   ];
   const PLATFORM_STATUS_LABELS: Record<string, string> = {
     RINGING: "Ringing",
@@ -130,6 +132,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     OTHER_NUMBER: "Other Number",
     PAYMENT_ISSUE: "Payment Issue",
     CALLBACK: "Callback",
+    INTERESTED: "Interested",
     PENDING: "Pending",
   };
   const isSinglePlatform = productPlatforms.length <= 1;
@@ -500,33 +503,40 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       return;
     }
     setPlatformStatusSaving(platformName);
-    const { error } = await supabase.rpc("update_lead_platform_status", {
-      p_lead_id: statusLead.id,
-      p_platform_name: platformName,
-      p_status: selected,
-    });
-    if (error) {
-      toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
-    } else {
-      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
-      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
-      // Refresh per-lead platform statuses so the table reflects the update
-      setLeadPlatformStatuses((prev) => {
-        const updated = { ...prev };
-        if (updated[statusLead.id]) {
-          updated[statusLead.id] = { ...updated[statusLead.id], [platformName]: selected };
-        }
-        return updated;
+    try {
+      const { error } = await supabase.rpc("update_lead_platform_status", {
+        p_lead_id: statusLead.id,
+        p_platform_name: platformName,
+        p_status: selected,
+        p_remarks: statusRemarks.trim(),
       });
-      if (detailLead?.id === statusLead.id) {
-        setDetailLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
-        loadPlatformDetailStatuses(statusLead.id);
+      if (error) {
+        toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
+      } else {
+        toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+        setStatusRemarks("");
+        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
+        // Refresh per-lead platform statuses so the table reflects the update
+        setLeadPlatformStatuses((prev) => {
+          const updated = { ...prev };
+          if (updated[statusLead.id]) {
+            updated[statusLead.id] = { ...updated[statusLead.id], [platformName]: selected };
+          }
+          return updated;
+        });
+        if (detailLead?.id === statusLead.id) {
+          setDetailLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+          loadPlatformDetailStatuses(statusLead.id);
+        }
+        if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+        loadStats();
+        load();
       }
-      if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
-      loadStats();
-      load();
+    } catch (err) {
+      toast({ title: `Failed to update ${platformName} status: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setPlatformStatusSaving(null);
     }
-    setPlatformStatusSaving(null);
   };
 
   // ===== Assign =====
@@ -1189,6 +1199,15 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   </div>
                 </div>
               ))}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Remarks</Label>
+                <Textarea
+                  value={statusRemarks}
+                  onChange={(e) => setStatusRemarks(e.target.value)}
+                  placeholder="Add remarks (optional)"
+                  rows={2}
+                />
+              </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setStatusLead(null)}>Close</Button>
               </DialogFooter>
