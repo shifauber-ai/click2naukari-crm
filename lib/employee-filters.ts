@@ -57,9 +57,9 @@ export function applyDateFilter<T extends { gte: (col: string, val: string) => T
 }
 
 export const PLATFORM_CONFIG = [
-  { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED"] },
-  { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED"] },
-  { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED"] },
+  { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
+  { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
+  { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
 ];
 
 export const PLATFORM_STATUS_MAP: Record<string, string[]> = {
@@ -87,6 +87,12 @@ export const PLATFORM_STATUS_LABELS: Record<string, string> = {
   ADMIN_REVIEW: "Admin Review",
   TAG_ADDED: "Tag Added",
   PENDING: "Pending",
+  DISCONNECTED: "Ringing / Disconnected",
+  ACTIVE_UBER: "Active on Uber",
+  OTHER_LOCATION: "Other Location",
+  NEED_TIME: "Need Time to Think",
+  WRONG_NUMBER: "Wrong Number",
+  SWITCH_OFF: "Switch Off / Incoming Off",
 };
 
 export function getStatusesForPlatform(platform: string | null): string[] | null {
@@ -107,6 +113,7 @@ export function mapPlatformStatusToLeadStatus(platformStatus: string): string {
   if (platformStatus === "FRESH") return "NEW";
   if (platformStatus === "EXISTING") return "RINGING";
   if (platformStatus === "OTHER_NUMBER" || platformStatus === "PAYMENT_ISSUE") return "OTHER_ISSUE";
+  if (platformStatus === "DISCONNECTED" || platformStatus === "ACTIVE_UBER" || platformStatus === "OTHER_LOCATION" || platformStatus === "NEED_TIME" || platformStatus === "WRONG_NUMBER" || platformStatus === "SWITCH_OFF") return platformStatus;
   if (platformStatus === "DONE") return "ID_DONE";
   return platformStatus;
 }

@@ -115,9 +115,9 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [statusRemarks, setStatusRemarks] = useState("");
 
   const ALL_PLATFORM_CONFIG = [
-    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED"] },
-    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED"] },
-    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED"] },
+    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
+    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
+    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
   ];
   const PLATFORM_STATUS_LABELS: Record<string, string> = {
     RINGING: "Ringing",
@@ -134,6 +134,12 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     CALLBACK: "Callback",
     INTERESTED: "Interested",
     PENDING: "Pending",
+    DISCONNECTED: "Ringing / Disconnected",
+    ACTIVE_UBER: "Active on Uber",
+    OTHER_LOCATION: "Other Location",
+    NEED_TIME: "Need Time to Think",
+    WRONG_NUMBER: "Wrong Number",
+    SWITCH_OFF: "Switch Off / Incoming Off",
   };
   const isSinglePlatform = productPlatforms.length <= 1;
   const isMultiPlatform = !isSinglePlatform && productPlatforms.length > 1;
@@ -481,6 +487,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   // ===== Status Update (per-platform) =====
   const openStatus = async (lead: LeadWithCaller) => {
     setStatusLead(lead);
+    setStatusRemarks(lead.remarks || "");
     setPlatformStatusLoading(true);
     setPlatformStatuses({});
     const { data } = await supabase
@@ -515,7 +522,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       } else {
         toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
         setStatusRemarks("");
-        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
+        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus, remarks: statusRemarks.trim() || l.remarks } : l));
         // Refresh per-lead platform statuses so the table reflects the update
         setLeadPlatformStatuses((prev) => {
           const updated = { ...prev };
@@ -525,10 +532,10 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           return updated;
         });
         if (detailLead?.id === statusLead.id) {
-          setDetailLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+          setDetailLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
           loadPlatformDetailStatuses(statusLead.id);
         }
-        if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+        if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
         loadStats();
         load();
       }
@@ -1020,7 +1027,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
                   <DetailRow label="Updated" value={format(new Date(detailLead.updated_at), "dd MMM yyyy, HH:mm")} />
                   <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"} />
-                  {detailLead.remarks && <DetailRow label="Remarks" value={detailLead.remarks} />}
+                  {detailLead.remarks ? <DetailRow label="Remark" value={detailLead.remarks} /> : <DetailRow label="Remark" value="No remark added" />}
                 </div>
               </div>
 

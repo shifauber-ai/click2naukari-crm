@@ -317,6 +317,7 @@ export default function AdminLeadsPage() {
 
   const openStatus = async (lead: Lead) => {
     setStatusLead(lead);
+    setStatusRemarks(lead.remarks || "");
     setPlatformStatusLoading(true);
     setPlatformStatuses({});
     const { data } = await supabase
@@ -351,8 +352,8 @@ export default function AdminLeadsPage() {
       } else {
         toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
         setStatusRemarks("");
-        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus } : l));
-        setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus } : prev);
+        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus, remarks: statusRemarks.trim() || l.remarks } : l));
+        setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
         load();
       }
     } catch (err) {
@@ -1586,6 +1587,12 @@ export default function AdminLeadsPage() {
                     </p>
                   </div>
                   <StatusBadge status={historyLead.status} />
+                </div>
+                <div className="mt-3 border-t border-border/40 pt-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Remark</p>
+                  <p className="mt-1 text-sm">
+                    {historyLead.remarks ? historyLead.remarks : "No remark added"}
+                  </p>
                 </div>
               </div>
 
