@@ -32,13 +32,7 @@ export type LeadStatus =
   | "FRESH"
   | "OTHER_NUMBER"
   | "PAYMENT_ISSUE"
-  | "DONE"
-  | "DISCONNECTED"
-  | "ACTIVE_UBER"
-  | "OTHER_LOCATION"
-  | "NEED_TIME"
-  | "WRONG_NUMBER"
-  | "SWITCH_OFF";
+  | "DONE";
 
 export const LEAD_STATUSES: LeadStatus[] = [
   "NEW",
@@ -59,12 +53,6 @@ export const LEAD_STATUSES: LeadStatus[] = [
   "OTHER_NUMBER",
   "PAYMENT_ISSUE",
   "DONE",
-  "DISCONNECTED",
-  "ACTIVE_UBER",
-  "OTHER_LOCATION",
-  "NEED_TIME",
-  "WRONG_NUMBER",
-  "SWITCH_OFF",
 ];
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -86,12 +74,6 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   OTHER_NUMBER: "Other Number",
   PAYMENT_ISSUE: "Payment Issue",
   DONE: "Done",
-  DISCONNECTED: "Ringing / Disconnected",
-  ACTIVE_UBER: "Active on Uber",
-  OTHER_LOCATION: "Other Location",
-  NEED_TIME: "Need Time to Think",
-  WRONG_NUMBER: "Wrong Number",
-  SWITCH_OFF: "Switch Off / Incoming Off",
 };
 
 export interface Profile {

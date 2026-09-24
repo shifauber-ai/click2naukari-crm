@@ -21,12 +21,6 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   OTHER_NUMBER: "bg-muted text-muted-foreground",
   PAYMENT_ISSUE: "bg-destructive/15 text-destructive border-destructive/30",
   DONE: "bg-success text-success-foreground",
-  DISCONNECTED: "bg-warning text-warning-foreground",
-  ACTIVE_UBER: "bg-chart-2/20 text-chart-2 border-chart-2/30",
-  OTHER_LOCATION: "bg-muted text-muted-foreground",
-  NEED_TIME: "bg-warning text-warning-foreground",
-  WRONG_NUMBER: "bg-destructive/15 text-destructive border-destructive/30",
-  SWITCH_OFF: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 export function StatusBadge({
