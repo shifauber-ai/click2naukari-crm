@@ -27,6 +27,8 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   NEED_TIME: "bg-warning text-warning-foreground",
   WRONG_NUMBER: "bg-destructive/15 text-destructive border-destructive/30",
   SWITCH_OFF: "bg-destructive/15 text-destructive border-destructive/30",
+  OUT_OF_CITY: "bg-muted text-muted-foreground",
+  NOT_ELIGIBLE: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 export function StatusBadge({

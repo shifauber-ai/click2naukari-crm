@@ -113,11 +113,13 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
   const [statusRemarks, setStatusRemarks] = useState("");
+  const [callbackDate, setCallbackDate] = useState("");
+  const [callbackTime, setCallbackTime] = useState("");
 
   const ALL_PLATFORM_CONFIG = [
-    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
-    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
-    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
+    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF", "OUT_OF_CITY", "NOT_ELIGIBLE"] },
+    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF", "OUT_OF_CITY", "NOT_ELIGIBLE"] },
+    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF", "OUT_OF_CITY", "NOT_ELIGIBLE"] },
   ];
   const PLATFORM_STATUS_LABELS: Record<string, string> = {
     RINGING: "Ringing",
@@ -140,6 +142,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     NEED_TIME: "Need Time to Think",
     WRONG_NUMBER: "Wrong Number",
     SWITCH_OFF: "Switch Off / Incoming Off",
+    OUT_OF_CITY: "Out of City",
+    NOT_ELIGIBLE: "Not Eligible",
   };
   const isSinglePlatform = productPlatforms.length <= 1;
   const isMultiPlatform = !isSinglePlatform && productPlatforms.length > 1;
@@ -488,6 +492,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const openStatus = async (lead: LeadWithCaller) => {
     setStatusLead(lead);
     setStatusRemarks(lead.remarks || "");
+    setCallbackDate(lead.callback_date || "");
+    setCallbackTime(lead.callback_time || "");
     setPlatformStatusLoading(true);
     setPlatformStatuses({});
     const { data } = await supabase
@@ -509,6 +515,10 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
+    if (selected === "CALLBACK" && (!callbackDate || !callbackTime)) {
+      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+      return;
+    }
     setPlatformStatusSaving(platformName);
     try {
       const { error } = await supabase.rpc("update_lead_platform_status", {
@@ -516,26 +526,40 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         p_platform_name: platformName,
         p_status: selected,
         p_remarks: statusRemarks.trim(),
+        p_callback_date: selected === "CALLBACK" ? callbackDate : null,
+        p_callback_time: selected === "CALLBACK" ? callbackTime : null,
       });
       if (error) {
         toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
       } else {
         toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+        // Re-fetch the lead from Supabase to get the latest status + remarks + callback fields
+        const { data: refreshed } = await supabase
+          .from("leads")
+          .select("*, current_caller:profiles!current_caller_id(full_name)")
+          .eq("id", statusLead.id)
+          .maybeSingle();
+        const refreshedLead = refreshed as LeadWithCaller | null;
         setStatusRemarks("");
-        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus, remarks: statusRemarks.trim() || l.remarks } : l));
-        // Refresh per-lead platform statuses so the table reflects the update
-        setLeadPlatformStatuses((prev) => {
-          const updated = { ...prev };
-          if (updated[statusLead.id]) {
-            updated[statusLead.id] = { ...updated[statusLead.id], [platformName]: selected };
+        setCallbackDate("");
+        setCallbackTime("");
+        if (refreshedLead) {
+          setLeads((prev) => prev.map((l) => l.id === statusLead.id ? refreshedLead : l));
+          setLeadPlatformStatuses((prev) => {
+            const updated = { ...prev };
+            if (updated[statusLead.id]) {
+              updated[statusLead.id] = { ...updated[statusLead.id], [platformName]: selected };
+            }
+            return updated;
+          });
+          if (detailLead?.id === statusLead.id) {
+            setDetailLead(refreshedLead);
+            loadPlatformDetailStatuses(statusLead.id);
           }
-          return updated;
-        });
-        if (detailLead?.id === statusLead.id) {
-          setDetailLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
-          loadPlatformDetailStatuses(statusLead.id);
+          setStatusLead(refreshedLead);
+        } else {
+          setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus, remarks: statusRemarks.trim() || l.remarks } : l));
         }
-        if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
         loadStats();
         load();
       }
@@ -1027,6 +1051,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
                   <DetailRow label="Updated" value={format(new Date(detailLead.updated_at), "dd MMM yyyy, HH:mm")} />
                   <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"} />
+                  {detailLead.callback_date && <DetailRow label="Callback Date" value={format(new Date(detailLead.callback_date), "dd MMM yyyy")} />}
+                  {detailLead.callback_time && <DetailRow label="Callback Time" value={detailLead.callback_time} />}
                   {detailLead.remarks ? <DetailRow label="Remark" value={detailLead.remarks} /> : <DetailRow label="Remark" value="No remark added" />}
                 </div>
               </div>
@@ -1206,6 +1232,18 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   </div>
                 </div>
               ))}
+              {Object.values(platformStatuses).some((s) => s === "CALLBACK") && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Callback Date *</Label>
+                    <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Callback Time *</Label>
+                    <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} />
+                  </div>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-sm">Remarks</Label>
                 <Textarea
@@ -1340,6 +1378,12 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                           <span className="text-muted-foreground">{format(new Date(h.created_at), "dd MMM, HH:mm")}</span>
                         </div>
                         {h.remarks && <p className="mt-1 text-muted-foreground">{h.remarks}</p>}
+                        {h.callback_date && (
+                          <p className="mt-0.5 text-muted-foreground">
+                            Callback: {format(new Date(h.callback_date), "dd MMM yyyy")}{h.callback_time ? ` at ${h.callback_time}` : ""}
+                          </p>
+                        )}
+                        <p className="mt-0.5 text-muted-foreground">by {h.actor_type.toLowerCase()}</p>
                       </div>
                     ))}
                   </div>

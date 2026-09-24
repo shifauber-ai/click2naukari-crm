@@ -38,7 +38,9 @@ export type LeadStatus =
   | "OTHER_LOCATION"
   | "NEED_TIME"
   | "WRONG_NUMBER"
-  | "SWITCH_OFF";
+  | "SWITCH_OFF"
+  | "OUT_OF_CITY"
+  | "NOT_ELIGIBLE";
 
 export const LEAD_STATUSES: LeadStatus[] = [
   "NEW",
@@ -65,6 +67,8 @@ export const LEAD_STATUSES: LeadStatus[] = [
   "NEED_TIME",
   "WRONG_NUMBER",
   "SWITCH_OFF",
+  "OUT_OF_CITY",
+  "NOT_ELIGIBLE",
 ];
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -92,7 +96,11 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   NEED_TIME: "Need Time to Think",
   WRONG_NUMBER: "Wrong Number",
   SWITCH_OFF: "Switch Off / Incoming Off",
+  OUT_OF_CITY: "Out of City",
+  NOT_ELIGIBLE: "Not Eligible",
 };
+
+export const FOLLOWUP_STATUSES: LeadStatus[] = ["CALLBACK", "INTERESTED"];
 
 export interface Profile {
   id: string;
@@ -157,6 +165,8 @@ export interface Lead {
   ola_id_done?: boolean;
   rapido_id_done?: boolean;
   form_status?: string;
+  callback_date?: string | null;
+  callback_time?: string | null;
   product?: Product;
   current_caller?: Profile | null;
 }
@@ -190,6 +200,8 @@ export interface LeadStatusHistory {
   actor_type: string;
   actor_id: string | null;
   created_at: string;
+  callback_date?: string | null;
+  callback_time?: string | null;
 }
 
 export interface ScheduledTransition {

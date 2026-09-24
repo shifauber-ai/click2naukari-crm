@@ -27,6 +27,8 @@ import {
   Wallet, Edit,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import type { Lead, Platform, ProductCity, LeadStatusHistory, LeadAssignment, ScheduledTransition } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
@@ -66,6 +68,9 @@ export default function EmployeeLeadsPage() {
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, string>>({});
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
+  const [statusRemarks, setStatusRemarks] = useState("");
+  const [callbackDate, setCallbackDate] = useState("");
+  const [callbackTime, setCallbackTime] = useState("");
   const [detailPlatformStatuses, setDetailPlatformStatuses] = useState<Record<string, string>>({});
   const [paymentLead, setPaymentLead] = useState<LeadWithDetails | null>(null);
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
@@ -214,6 +219,9 @@ export default function EmployeeLeadsPage() {
 
   const openStatus = async (lead: LeadWithDetails) => {
     setStatusLead(lead);
+    setStatusRemarks(lead.remarks || "");
+    setCallbackDate(lead.callback_date || "");
+    setCallbackTime(lead.callback_time || "");
     setPlatformStatusLoading(true);
     setPlatformStatuses({});
     await loadPlatformStatuses(lead.id, "modal");
@@ -254,24 +262,50 @@ export default function EmployeeLeadsPage() {
       toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
-    setPlatformStatusSaving(platformName);
-    const { error } = await supabase.rpc("update_lead_platform_status", {
-      p_lead_id: statusLead.id,
-      p_platform_name: platformName,
-      p_status: selected,
-    });
-    if (error) {
-      toast({ title: `Failed: ${error.message}`, variant: "destructive" });
-    } else {
-      toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
-      setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as any } : l));
-      if (viewLead?.id === statusLead.id) {
-        setViewLead((prev) => prev ? { ...prev, status: selected as any } : prev);
-        loadPlatformStatuses(statusLead.id, "detail");
-      }
-      if (statusLead) setStatusLead((prev) => prev ? { ...prev, status: selected as any } : prev);
+    if (selected === "CALLBACK" && (!callbackDate || !callbackTime)) {
+      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+      return;
     }
-    setPlatformStatusSaving(null);
+    setPlatformStatusSaving(platformName);
+    try {
+      const { error } = await supabase.rpc("update_lead_platform_status", {
+        p_lead_id: statusLead.id,
+        p_platform_name: platformName,
+        p_status: selected,
+        p_remarks: statusRemarks.trim(),
+        p_callback_date: selected === "CALLBACK" ? callbackDate : null,
+        p_callback_time: selected === "CALLBACK" ? callbackTime : null,
+      });
+      if (error) {
+        toast({ title: `Failed: ${error.message}`, variant: "destructive" });
+      } else {
+        toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
+        // Re-fetch the lead from Supabase to get the latest status + remarks + callback fields
+        const { data: refreshed } = await supabase
+          .from("leads")
+          .select("*, product:products(*)")
+          .eq("id", statusLead.id)
+          .maybeSingle();
+        const refreshedLead = refreshed as LeadWithDetails | null;
+        setStatusRemarks("");
+        setCallbackDate("");
+        setCallbackTime("");
+        if (refreshedLead) {
+          setLeads((prev) => prev.map((l) => l.id === statusLead.id ? refreshedLead : l));
+          if (viewLead?.id === statusLead.id) {
+            setViewLead(refreshedLead);
+            loadPlatformStatuses(statusLead.id, "detail");
+          }
+          setStatusLead(refreshedLead);
+        } else {
+          setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as any } : l));
+        }
+      }
+    } catch (err) {
+      toast({ title: `Failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setPlatformStatusSaving(null);
+    }
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -668,6 +702,12 @@ export default function EmployeeLeadsPage() {
         transitions={transitions}
         historyLoading={historyLoading}
         platformConfig={PLATFORM_CONFIG}
+        statusRemarks={statusRemarks}
+        setStatusRemarks={setStatusRemarks}
+        callbackDate={callbackDate}
+        setCallbackDate={setCallbackDate}
+        callbackTime={callbackTime}
+        setCallbackTime={setCallbackTime}
       />
 
       {isCar && (
@@ -695,6 +735,7 @@ function LeadDialogs({
   platformStatusSaving, detailPlatformStatuses, loadPlatformStatuses,
   handlePlatformStatusUpdate, handleCall, handleWhatsApp,
   assignments, history, transitions, historyLoading, platformConfig,
+  statusRemarks, setStatusRemarks, callbackDate, setCallbackDate, callbackTime, setCallbackTime,
 }: {
   viewLead: LeadWithDetails | null;
   setViewLead: (v: LeadWithDetails | null) => void;
@@ -718,6 +759,12 @@ function LeadDialogs({
   transitions: ScheduledTransition[];
   historyLoading: boolean;
   platformConfig: { name: string; statuses: string[] }[];
+  statusRemarks: string;
+  setStatusRemarks: React.Dispatch<React.SetStateAction<string>>;
+  callbackDate: string;
+  setCallbackDate: React.Dispatch<React.SetStateAction<string>>;
+  callbackTime: string;
+  setCallbackTime: React.Dispatch<React.SetStateAction<string>>;
 }) {
   return (
     <>
@@ -750,6 +797,8 @@ function LeadDialogs({
                 <DetailItem label="Created" value={format(new Date(viewLead.created_at), "dd MMM yyyy, HH:mm")} />
                 <DetailItem label="Assigned Caller" value={profile.full_name} />
                 <DetailItem label="Follow-up" value={viewLead.next_followup_at ? format(new Date(viewLead.next_followup_at), "dd MMM, HH:mm") : "None"} />
+                {viewLead.callback_date && <DetailItem label="Callback Date" value={format(new Date(viewLead.callback_date), "dd MMM yyyy")} />}
+                {viewLead.callback_time && <DetailItem label="Callback Time" value={viewLead.callback_time} />}
               </div>
 
               {viewLead.remarks && (
@@ -831,6 +880,22 @@ function LeadDialogs({
                   </div>
                 </div>
               ))}
+              {Object.values(platformStatuses).some((s) => s === "CALLBACK") && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-500">Callback Date *</label>
+                    <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-slate-200" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500">Callback Time *</label>
+                    <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-slate-200" />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium text-slate-500">Remarks</label>
+                <Textarea value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Add remarks (optional)" rows={2} className="mt-1 border-slate-200" />
+              </div>
               <Button variant="outline" className="w-full" onClick={() => setStatusLead(null)}>Close</Button>
             </div>
           )}
@@ -894,6 +959,11 @@ function LeadDialogs({
                           <span className="text-xs text-muted-foreground">{format(new Date(h.created_at), "dd MMM, HH:mm")}</span>
                         </div>
                         {h.remarks && <p className="mt-1 text-xs text-muted-foreground">{h.remarks}</p>}
+                        {h.callback_date && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Callback: {format(new Date(h.callback_date), "dd MMM yyyy")}{h.callback_time ? ` at ${h.callback_time}` : ""}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-xs text-muted-foreground">by {h.actor_type.toLowerCase()}</p>
                       </div>
                     ))}

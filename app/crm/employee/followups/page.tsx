@@ -14,6 +14,8 @@ import type { Lead, Platform } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -34,6 +36,8 @@ export default function EmployeeFollowupsPage() {
   const [statusLead, setStatusLead] = useState<Lead | null>(null);
   const [newStatus, setNewStatus] = useState<LeadStatus>("RINGING");
   const [statusRemarks, setStatusRemarks] = useState("");
+  const [callbackDate, setCallbackDate] = useState("");
+  const [callbackTime, setCallbackTime] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [viewLead, setViewLead] = useState<Lead | null>(null);
@@ -159,23 +163,34 @@ export default function EmployeeFollowupsPage() {
   const openStatus = (lead: Lead) => {
     setStatusLead(lead);
     setNewStatus(lead.status === "NEW" ? "RINGING" : lead.status);
-    setStatusRemarks("");
+    setStatusRemarks(lead.remarks || "");
+    setCallbackDate(lead.callback_date || "");
+    setCallbackTime(lead.callback_time || "");
   };
 
   const handleStatusUpdate = async () => {
     if (!statusLead) return;
-    setStatusSaving(true);
-    const { error } = await supabase.rpc("update_lead_status", {
-      p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks,
-    });
-    setStatusSaving(false);
-    if (error) {
-      toast({ title: `Status update failed: ${error.message}`, variant: "destructive" });
+    if (newStatus === "CALLBACK" && (!callbackDate || !callbackTime)) {
+      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
       return;
     }
-    setStatusLead(null);
-    toast({ title: "Status updated successfully" });
-    loadFollowups();
+    setStatusSaving(true);
+    try {
+      const { error } = await supabase.rpc("update_lead_status", {
+        p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks.trim(),
+        p_callback_date: newStatus === "CALLBACK" ? callbackDate : null,
+        p_callback_time: newStatus === "CALLBACK" ? callbackTime : null,
+      });
+      if (error) {
+        toast({ title: `Status update failed: ${error.message}`, variant: "destructive" });
+        return;
+      }
+      setStatusLead(null);
+      toast({ title: "Status updated successfully" });
+      loadFollowups();
+    } finally {
+      setStatusSaving(false);
+    }
   };
 
   const renderLeadList = (leads: Lead[], emptyMsg: string) => {
@@ -205,7 +220,13 @@ export default function EmployeeFollowupsPage() {
                 {lead.next_followup_at ? format(new Date(lead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"}
                 <span className="text-slate-300">•</span>
                 <StatusPill status={lead.status} />
+                {lead.callback_date && (
+                  <span className="text-slate-400">• Callback: {format(new Date(lead.callback_date), "dd MMM")}{lead.callback_time ? ` ${lead.callback_time}` : ""}</span>
+                )}
               </div>
+              {lead.remarks && (
+                <div className="mt-0.5 text-xs text-slate-400 truncate" title={lead.remarks}>{lead.remarks}</div>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)}>
@@ -303,9 +324,21 @@ export default function EmployeeFollowupsPage() {
                 </SelectContent>
               </Select>
             </div>
+            {newStatus === "CALLBACK" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-500">Callback Date *</label>
+                  <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-slate-200" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500">Callback Time *</label>
+                  <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-slate-200" />
+                </div>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-slate-500">Remarks</label>
-              <Input value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Optional remarks" className="mt-1 border-slate-200" />
+              <Textarea value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Add remarks (optional)" rows={2} className="mt-1 border-slate-200" />
             </div>
             <Button className="w-full gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={handleStatusUpdate} disabled={statusSaving}>
               {statusSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Update Status"}

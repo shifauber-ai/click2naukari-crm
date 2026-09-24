@@ -57,9 +57,9 @@ export function applyDateFilter<T extends { gte: (col: string, val: string) => T
 }
 
 export const PLATFORM_CONFIG = [
-  { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
-  { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
-  { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF"] },
+  { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF", "OUT_OF_CITY", "NOT_ELIGIBLE"] },
+  { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF", "OUT_OF_CITY", "NOT_ELIGIBLE"] },
+  { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK", "INTERESTED", "DISCONNECTED", "ACTIVE_UBER", "OTHER_LOCATION", "NEED_TIME", "WRONG_NUMBER", "SWITCH_OFF", "OUT_OF_CITY", "NOT_ELIGIBLE"] },
 ];
 
 export const PLATFORM_STATUS_MAP: Record<string, string[]> = {
@@ -93,6 +93,8 @@ export const PLATFORM_STATUS_LABELS: Record<string, string> = {
   NEED_TIME: "Need Time to Think",
   WRONG_NUMBER: "Wrong Number",
   SWITCH_OFF: "Switch Off / Incoming Off",
+  OUT_OF_CITY: "Out of City",
+  NOT_ELIGIBLE: "Not Eligible",
 };
 
 export function getStatusesForPlatform(platform: string | null): string[] | null {
