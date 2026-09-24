@@ -76,6 +76,7 @@ interface CRMField { key: string; label: string; required: boolean; }
 const NORMAL_FIELDS: CRMField[] = [
   { key: "name", label: "Name", required: true },
   { key: "phone", label: "Phone", required: true },
+  { key: "vehicleNo", label: "Vehicle No", required: false },
   { key: "platform", label: "Platform", required: false },
   { key: "city", label: "City", required: false },
   { key: "source", label: "Source", required: false },
@@ -114,6 +115,7 @@ function autoMap(headers: string[], fields: CRMField[]): Mapping {
           city: ["location", "town"],
           platform: ["source_platform", "app"],
           source: ["origin", "channel"],
+          vehicleno: ["vehicle", "vehiclenumber", "registration", "regnoreg", "regnumber", "regno"],
           lasttripdate: ["lasttrip", "last_trip_date", "last trip"],
         };
         const syns = synonyms[field.key] || [];
@@ -388,6 +390,10 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
 
       const parsedRow: ParsedRow = { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "OK", error: "" };
 
+      if (!isHC) {
+        parsedRow.vehicleNo = mapping.vehicleNo ? getCol(cells, mapping.vehicleNo) : "";
+      }
+
       if (isHC) {
         parsedRow.vehicleNo = mapping.vehicleNo ? getCol(cells, mapping.vehicleNo) : "";
         parsedRow.dlNo = mapping.dlNo ? getCol(cells, mapping.dlNo) : "";
@@ -508,6 +514,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
           platform: row.platform || null, city: row.city || null,
           source: row.source || null,
           status: (row.status as string) || "NEW",
+          vehicle_no: row.vehicleNo || null,
         };
       });
 
@@ -740,7 +747,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       if (format === "csv") downloadCSV([header], "hc-import-template.csv");
       else downloadXLSX([header], "Template", "hc-import-template.xlsx");
     } else {
-      const header = ["Name", "Phone", "Platform", "City"];
+      const header = ["Name", "Phone", "Vehicle No", "Platform", "City"];
       if (format === "csv") downloadCSV([header], `${product.code}-import-template.csv`);
       else downloadXLSX([header], "Template", `${product.code}-import-template.xlsx`);
     }
@@ -938,13 +945,14 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
               </Card>
               <div className="rounded-xl border border-border/60 bg-card overflow-x-auto">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Name</TableHead><TableHead>Phone</TableHead>{!isHC && <TableHead>Platform</TableHead>}{isHC && <TableHead>Vehicle No</TableHead>}<TableHead>Status</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Row</TableHead><TableHead>Name</TableHead><TableHead>Phone</TableHead>{!isHC && <TableHead>Vehicle No</TableHead>}{!isHC && <TableHead>Platform</TableHead>}{isHC && <TableHead>Vehicle No</TableHead>}<TableHead>Status</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {parsedRows.slice(0, 100).map((row) => (
                       <TableRow key={row.rowIndex}>
                         <TableCell>{row.rowIndex}</TableCell>
                         <TableCell>{row.name}</TableCell>
                         <TableCell>{row.phone}</TableCell>
+                        {!isHC && <TableCell>{row.vehicleNo || "—"}</TableCell>}
                         {!isHC && <TableCell><PlatformBadge platform={row.platform} size="xs" /></TableCell>}
                         {isHC && <TableCell>{row.vehicleNo || "—"}</TableCell>}
                         <TableCell><RowStatusBadge status={row.rowStatus} /></TableCell>
