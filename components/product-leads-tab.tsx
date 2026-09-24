@@ -113,9 +113,9 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
 
   const ALL_PLATFORM_CONFIG = [
-    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK"] },
-    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED"] },
-    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED"] },
+    { name: "Uber", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_HERO", "ID_DONE", "NOT_INTERESTED", "DOC_ISSUE", "VEHICLE_ISSUE", "ID_BLOCK", "CALLBACK"] },
+    { name: "Rapido", statuses: ["RINGING", "FRESH", "EXISTING", "OTHER_NUMBER", "ID_DONE", "NOT_INTERESTED", "CALLBACK"] },
+    { name: "Ola", statuses: ["RINGING", "FRESH", "EXISTING", "PAYMENT_ISSUE", "NOT_INTERESTED", "CALLBACK"] },
   ];
   const PLATFORM_STATUS_LABELS: Record<string, string> = {
     RINGING: "Ringing",
@@ -129,6 +129,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     ID_BLOCK: "ID Block",
     OTHER_NUMBER: "Other Number",
     PAYMENT_ISSUE: "Payment Issue",
+    CALLBACK: "Callback",
     PENDING: "Pending",
   };
   const isSinglePlatform = productPlatforms.length <= 1;
@@ -255,7 +256,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       // Build query on lead_platform_status joined with platforms
       let psq = supabase
         .from("lead_platform_status")
-        .select("lead_id, platform:platforms!platform_id(name), status");
+        .select("lead_id, platform, status");
 
       if (platformFilter !== "ALL") {
         // Filter by specific platform name (case-insensitive match)
@@ -263,9 +264,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           (pp) => pp.name.toUpperCase() === platformFilter
         )?.name;
         if (platformName) {
-          psq = psq.eq("platform_id", productPlatforms.find(
-            (pp) => pp.name.toUpperCase() === platformFilter
-          )!.id);
+          psq = psq.ilike("platform", platformName);
         }
       }
 
@@ -282,12 +281,12 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
 
       // Build the set of matching lead IDs and the match platform map
       const leadIdSet = new Set<string>();
-      (psData as unknown as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
+      (psData as unknown as { lead_id: string; platform: string | null; status: string }[] | null)?.forEach((row) => {
         leadIdSet.add(row.lead_id);
-        if (row.platform?.name) {
+        if (row.platform) {
           // For All Platforms + specific status: record which platform matched
           if (platformFilter === "ALL" && statusFilter !== "ALL") {
-            matchPlatformMap[row.lead_id] = row.platform.name;
+            matchPlatformMap[row.lead_id] = row.platform;
           }
         }
       });
@@ -360,14 +359,14 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         const leadIds = loadedLeads.map((l) => l.id);
         const { data: lpsData } = await supabase
           .from("lead_platform_status")
-          .select("lead_id, platform:platforms!platform_id(name), status")
+          .select("lead_id, platform, status")
           .in("lead_id", leadIds);
 
         const statusMap: Record<string, Record<string, string>> = {};
-        (lpsData as unknown as { lead_id: string; platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
-          if (row.platform?.name) {
+        (lpsData as unknown as { lead_id: string; platform: string | null; status: string }[] | null)?.forEach((row) => {
+          if (row.platform) {
             if (!statusMap[row.lead_id]) statusMap[row.lead_id] = {};
-            statusMap[row.lead_id][row.platform.name] = row.status;
+            statusMap[row.lead_id][row.platform] = row.status;
           }
         });
         setLeadPlatformStatuses(statusMap);
@@ -483,11 +482,11 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     setPlatformStatuses({});
     const { data } = await supabase
       .from("lead_platform_status")
-      .select("platform:platforms!platform_id(name), status")
+      .select("platform, status")
       .eq("lead_id", lead.id);
     const loaded: Record<string, string> = {};
-    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
-      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    (data as { platform: string | null; status: string }[] | null)?.forEach((row) => {
+      if (row.platform) loaded[row.platform] = row.status;
     });
     setPlatformStatuses(loaded);
     setPlatformStatusLoading(false);
@@ -561,11 +560,11 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const loadPlatformDetailStatuses = async (leadId: string) => {
     const { data } = await supabase
       .from("lead_platform_status")
-      .select("platform:platforms!platform_id(name), status")
+      .select("platform, status")
       .eq("lead_id", leadId);
     const loaded: Record<string, string> = {};
-    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
-      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    (data as { platform: string | null; status: string }[] | null)?.forEach((row) => {
+      if (row.platform) loaded[row.platform] = row.status;
     });
     setDetailPlatformStatuses(loaded);
   };
