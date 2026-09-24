@@ -682,7 +682,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     if (error) { toast({ title: "Export failed. Please try again.", variant: "destructive" }); return null; }
     const header = isHC
       ? ["Lead ID", "Driver Name", "Phone", "Vehicle No", "DL No", "Total Trips", "License No", "Last Trip Date", "City", "Platform", "Status", "Created", "Updated"]
-      : ["Lead ID", "Name", "Mobile Number", "Platform", "City", "Product", "Source", "Assigned Caller", "Status", "Sub Status", "Call Count", "Last Call Date", "Next Follow-up Date", "ID Created Date", "Created Date", "Updated Date"];
+      : ["Lead ID", "Name", "Mobile Number", "Vehicle No", "Platform", "City", "Product", "Source", "Assigned Caller", "Status", "Sub Status", "Call Count", "Last Call Date", "Next Follow-up Date", "ID Created Date", "Created Date", "Updated Date"];
     const rows = (data as Record<string, unknown>[] | null || []).map((r): (string | number)[] => {
       const created = r.created_at ? format(new Date(r.created_at as string), "yyyy-MM-dd HH:mm") : "";
       const updated = r.updated_at ? format(new Date(r.updated_at as string), "yyyy-MM-dd HH:mm") : "";
@@ -691,7 +691,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       const caller = (r.current_caller as { full_name: string } | null)?.full_name || "";
       return isHC
         ? [String(r.id || ""), String(r.name || ""), String(r.phone || ""), String(r.vehicle_no || ""), String(r.dl_no || ""), String(r.total_trips ?? ""), String(r.license_no || ""), String(r.last_trip_date || ""), String(r.city || ""), String(r.platform || ""), String(r.status || ""), created, updated]
-        : [String(r.id || ""), String(r.name || ""), String(r.phone || ""), String(r.platform || ""), String(r.city || ""), prodName, String(r.source || ""), caller, String(r.status || ""), String(r.remarks || ""), "", "", followup, "", created, updated];
+        : [String(r.id || ""), String(r.name || ""), String(r.phone || ""), String(r.vehicle_no || ""), String(r.platform || ""), String(r.city || ""), prodName, String(r.source || ""), caller, String(r.status || ""), String(r.remarks || ""), "", "", followup, "", created, updated];
     });
     return { header, rows };
   };

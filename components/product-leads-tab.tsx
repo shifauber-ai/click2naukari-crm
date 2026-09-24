@@ -343,8 +343,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       cq = cq.lt("created_at", endStr); q = q.lt("created_at", endStr);
     }
     if (search) {
-      cq = cq.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
-      q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      cq = cq.or(`name.ilike.%${search}%,phone.ilike.%${search}%,vehicle_no.ilike.%${search}%`);
+      q = q.or(`name.ilike.%${search}%,phone.ilike.%${search}%,vehicle_no.ilike.%${search}%`);
     }
 
     const [cr, dr] = await Promise.all([cq, q]);
@@ -743,7 +743,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search name or phone..." value={search}
+          <Input placeholder="Search name, phone, vehicle no..." value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-9" />
         </div>
         {!idDoneOnly && (
@@ -844,6 +844,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 )}
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
+                <TableHead>Vehicle No</TableHead>
                 <TableHead>City</TableHead>
                 {showPlatformColumn && <TableHead>Platform</TableHead>}
                 <TableHead>Source</TableHead>
@@ -866,6 +867,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                     {lead.name}
                   </TableCell>
                   <TableCell className="text-sm">{lead.phone}</TableCell>
+                  <TableCell className="text-sm">{lead.vehicle_no || "—"}</TableCell>
                   <TableCell className="text-sm">{lead.city || "—"}</TableCell>
                   {showPlatformColumn && (
                     <TableCell className="text-sm">
@@ -992,6 +994,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <DetailRow label="Driver Name" value={detailLead.name} />
                   <DetailRow label="Phone" value={detailLead.phone} />
+                  <DetailRow label="Vehicle No" value={detailLead.vehicle_no || "—"} />
                   <DetailRow label="City" value={detailLead.city || "—"} />
                   <DetailRow label="Platform" value={<PlatformBadge platform={detailLead.platform} />} />
                   <DetailRow label="Source" value={detailLead.source || "—"} />
