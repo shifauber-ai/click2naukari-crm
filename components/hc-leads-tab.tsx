@@ -281,22 +281,24 @@ export function HCLeadsTab({ product }: { product: Product }) {
     try {
       const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", { p_lead_ids: ids });
       if (error) {
-        toast({ title: `Bulk delete failed: ${error.message}`, variant: "destructive" });
+        toast({ title: "Unable to delete selected HC leads. Please try again.", variant: "destructive" });
+        console.error("HC bulk delete error:", error.message);
         return;
       }
       const result = data as { deleted_count: number; not_found_count: number } | null;
       const deletedCount = result?.deleted_count ?? ids.length;
       if (deletedCount === 0) {
-        toast({ title: "No leads were deleted. They may have already been removed.", variant: "destructive" });
+        toast({ title: "Unable to delete selected HC leads. Please try again.", variant: "destructive" });
         return;
       }
-      toast({ title: `${deletedCount} lead${deletedCount !== 1 ? "s" : ""} permanently deleted` });
+      toast({ title: `${deletedCount} HC lead${deletedCount !== 1 ? "s" : ""} deleted successfully.` });
       setBulkDeleteOpen(false);
       setSelectedIds(new Set());
-      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      load();
       loadStats();
     } catch (err) {
-      toast({ title: `Bulk delete failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+      toast({ title: "Unable to delete selected HC leads. Please try again.", variant: "destructive" });
+      console.error("HC bulk delete exception:", err);
     } finally {
       setBulkDeleting(false);
     }
@@ -496,7 +498,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
       )}
 
       {/* ===== Bulk Delete Button ===== */}
-      {canManage && selectedIds.size > 0 && (
+      {isAdmin && selectedIds.size > 0 && (
         <div className="flex items-center gap-3">
           <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
             <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedIds.size})
@@ -523,8 +525,8 @@ export function HCLeadsTab({ product }: { product: Product }) {
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete {selectedIds.size} selected leads?</DialogTitle>
-            <DialogDescription>This will permanently delete {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} and all related records. This action cannot be undone.</DialogDescription>
+            <DialogTitle>Delete HC Leads?</DialogTitle>
+            <DialogDescription>You are about to permanently delete {selectedIds.size} selected HC lead{selectedIds.size !== 1 ? "s" : ""}. This action cannot be undone.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
