@@ -139,6 +139,8 @@ export default function AdminLeadsPage() {
   const [platformStatusLoading, setPlatformStatusLoading] = useState(false);
   const [platformStatusSaving, setPlatformStatusSaving] = useState<string | null>(null);
   const [statusRemarks, setStatusRemarks] = useState("");
+  const [callbackDate, setCallbackDate] = useState("");
+  const [callbackTime, setCallbackTime] = useState("");
   const [productPlatformsMap, setProductPlatformsMap] = useState<Map<string, { id: string; name: string }[]>>(new Map());
 
   const [assignments, setAssignments] = useState<LeadAssignment[]>([]);
@@ -318,15 +320,17 @@ export default function AdminLeadsPage() {
   const openStatus = async (lead: Lead) => {
     setStatusLead(lead);
     setStatusRemarks(lead.remarks || "");
+    setCallbackDate(lead.callback_date || "");
+    setCallbackTime(lead.callback_time || "");
     setPlatformStatusLoading(true);
     setPlatformStatuses({});
     const { data } = await supabase
       .from("lead_platform_status")
-      .select("platform:platforms!platform_id(name), status")
+      .select("platform, status")
       .eq("lead_id", lead.id);
     const loaded: Record<string, string> = {};
-    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
-      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    (data as { platform: string; status: string }[] | null)?.forEach((row) => {
+      if (row.platform) loaded[row.platform] = row.status;
     });
     setPlatformStatuses(loaded);
     setPlatformStatusLoading(false);
@@ -339,6 +343,10 @@ export default function AdminLeadsPage() {
       toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
+    if (selected === "CALLBACK" && (!callbackDate || !callbackTime)) {
+      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+      return;
+    }
     setPlatformStatusSaving(platformName);
     try {
       const { error } = await supabase.rpc("update_lead_platform_status", {
@@ -346,14 +354,29 @@ export default function AdminLeadsPage() {
         p_platform_name: platformName,
         p_status: selected,
         p_remarks: statusRemarks.trim(),
+        p_callback_date: selected === "CALLBACK" ? callbackDate : null,
+        p_callback_time: selected === "CALLBACK" ? callbackTime : null,
       });
       if (error) {
         toast({ title: error.message, variant: "destructive" });
       } else {
         toast({ title: `${platformName} status updated to ${PLATFORM_STATUS_LABELS[selected] || selected}` });
         setStatusRemarks("");
-        setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus, remarks: statusRemarks.trim() || l.remarks } : l));
-        setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
+        setCallbackDate("");
+        setCallbackTime("");
+        const { data: refreshed } = await supabase
+          .from("leads")
+          .select("*, product:products(*), current_caller:profiles!current_caller_id(*)")
+          .eq("id", statusLead.id)
+          .maybeSingle();
+        const refreshedLead = refreshed as Lead | null;
+        if (refreshedLead) {
+          setLeads((prev) => prev.map((l) => l.id === statusLead.id ? refreshedLead : l));
+          setStatusLead(refreshedLead);
+        } else {
+          setLeads((prev) => prev.map((l) => l.id === statusLead.id ? { ...l, status: selected as LeadStatus, remarks: statusRemarks.trim() || l.remarks } : l));
+          setStatusLead((prev) => prev ? { ...prev, status: selected as LeadStatus, remarks: statusRemarks.trim() || prev.remarks } : prev);
+        }
         load();
       }
     } catch (err) {
@@ -1203,6 +1226,26 @@ export default function AdminLeadsPage() {
                   rows={2}
                 />
               </div>
+              {Object.values(platformStatuses).includes("CALLBACK") && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Callback Date *</Label>
+                    <Input
+                      type="date"
+                      value={callbackDate}
+                      onChange={(e) => setCallbackDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Callback Time *</Label>
+                    <Input
+                      type="time"
+                      value={callbackTime}
+                      onChange={(e) => setCallbackTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
               <DialogFooter>
                 <Button
                   type="button"

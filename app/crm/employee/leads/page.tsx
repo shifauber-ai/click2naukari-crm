@@ -207,11 +207,11 @@ export default function EmployeeLeadsPage() {
   const loadPlatformStatuses = async (leadId: string, target: "modal" | "detail") => {
     const { data } = await supabase
       .from("lead_platform_status")
-      .select("platform:platforms!platform_id(name), status")
+      .select("platform, status")
       .eq("lead_id", leadId);
     const loaded: Record<string, string> = {};
-    (data as { platform: { name: string } | null; status: string }[] | null)?.forEach((row) => {
-      if (row.platform?.name) loaded[row.platform.name] = row.status;
+    (data as { platform: string; status: string }[] | null)?.forEach((row) => {
+      if (row.platform) loaded[row.platform] = row.status;
     });
     if (target === "modal") setPlatformStatuses(loaded);
     else setDetailPlatformStatuses(loaded);
