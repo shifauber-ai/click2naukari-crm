@@ -73,7 +73,7 @@ BEGIN
   END;
 
   UPDATE public.leads
-    SET status = v_mapped_status::lead_status,
+    SET status = v_mapped_status,
         updated_at = now(),
         last_contact_at = CASE WHEN p_status NOT IN ('FRESH','EXISTING') THEN now() ELSE last_contact_at END
     WHERE id = p_lead_id;
