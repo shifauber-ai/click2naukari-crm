@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+    inner = json.loads(data.split('<untrusted-data-')[1].split('</untrusted-data-')[0])
+  File "/usr/lib/python3.13/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/lib/python3.13/json/decoder.py", line 348, in decode
+    raise JSONDecodeError("Extra data", s, end)
+json.decoder.JSONDecodeError: Extra data: line 1 column 2 (char 1)
