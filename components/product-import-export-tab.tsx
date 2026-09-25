@@ -521,6 +521,11 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       // Bulk insert leads in chunks of 250 via RPC
       const CHUNK_SIZE = 250;
       setImportProgress({ done: 0, total: leadInserts.length });
+      const rpcErrors: { row: string; error: string }[] = [];
+
+      if (leadInserts.length === 0) {
+        toast({ title: "No valid rows to import.", variant: "destructive" });
+      }
 
       for (let i = 0; i < leadInserts.length; i += CHUNK_SIZE) {
         const chunk = leadInserts.slice(i, i + CHUNK_SIZE);
@@ -528,12 +533,20 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
           p_leads: chunk,
         });
         if (rpcErr) {
+          console.error("[IMPORT] RPC error:", rpcErr);
           throw new Error(`Lead insert failed at row ${i + 1}: ${rpcErr.message}`);
         }
-        const result = rpcResult as { imported: number; failed: number } | null;
+        const result = rpcResult as { imported: number; failed: number; first_error?: string; errors?: { row: unknown; error: string }[] } | null;
+        console.log(`[IMPORT] Chunk ${i}-${i + chunk.length}: imported=${result?.imported}, failed=${result?.failed}, first_error=${result?.first_error}`);
         if (result) {
           imported += result.imported;
           failedInsert += result.failed;
+          if (result.first_error) {
+            rpcErrors.push({ row: "N/A", error: result.first_error });
+          }
+          if (result.errors && result.errors.length > 0) {
+            console.error("[IMPORT] Row errors:", result.errors);
+          }
         }
         setImportProgress({ done: Math.min(i + CHUNK_SIZE, leadInserts.length), total: leadInserts.length });
       }
@@ -541,14 +554,16 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       // Build import records for ALL rows (for audit trail)
       const importRecordInserts: Record<string, unknown>[] = [];
 
+      // Only mark as IMPORTED if the RPC actually imported them
       for (const row of rowsToImport) {
+        const wasImported = imported > 0;
         importRecordInserts.push({
           batch_id: batchId, row_number: row.rowIndex, name: row.name, phone: row.phone,
           product_id: product.id, platform: row.platform || (isHC ? "UBER" : null),
           city: row.city || null, label: row.source || null,
-          status: "IMPORTED",
+          status: wasImported ? "IMPORTED" : "INSERT_FAILED",
           duplicate_type: "NONE" as DuplicateType, existing_lead_id: null,
-          validation_error: null,
+          validation_error: failedInsert > 0 ? `RPC returned ${failedInsert} failures (imported=${imported})` : null,
         });
       }
       for (const row of parsedRows.filter((r) => r.rowStatus === "EXISTING_LEAD_DUPLICATE")) {
@@ -593,10 +608,14 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         await supabase.from("import_records").insert(importRecordInserts.slice(i, i + CHUNK_SIZE));
       }
 
-      // Update batch as completed
-      await supabase.from("import_batches").update({
-        imported, status: "COMPLETED",
+      // Update batch — only mark COMPLETED if leads were actually inserted
+      const batchStatus = imported > 0 ? "COMPLETED" : "failed";
+      const { error: batchUpdateErr } = await supabase.from("import_batches").update({
+        imported, status: batchStatus, failed: failedInsert,
       }).eq("id", batchId);
+      if (batchUpdateErr) {
+        console.error("[IMPORT] Batch update error:", batchUpdateErr);
+      }
 
       // Auto-assign imported leads to active callers in the product's Caller Queue
       if (imported > 0) {
@@ -623,7 +642,12 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
           });
         }
       } else {
-        toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid + failedInsert} Failed Records` });
+        if (imported === 0 && leadInserts.length > 0) {
+          const errMsg = rpcErrors.length > 0 ? rpcErrors[0].error : "Unknown error";
+          toast({ title: `Import failed: 0 of ${leadInserts.length} leads inserted. ${errMsg}`, variant: "destructive" });
+        } else {
+          toast({ title: `Import Completed: ${imported} Leads Imported, ${internalDup + existingDup} Duplicate Records, ${invalid + failedInsert} Failed Records` });
+        }
       }
       loadBatches();
       loadDupRecords();
