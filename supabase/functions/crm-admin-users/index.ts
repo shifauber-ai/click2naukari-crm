@@ -164,10 +164,10 @@ Deno.serve(async (req: Request) => {
       }
 
       await adminClient.from("audit_logs").insert({
-        actor_id: callerId,
+        user_id: callerId,
         action: "EMPLOYEE_CREATE",
         entity: "profile",
-        entity_id: newUserId,
+        entity_id: String(newUserId),
         metadata: { email: createEmail, role, full_name: body.full_name },
       });
       return json({ success: true, user_id: newUserId, email: createEmail });
@@ -228,10 +228,10 @@ Deno.serve(async (req: Request) => {
         }
       }
       await adminClient.from("audit_logs").insert({
-        actor_id: callerId,
+        user_id: callerId,
         action: "EMPLOYEE_UPDATE",
         entity: "profile",
-        entity_id: body.user_id,
+        entity_id: String(body.user_id),
         metadata: updates,
       });
       // Return the updated profile so caller can verify
@@ -263,10 +263,10 @@ Deno.serve(async (req: Request) => {
         .update({ is_active: body.is_active })
         .eq("employee_id", body.user_id);
       await adminClient.from("audit_logs").insert({
-        actor_id: callerId,
+        user_id: callerId,
         action: body.is_active ? "EMPLOYEE_ACTIVATE" : "EMPLOYEE_DEACTIVATE",
         entity: "profile",
-        entity_id: body.user_id,
+        entity_id: String(body.user_id),
         metadata: { is_active: body.is_active },
       });
       return json({ ok: true });
@@ -296,10 +296,10 @@ Deno.serve(async (req: Request) => {
       // Write audit log BEFORE deletion (actor_id will be SET NULL after,
       // but we store the actor identity in metadata for traceability).
       await adminClient.from("audit_logs").insert({
-        actor_id: callerId,
+        user_id: callerId,
         action: "EMPLOYEE_DELETE",
         entity: "profile",
-        entity_id: body.user_id,
+        entity_id: String(body.user_id),
         metadata: { permanent_delete: true, deleted_email: targetProfile.email, deleted_name: targetProfile.full_name },
       });
 

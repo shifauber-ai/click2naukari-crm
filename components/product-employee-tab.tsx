@@ -58,6 +58,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkAssignSaving, setBulkAssignSaving] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -310,6 +315,70 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     setSelectedProductIds((prev) => { const n = new Set(prev); n.has(pid) ? n.delete(pid) : n.add(pid); return n; });
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+  const toggleSelectAll = () => {
+    const selectable = employees.filter((p) => p.role !== "ADMIN" && p.id !== profile?.id);
+    setSelectedIds((prev) => prev.size === selectable.length ? new Set() : new Set(selectable.map((p) => p.id)));
+  };
+  const selectableEmployees = employees.filter((p) => p.role !== "ADMIN" && p.id !== profile?.id);
+  const allSelected = selectableEmployees.length > 0 && selectedIds.size === selectableEmployees.length;
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      let deleted = 0;
+      let failed = 0;
+      for (const id of Array.from(selectedIds)) {
+        const { ok } = await callEdgeFunction("crm-admin-users", { action: "delete", user_id: id });
+        if (ok) deleted++; else failed++;
+      }
+      if (deleted > 0) {
+        toast({ title: `${deleted} employee${deleted !== 1 ? "s" : ""} permanently deleted${failed > 0 ? `, ${failed} failed` : ""}` });
+      } else {
+        toast({ title: "No employees were deleted", variant: "destructive" });
+      }
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Bulk delete failed", variant: "destructive" });
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleBulkAssignToProduct = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkAssignSaving(true);
+    try {
+      let assigned = 0;
+      let failed = 0;
+      for (const id of Array.from(selectedIds)) {
+        const { error } = await supabase.from("caller_queues").upsert({
+          product_id: product.id,
+          employee_id: id,
+          is_active: true,
+        }, { onConflict: "product_id,employee_id" });
+        if (!error) assigned++; else failed++;
+      }
+      if (assigned > 0) {
+        toast({ title: `${assigned} employee${assigned !== 1 ? "s" : ""} assigned to ${product.name}${failed > 0 ? `, ${failed} failed` : ""}` });
+      } else {
+        toast({ title: "No employees were assigned", variant: "destructive" });
+      }
+      setBulkAssignOpen(false);
+      setSelectedIds(new Set());
+      load();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Bulk assign failed", variant: "destructive" });
+    } finally {
+      setBulkAssignSaving(false);
+    }
+  };
+
   const roleBadge = (r: string) => {
     if (r === "ADMIN") return <span className="inline-flex rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">Admin</span>;
     if (r === "MANAGER") return <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Manager</span>;
@@ -400,7 +469,19 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
           <p className="text-sm text-muted-foreground">Manage employees and city assignments for {product.name}</p>
         </div>
         {isAdmin && (
-          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" /> Add Employee</Button>
+          <div className="flex gap-2">
+            {selectedIds.size > 0 && (
+              <>
+                <Button variant="outline" onClick={() => setBulkAssignOpen(true)}>
+                  <Users className="mr-2 h-4 w-4" /> Assign to Product ({selectedIds.size})
+                </Button>
+                <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedIds.size})
+                </Button>
+              </>
+            )}
+            <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" /> Add Employee</Button>
+          </div>
         )}
       </div>
 
@@ -453,6 +534,9 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
@@ -466,6 +550,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
             <TableBody>
               {employees.map((p) => (
                 <TableRow key={p.id}>
+                  <TableCell className="w-10">
+                    {p.role !== "ADMIN" && p.id !== profile?.id && (
+                      <Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} />
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">{p.full_name}</TableCell>
                   <TableCell className="text-sm">{p.email}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.phone || "—"}</TableCell>
@@ -589,6 +678,54 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk delete confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} Employees?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete {selectedIds.size} employee{selectedIds.size !== 1 ? "s" : ""} and their related CRM records? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</>
+              ) : (
+                "Delete Permanently"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk assign to product confirmation */}
+      <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign {selectedIds.size} Employees to {product.name}</DialogTitle>
+            <DialogDescription>
+              The selected employees will be added to the {product.name} caller queue, making them eligible to receive leads from this product.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkAssignOpen(false)} disabled={bulkAssignSaving}>Cancel</Button>
+            <Button onClick={handleBulkAssignToProduct} disabled={bulkAssignSaving}>
+              {bulkAssignSaving ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Assigning...</>
+              ) : (
+                "Assign to Product"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
