@@ -62,5 +62,5 @@ CREATE POLICY "profiles_manager_select" ON public.profiles
 DROP POLICY IF EXISTS "profiles_manager_update" ON public.profiles;
 CREATE POLICY "profiles_manager_update" ON public.profiles
   FOR UPDATE TO authenticated
-  USING (is_manager() AND role IN ('EMPLOYEE', 'MANAGER'))
-  WITH CHECK (is_manager() AND role IN ('EMPLOYEE', 'MANAGER'));
+  USING (is_manager() AND role IN ('employee', 'manager'))
+  WITH CHECK (is_manager() AND role IN ('employee', 'manager'));
