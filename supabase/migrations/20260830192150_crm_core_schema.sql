@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email text NOT NULL,
   full_name text NOT NULL DEFAULT '',
-  role text NOT NULL DEFAULT 'EMPLOYEE' CHECK (role IN ('ADMIN','EMPLOYEE')),
+  role text NOT NULL DEFAULT 'employee' CHECK (role IN ('admin','employee')),
   is_active boolean NOT NULL DEFAULT true,
   phone text,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -340,7 +340,7 @@ SET search_path = public
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'ADMIN' AND is_active = true
+    WHERE id = auth.uid() AND role = 'admin' AND is_active = true
   );
 $$;
 

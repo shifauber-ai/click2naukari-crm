@@ -61,7 +61,7 @@ DO $$ BEGIN
   ) THEN
     ALTER TABLE public.profiles
     ADD CONSTRAINT profiles_role_check
-    CHECK (role IN ('ADMIN', 'MANAGER', 'EMPLOYEE'));
+    CHECK (role IN ('admin', 'manager', 'employee'));
   END IF;
 END $$;
 
@@ -104,7 +104,7 @@ CREATE OR REPLACE FUNCTION public.is_manager()
 AS $function$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'MANAGER' AND is_active = true
+    WHERE id = auth.uid() AND role = 'manager' AND is_active = true
   );
 $function$;
 

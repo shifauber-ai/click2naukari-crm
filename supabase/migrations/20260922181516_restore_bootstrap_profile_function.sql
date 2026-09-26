@@ -7,7 +7,7 @@ CREATE OR REPLACE FUNCTION public.bootstrap_profile(
   p_user_id uuid,
   p_email text,
   p_full_name text,
-  p_role text DEFAULT 'EMPLOYEE'
+  p_role text DEFAULT 'employee'
 )
 RETURNS void
 LANGUAGE plpgsql
