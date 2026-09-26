@@ -50,8 +50,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.audit_logs (actor_id, action, entity, entity_id, metadata)
-  VALUES (auth.uid(), p_action, p_entity, p_entity_id, p_metadata);
+  BEGIN
+    INSERT INTO public.audit_logs (actor_id, action, entity, entity_id, metadata)
+    VALUES (auth.uid(), p_action, p_entity, p_entity_id, p_metadata);
+  EXCEPTION WHEN undefined_column THEN
+    INSERT INTO public.audit_logs (user_id, action, entity, entity_id, metadata)
+    VALUES (auth.uid(), p_action, p_entity, p_entity_id, p_metadata);
+  END;
 END;
 $$;
 
@@ -82,6 +87,9 @@ DECLARE
   v_caller_id uuid;
   v_caller_priority int;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    RETURN NULL;
+  END IF;
   SELECT * INTO v_lead FROM public.leads WHERE id = p_lead_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Lead not found';
@@ -144,6 +152,9 @@ DECLARE
   v_current_priority int;
   v_next_caller_id uuid;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    RETURN NULL;
+  END IF;
   SELECT * INTO v_lead FROM public.leads WHERE id = p_lead_id;
   IF NOT FOUND THEN RETURN NULL; END IF;
 
@@ -229,6 +240,9 @@ DECLARE
   v_next_action timestamptz;
   v_issue_type text;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    RETURN;
+  END IF;
   SELECT * INTO v_lead FROM public.leads WHERE id = p_lead_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'Lead not found'; END IF;
 
@@ -343,6 +357,9 @@ AS $$
 DECLARE
   v_lead public.leads%ROWTYPE;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    RETURN;
+  END IF;
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Admin only';
   END IF;
@@ -391,6 +408,9 @@ DECLARE
   v_lead public.leads%ROWTYPE;
   v_new_caller uuid;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    RETURN 0;
+  END IF;
   FOR v_rec IN
     SELECT id, lead_id, product_id, current_caller_id, expected_status, attempt_number
     FROM public.scheduled_transitions

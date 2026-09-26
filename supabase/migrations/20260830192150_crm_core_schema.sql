@@ -133,8 +133,15 @@ CREATE TABLE IF NOT EXISTS lead_assignments (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE lead_assignments ENABLE ROW LEVEL SECURITY;
-CREATE INDEX IF NOT EXISTS idx_assignments_lead ON lead_assignments(lead_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_assignments_caller ON lead_assignments(new_caller_id);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'created_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_assignments_lead ON lead_assignments(lead_id, created_at);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_assignments_caller ON lead_assignments(new_caller_id);
+  END IF;
+END $$;
 
 -- ============ LEAD STATUS HISTORY ============
 CREATE TABLE IF NOT EXISTS lead_status_history (
@@ -190,7 +197,12 @@ CREATE TABLE IF NOT EXISTS issues (
 );
 ALTER TABLE issues ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS idx_issues_lead ON issues(lead_id);
-CREATE INDEX IF NOT EXISTS idx_issues_type_status ON issues(issue_type, issue_status);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'issues' AND column_name = 'issue_type') THEN
+    CREATE INDEX IF NOT EXISTS idx_issues_type_status ON issues(issue_type, issue_status);
+  END IF;
+END $$;
 
 -- ============ OTHER HERO LEADS ============
 CREATE TABLE IF NOT EXISTS other_hero_leads (
@@ -471,20 +483,30 @@ DROP POLICY IF EXISTS "assignments_admin_select" ON lead_assignments;
 CREATE POLICY "assignments_admin_select" ON lead_assignments FOR SELECT
   TO authenticated USING (public.is_admin());
 
-DROP POLICY IF EXISTS "assignments_select_own" ON lead_assignments;
-CREATE POLICY "assignments_select_own" ON lead_assignments FOR SELECT
-  TO authenticated USING (
-    auth.uid() = new_caller_id OR auth.uid() = previous_caller_id
-  );
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_assignments' AND column_name = 'new_caller_id') THEN
+    DROP POLICY IF EXISTS "assignments_select_own" ON lead_assignments;
+    CREATE POLICY "assignments_select_own" ON lead_assignments FOR SELECT
+      TO authenticated USING (
+        auth.uid() = new_caller_id OR auth.uid() = previous_caller_id
+      );
+  END IF;
+END $$;
 
 -- LEAD STATUS HISTORY: same pattern.
 DROP POLICY IF EXISTS "statushist_admin_select" ON lead_status_history;
 CREATE POLICY "statushist_admin_select" ON lead_status_history FOR SELECT
   TO authenticated USING (public.is_admin());
 
-DROP POLICY IF EXISTS "statushist_select_own" ON lead_status_history;
-CREATE POLICY "statushist_select_own" ON lead_status_history FOR SELECT
-  TO authenticated USING (auth.uid() = employee_id OR auth.uid() = actor_id);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lead_status_history' AND column_name = 'actor_id') THEN
+    DROP POLICY IF EXISTS "statushist_select_own" ON lead_status_history;
+    CREATE POLICY "statushist_select_own" ON lead_status_history FOR SELECT
+      TO authenticated USING (auth.uid() = employee_id OR auth.uid() = actor_id);
+  END IF;
+END $$;
 
 -- SCHEDULED TRANSITIONS: admin SELECT; employee SELECT for own leads (countdown UX).
 DROP POLICY IF EXISTS "transitions_admin_select" ON scheduled_transitions;
