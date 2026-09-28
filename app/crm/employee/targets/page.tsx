@@ -32,6 +32,8 @@ export default function EmployeeTargetsPage() {
     if (!profile?.id || !product) return;
     setLoading(true);
 
+    const today = new Date().toISOString().slice(0, 10);
+
     const [targetsResp, metricsList] = await Promise.all([
       supabase
         .from("employee_targets")
@@ -39,10 +41,15 @@ export default function EmployeeTargetsPage() {
         .eq("employee_id", profile.id)
         .eq("product_id", product.id)
         .eq("is_active", true)
+        .lte("start_date", today)
+        .gte("end_date", today)
         .order("created_at", { ascending: false }),
       fetchActiveMetrics(product.id),
     ]);
 
+    if (targetsResp.error) {
+      console.error("[employee-targets] query error:", targetsResp.error);
+    }
     const rawTargets = (targetsResp.data as (EmployeeTarget & { city: ProductCity | null; metric: TargetMetric | null })[]) || [];
     const metricMap = new Map<string, TargetMetric>();
     metricsList.forEach((m) => metricMap.set(m.id, m));

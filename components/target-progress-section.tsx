@@ -27,6 +27,7 @@ interface TargetRow {
   productName: string;
   cityName: string;
   metricName: string;
+  targetType: string;
   target: number;
   completed: number;
   remaining: number;
@@ -108,6 +109,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
 
     const { data, error } = await targetQuery;
     if (error) {
+      console.error("[target-progress] query error:", error);
       setLoading(false);
       return;
     }
@@ -133,6 +135,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
         productName: t.product?.name || prod.name,
         cityName: t.city?.city_name || "All Cities",
         metricName: t.metric?.name || t.target_type.replace(/_/g, " "),
+        targetType: t.target_type,
         target: Number(t.target_value),
         completed: achievement.achieved,
         remaining: achievement.remaining,
@@ -330,6 +333,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
                       <TableHead>Employee</TableHead>
                       <TableHead>Product</TableHead>
                       <TableHead>City</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Metric</TableHead>
                       <TableHead>Target</TableHead>
                       <TableHead>Completed</TableHead>
@@ -343,6 +347,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
                         <TableCell className="font-medium">{e.employeeName}</TableCell>
                         <TableCell>{e.productName}</TableCell>
                         <TableCell>{e.cityName}</TableCell>
+                        <TableCell className="text-sm">{e.targetType}</TableCell>
                         <TableCell className="text-sm">{e.metricName}</TableCell>
                         <TableCell>{e.target}</TableCell>
                         <TableCell className="text-success-foreground">{e.completed}</TableCell>
