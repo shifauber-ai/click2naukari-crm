@@ -13,10 +13,26 @@ export async function calculateAchievement(
   product: Product,
   metric?: TargetMetric | null
 ): Promise<AchievementResult> {
+  // Use the server-side RPC for all targets — it handles ULP, FT, OLA, RAPIDO,
+  // COLLECTION, TAG_ADDED, TAG_FORM, and generic counts with city filtering.
+  const { data, error } = await supabase.rpc("get_target_achievement", {
+    p_target_id: target.id,
+  });
+
+  if (!error && data) {
+    const result = data as { achieved: number; remaining: number; progress_pct: number };
+    return {
+      achieved: result.achieved,
+      remaining: result.remaining,
+      progressPct: result.progress_pct,
+    };
+  }
+
+  // Fallback: client-side calculation if RPC fails
   const { start, end } = getTargetDateRange(target.start_date, target.end_date, target.period_type);
   let achieved = 0;
 
-  const isAmount = metric?.value_type === "AMOUNT" || target.target_type === "OLA_COLLECTION";
+  const isAmount = metric?.value_type === "AMOUNT" || target.target_type === "OLA_COLLECTION" || target.target_type === "COLLECTION";
 
   if (isAmount) {
     const { data } = await supabase
@@ -31,38 +47,16 @@ export async function calculateAchievement(
   } else {
     const metricKey = metric?.key || target.target_type;
 
-    // Use the server-side RPC for ULP/FT targets for accurate city-filtered counts
-    if (metricKey === "ULP" || metricKey === "FT") {
-      const { data, error } = await supabase.rpc("get_target_achievement", {
-        p_target_id: target.id,
-      });
-      if (!error && data) {
-        const result = data as { achieved: number; remaining: number; progress_pct: number };
-        return {
-          achieved: result.achieved,
-          remaining: result.remaining,
-          progressPct: result.progress_pct,
-        };
-      }
-      // Fallback to client-side if RPC fails
-    }
-
     let q = supabase
       .from("leads")
       .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status, lead_type")
-      .eq("current_caller_id", target.employee_id)
       .eq("product_id", target.product_id)
       .gte("created_at", start)
       .lte("created_at", end);
 
-    if (metricKey === "RAPIDO") {
-      q = q.ilike("platform", "Rapido");
-    }
-
     const { data } = await q;
     const leads = data || [];
 
-    // Resolve city name for filtering
     let cityFilter = "";
     if (target.city_id) {
       const { data: cityData } = await supabase
@@ -73,46 +67,23 @@ export async function calculateAchievement(
       cityFilter = (cityData as { city_name: string } | null)?.city_name || "";
     }
 
-    if (metricKey === "TAG_ADDED") {
-      achieved = leads.filter((l) =>
-        l.status === "TAG_ADDED" &&
-        (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase())
-      ).length;
-    } else if (metricKey === "TAG_FORM") {
-      achieved = leads.filter((l) =>
-        (l as { form_status?: string }).form_status === "TAG_FORM" &&
-        (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase())
-      ).length;
-    } else if (metricKey === "ULP" || metricKey === "MUMBAI_ULP" || metricKey === "PUNE_ULP") {
-      if (metricKey === "MUMBAI_ULP") {
-        achieved = leads.filter((l) => l.uber_id_done === true && l.city?.toLowerCase() === "mumbai").length;
-      } else if (metricKey === "PUNE_ULP") {
-        achieved = leads.filter((l) => l.uber_id_done === true && l.city?.toLowerCase() === "pune").length;
-      } else {
-        // ULP: city-filtered + uber_id_done + lead_type=ULP
-        achieved = leads.filter((l) =>
-          l.uber_id_done === true &&
-          (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase()) &&
-          (l as { lead_type?: string }).lead_type !== "FT"
-        ).length;
-      }
-    } else if (metricKey === "MUMBAI_OLA") {
-      achieved = leads.filter((l) => l.ola_id_done === true && l.city?.toLowerCase() === "mumbai").length;
-    } else if (metricKey === "PUNE_OLA") {
-      achieved = leads.filter((l) => l.ola_id_done === true && l.city?.toLowerCase() === "pune").length;
-    } else if (metricKey === "RAPIDO") {
-      achieved = leads.filter((l) => l.rapido_id_done === true).length;
+    const cityMatch = (l: { city?: string | null }) =>
+      !cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase();
+
+    if (metricKey === "ULP") {
+      achieved = leads.filter((l) => l.uber_id_done === true && cityMatch(l) && l.lead_type !== "FT").length;
     } else if (metricKey === "FT") {
-      // FT: city-filtered + lead_type=FT + ID_DONE
-      achieved = leads.filter((l) =>
-        l.status === "ID_DONE" &&
-        (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase()) &&
-        (l as { lead_type?: string }).lead_type === "FT"
-      ).length;
+      achieved = leads.filter((l) => l.status === "ID_DONE" && cityMatch(l) && l.lead_type === "FT").length;
+    } else if (metricKey === "OLA") {
+      achieved = leads.filter((l) => l.ola_id_done === true && cityMatch(l)).length;
+    } else if (metricKey === "RAPIDO") {
+      achieved = leads.filter((l) => l.rapido_id_done === true && cityMatch(l)).length;
+    } else if (metricKey === "TAG_ADDED") {
+      achieved = leads.filter((l) => l.status === "TAG_ADDED" && cityMatch(l)).length;
+    } else if (metricKey === "TAG_FORM") {
+      achieved = leads.filter((l) => (l as { form_status?: string }).form_status === "TAG_FORM" && cityMatch(l)).length;
     } else {
-      achieved = leads.filter((l) =>
-        !cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase()
-      ).length;
+      achieved = leads.filter(cityMatch).length;
     }
   }
 

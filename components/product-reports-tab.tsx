@@ -43,6 +43,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
   const [platformFilter, setPlatformFilter] = useState("ALL");
   const [cityFilter, setCityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
   const [employees, setEmployees] = useState<Profile[]>([]);
@@ -105,11 +106,12 @@ export function ProductReportsTab({ product }: { product: Product }) {
       if (cityFilter !== "ALL") q = q.eq("city", cityFilter);
       if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
       if (employeeFilter !== "ALL") q = q.eq("current_caller_id", employeeFilter);
+      if (typeFilter !== "ALL") q = q.eq("lead_type", typeFilter);
       return q;
     };
 
     const [leadData, callData, leadAssignData] = await Promise.all([
-      buildLeadQuery("id, status, platform, city, current_caller_id, created_at, form_status, current_caller:profiles!current_caller_id(full_name)"),
+      buildLeadQuery("id, status, platform, city, current_caller_id, created_at, form_status, uber_id_done, ola_id_done, rapido_id_done, lead_type, current_caller:profiles!current_caller_id(full_name)"),
       supabase.from("call_history").select("call_status, caller_id, caller:profiles!caller_id(full_name), call_timestamp")
         .eq("product_id", product.id).gte("call_timestamp", fromIso).lte("call_timestamp", toIso),
       supabase.from("leads").select("id, current_caller_id, current_caller:profiles!current_caller_id(full_name)")
@@ -128,7 +130,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       calls: calls.length,
       interested: countStatus("INTERESTED"),
       callback: countStatus("CALLBACK"),
-      idDone: countStatus("ID_DONE"),
+      idDone: leads.filter((l) => l.uber_id_done || l.ola_id_done || l.rapido_id_done || l.status === "ID_DONE").length,
       notInterested: countStatus("NOT_INTERESTED"),
       issues: countStatus("DOC_VEHICLE_ISSUE"),
       otherHero: countStatus("OTHER_HERO"),
@@ -145,7 +147,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       eMap[id].leads++;
       if (l.status === "INTERESTED") eMap[id].interested++;
       if (l.status === "CALLBACK") eMap[id].callback++;
-      if (l.status === "ID_DONE") eMap[id].idDone++;
+      if (l.uber_id_done || l.ola_id_done || l.rapido_id_done || l.status === "ID_DONE") eMap[id].idDone++;
       if (l.status === "NOT_INTERESTED") eMap[id].notInterested++;
       if (l.status === "OTHER_HERO") eMap[id].otherHero++;
       if (l.status === "DOC_VEHICLE_ISSUE") eMap[id].issues++;
@@ -168,7 +170,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       pMap[p].total++;
       if (l.status === "INTERESTED") pMap[p].interested++;
       if (l.status === "CALLBACK") pMap[p].callback++;
-      if (l.status === "ID_DONE") pMap[p].idDone++;
+      if ((l.uber_id_done && p.toUpperCase() === "UBER") || (l.ola_id_done && p.toUpperCase() === "OLA") || (l.rapido_id_done && p.toUpperCase() === "RAPIDO") || l.status === "ID_DONE") pMap[p].idDone++;
       if (l.status === "NOT_INTERESTED") pMap[p].notInterested++;
       if (l.status === "OTHER_HERO") pMap[p].otherHero++;
     });
@@ -180,7 +182,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       const c = (l.city as string) || "Unknown";
       if (!cMap[c]) cMap[c] = { name: c, total: 0, idDone: 0, interested: 0, callback: 0, notInterested: 0 };
       cMap[c].total++;
-      if (l.status === "ID_DONE") cMap[c].idDone++;
+      if (l.uber_id_done || l.ola_id_done || l.rapido_id_done || l.status === "ID_DONE") cMap[c].idDone++;
       if (l.status === "INTERESTED") cMap[c].interested++;
       if (l.status === "CALLBACK") cMap[c].callback++;
       if (l.status === "NOT_INTERESTED") cMap[c].notInterested++;
@@ -200,7 +202,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       dMap[d].leads++;
       if (l.status === "INTERESTED") dMap[d].interested++;
       if (l.status === "CALLBACK") dMap[d].callback++;
-      if (l.status === "ID_DONE") dMap[d].idDone++;
+      if (l.uber_id_done || l.ola_id_done || l.rapido_id_done || l.status === "ID_DONE") dMap[d].idDone++;
       if (l.status === "OTHER_HERO") dMap[d].otherHero++;
       if (l.status === "NOT_INTERESTED") dMap[d].notInterested++;
     });
@@ -219,7 +221,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       const wk = format(weekStart, "dd MMM");
       if (!wMap[wk]) wMap[wk] = { week: wk, leads: 0, calls: 0, idDone: 0, interested: 0, callback: 0 };
       wMap[wk].leads++;
-      if (l.status === "ID_DONE") wMap[wk].idDone++;
+      if (l.uber_id_done || l.ola_id_done || l.rapido_id_done || l.status === "ID_DONE") wMap[wk].idDone++;
       if (l.status === "INTERESTED") wMap[wk].interested++;
       if (l.status === "CALLBACK") wMap[wk].callback++;
     });
@@ -239,7 +241,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
       const mo = format(d, "MMM yyyy");
       if (!mMap[mo]) mMap[mo] = { month: mo, leads: 0, calls: 0, idDone: 0, interested: 0, callback: 0 };
       mMap[mo].leads++;
-      if (l.status === "ID_DONE") mMap[mo].idDone++;
+      if (l.uber_id_done || l.ola_id_done || l.rapido_id_done || l.status === "ID_DONE") mMap[mo].idDone++;
       if (l.status === "INTERESTED") mMap[mo].interested++;
       if (l.status === "CALLBACK") mMap[mo].callback++;
     });
@@ -278,7 +280,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
     }
 
     setLoading(false);
-  }, [product.id, getDateRange, platformFilter, cityFilter, statusFilter, employeeFilter, isCar]);
+  }, [product.id, getDateRange, platformFilter, cityFilter, statusFilter, employeeFilter, typeFilter, isCar]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -351,6 +353,14 @@ export function ProductReportsTab({ product }: { product: Product }) {
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
             {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Types</SelectItem>
+            <SelectItem value="ULP">ULP</SelectItem>
+            <SelectItem value="FT">FT</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -49,6 +49,7 @@ interface GroupedCaller {
   employee: Profile;
   rows: QueueRow[];
   cityNames: string[];
+  types: string[];
   isActive: boolean;
   minPriority: number;
 }
@@ -61,6 +62,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [productCities, setProductCities] = useState<CityRow[]>([]);
   const [cityFilter, setCityFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -84,6 +86,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   const [addEmpId, setAddEmpId] = useState("");
   const [addPriority, setAddPriority] = useState("100");
   const [addCityIds, setAddCityIds] = useState<Set<string>>(new Set());
+  const [addType, setAddType] = useState<string>("ULP");
 
   // Edit form
   const [editPriority, setEditPriority] = useState("100");
@@ -160,10 +163,11 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         if (cityFilter === "ALL_CITIES") rows = rows.filter((r) => !r.city_id);
         else rows = rows.filter((r) => r.city_id === cityFilter);
       }
+      if (typeFilter !== "ALL") rows = rows.filter((r) => (r as { employee_type?: string }).employee_type === typeFilter);
       setQueue(rows);
     }
     setLoading(false);
-  }, [product.id, search, statusFilter, queueFilter, priorityFilter, cityFilter, toast]);
+  }, [product.id, search, statusFilter, queueFilter, priorityFilter, cityFilter, typeFilter, toast]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -171,60 +175,51 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     return () => clearTimeout(t);
   }, [load]);
 
-  const hasActiveFilters = search || statusFilter !== "ALL" || queueFilter !== "ALL" || priorityFilter !== "ALL" || cityFilter !== "ALL";
+  const hasActiveFilters = search || statusFilter !== "ALL" || queueFilter !== "ALL" || priorityFilter !== "ALL" || cityFilter !== "ALL" || typeFilter !== "ALL";
   const clearFilters = () => {
-    setSearch(""); setStatusFilter("ALL"); setQueueFilter("ALL"); setPriorityFilter("ALL"); setCityFilter("ALL");
+    setSearch(""); setStatusFilter("ALL"); setQueueFilter("ALL"); setPriorityFilter("ALL"); setCityFilter("ALL"); setTypeFilter("ALL");
   };
 
   const [productAssignments, setProductAssignments] = useState<
-    Map<string, { profile: Profile; cityIds: Set<string> }>
+    Map<string, { profile: Profile; cityIds: Set<string>; types: Set<string> }>
   >(new Map());
   useEffect(() => {
     (async () => {
-      // Load employees from employee_product_cities
+      // Load employees from employee_product_cities with their type assignments
       const { data } = await supabase
         .from("employee_product_cities")
-        .select("employee_id, city_id, employee:profiles!employee_id(*)")
-        .eq("product_id", product.id);
-      const map = new Map<string, { profile: Profile; cityIds: Set<string> }>();
-      (data as unknown as { employee_id: string; city_id: string; employee: Profile }[] | null)?.forEach((r) => {
+        .select("employee_id, city_id, employee_type, employee:profiles!employee_id(*)")
+        .eq("product_id", product.id)
+        .eq("is_active", true);
+      const map = new Map<string, { profile: Profile; cityIds: Set<string>; types: Set<string> }>();
+      (data as unknown as { employee_id: string; city_id: string; employee_type: string; employee: Profile }[] | null)?.forEach((r) => {
         if (!r.employee) return;
         const existing = map.get(r.employee_id);
         if (existing) {
           if (r.city_id) existing.cityIds.add(r.city_id);
+          if (r.employee_type) existing.types.add(r.employee_type);
         } else {
           map.set(r.employee_id, {
             profile: r.employee,
             cityIds: new Set(r.city_id ? [r.city_id] : []),
+            types: new Set(r.employee_type ? [r.employee_type] : []),
           });
-        }
-      });
-      // Also load all active employees so they can be added to the caller queue
-      // even if they're not yet in employee_product_cities
-      const { data: allEmps } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("is_active", true)
-        .eq("role", "employee")
-        .order("full_name");
-      (allEmps as Profile[] | null)?.forEach((emp) => {
-        if (!map.has(emp.id)) {
-          map.set(emp.id, { profile: emp, cityIds: new Set() });
         }
       });
       setProductAssignments(map);
     })();
   }, [product.id]);
 
-  // Available employees for Add: all active employees.
+  // Available employees for Add: only employees assigned to this product.
   // When cities are selected, filter to those assigned to ALL selected cities
-  // via employee_product_cities (if any assignments exist). Employees without
-  // city assignments can still be added product-wide (no city filter).
+  // with the selected employee_type.
+  // When type is selected, filter to employees who have that type in any of the selected cities.
   const availableEmployees = (() => {
     const result: Profile[] = [];
-    productAssignments.forEach(({ profile, cityIds }) => {
-      // If cities are selected, only show employees assigned to ALL of them
-      // OR employees with no city assignments (they can be added to any city)
+    productAssignments.forEach(({ profile, cityIds, types }) => {
+      // Must have the selected type
+      if (addType !== "ALL" && !types.has(addType)) return;
+      // If cities are selected, must be assigned to ALL of them
       if (addCityIds.size > 0 && cityIds.size > 0) {
         for (const cid of Array.from(addCityIds)) {
           if (!cityIds.has(cid)) return;
@@ -244,6 +239,8 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
       if (existing) {
         existing.rows.push(row);
         if (row.city_name) existing.cityNames.push(row.city_name);
+        const et = (row as { employee_type?: string }).employee_type;
+        if (et && !existing.types.includes(et)) existing.types.push(et);
         if (!row.is_active) existing.isActive = false;
         existing.minPriority = Math.min(existing.minPriority, row.priority);
       } else {
@@ -251,6 +248,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
           employee: row.employee,
           rows: [row],
           cityNames: row.city_name ? [row.city_name] : [],
+          types: (row as { employee_type?: string }).employee_type ? [(row as { employee_type?: string }).employee_type!] : [],
           isActive: row.is_active,
           minPriority: row.priority,
         });
@@ -263,6 +261,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
     setAddCityIds((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
     setAddEmpId("");
   };
+  const handleAddTypeChange = (v: string) => { setAddType(v); setAddEmpId(""); };
 
   // ===== Add caller (multi-city) =====
   const handleAdd = async (e: React.FormEvent) => {
@@ -278,7 +277,8 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
           .from("caller_queues")
           .select("id")
           .eq("product_id", product.id)
-          .eq("employee_id", addEmpId);
+          .eq("employee_id", addEmpId)
+          .eq("employee_type", addType);
         if (cid) dupQuery = dupQuery.eq("city_id", cid);
         else dupQuery = dupQuery.is("city_id", null);
         const { data: existing } = await dupQuery.maybeSingle();
@@ -296,6 +296,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         priority: parseInt(addPriority, 10) || 100,
         is_active: true,
         city_id: cid,
+        employee_type: addType,
       }));
 
       const { data, error } = await supabase
@@ -317,6 +318,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
         setAddEmpId("");
         setAddPriority("100");
         setAddCityIds(new Set());
+        setAddType("ULP");
         loadStats();
       }
     } catch (err) {
@@ -611,6 +613,14 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
             </SelectContent>
           </Select>
         )}
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Types</SelectItem>
+            <SelectItem value="ULP">ULP</SelectItem>
+            <SelectItem value="FT">FT</SelectItem>
+          </SelectContent>
+        </Select>
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-3.5 w-3.5" /> Clear
@@ -656,13 +666,19 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                   <TableCell className="text-sm">
                     <div className="flex flex-wrap gap-1">
                       {group.cityNames.length > 0 ? (
-                        group.cityNames.map((cn) => (
-                          <span key={cn} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                        group.cityNames.map((cn, i) => (
+                          <span key={i} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
                             <MapPin className="h-3 w-3" />{cn}
+                            {group.types[i] && <span className="ml-0.5 text-[9px] opacity-70">{group.types[i]}</span>}
                           </span>
                         ))
                       ) : (
                         <span className="text-muted-foreground text-xs">Product-wide</span>
+                      )}
+                      {group.types.length > 0 && group.cityNames.length === 0 && (
+                        group.types.map((t) => (
+                          <span key={t} className="inline-flex rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{t}</span>
+                        ))
                       )}
                     </div>
                   </TableCell>
@@ -759,6 +775,17 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                   Clear all cities
                 </Button>
               )}
+            </div>
+            <div>
+              <Label>Employee Type</Label>
+              <Select value={addType} onValueChange={handleAddTypeChange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ULP">ULP</SelectItem>
+                  <SelectItem value="FT">FT</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">Only employees assigned to this product with this type will appear.</p>
             </div>
             <div>
               <Label>Caller</Label>

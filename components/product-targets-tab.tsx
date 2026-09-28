@@ -68,6 +68,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
 
   const [period, setPeriod] = useState<PeriodKey>("DAILY");
   const [selectedCityId, setSelectedCityId] = useState<string>("");
+  const [selectedType, setSelectedType] = useState<string>("ULP");
   const [startDate, setStartDate] = useState(computeDefaultDates("DAILY").start);
   const [endDate, setEndDate] = useState(computeDefaultDates("DAILY").end);
 
@@ -107,11 +108,13 @@ export function ProductTargetsTab({ product }: { product: Product }) {
       setEmployees([]);
       return;
     }
+    // Load employees from caller_queues filtered by city and employee_type
     const { data } = await supabase
       .from("caller_queues")
       .select("is_active, employee:profiles!employee_id(id, full_name)")
       .eq("product_id", product.id)
-      .eq("city_id", selectedCityId);
+      .eq("city_id", selectedCityId)
+      .eq("employee_type", selectedType);
     const empMap = new Map<string, CallerOption>();
     (data as unknown as { is_active: boolean; employee: { id: string; full_name: string } | null }[] | null)?.forEach((r) => {
       if (r.employee && !empMap.has(r.employee.id)) {
@@ -122,8 +125,23 @@ export function ProductTargetsTab({ product }: { product: Product }) {
         });
       }
     });
+    // Fallback: if no callers in queue with this type, load from employee_product_cities
+    if (empMap.size === 0) {
+      const { data: epcData } = await supabase
+        .from("employee_product_cities")
+        .select("employee:profiles!employee_id(id, full_name)")
+        .eq("product_id", product.id)
+        .eq("city_id", selectedCityId)
+        .eq("employee_type", selectedType)
+        .eq("is_active", true);
+      (epcData as unknown as { employee: { id: string; full_name: string } | null }[] | null)?.forEach((r) => {
+        if (r.employee && !empMap.has(r.employee.id)) {
+          empMap.set(r.employee.id, { id: r.employee.id, full_name: r.employee.full_name, isActive: true });
+        }
+      });
+    }
     setEmployees(Array.from(empMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name)));
-  }, [product.id, selectedCityId]);
+  }, [product.id, selectedCityId, selectedType]);
 
   const loadExistingTargets = useCallback(async () => {
     if (!selectedCityId || !startDate) return;
@@ -178,7 +196,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
     if (selectedCityId) {
       loadEmployees();
     }
-  }, [selectedCityId, loadEmployees]);
+  }, [selectedCityId, selectedType, loadEmployees]);
 
   useEffect(() => {
     if (selectedCityId) {
@@ -510,6 +528,17 @@ export function ProductTargetsTab({ product }: { product: Product }) {
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs">Employee Type</Label>
+            <Select value={selectedType} onValueChange={setSelectedType}>
+              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ULP">ULP</SelectItem>
+                <SelectItem value="FT">FT</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
             <Label className="text-xs">Start Date</Label>
             <Input
               type="date"
@@ -551,6 +580,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
         {selectedCity && (
           <Badge variant="outline" className="border-border/60">{selectedCity.city_name}</Badge>
         )}
+        <Badge variant="outline" className="border-border/60">{selectedType}</Badge>
         <Badge variant="outline" className="border-border/60">{PERIOD_LABELS[period]}</Badge>
         <Badge variant="outline" className="border-border/60">
           {format(new Date(startDate), "dd MMM yyyy")}

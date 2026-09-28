@@ -42,6 +42,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
   const [productFilter, setProductFilter] = useState("ALL");
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
   const [cityFilter, setCityFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -99,6 +100,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
 
     if (productFilter !== "ALL") targetQuery = targetQuery.eq("product_id", productFilter);
     if (employeeFilter !== "ALL") targetQuery = targetQuery.eq("employee_id", employeeFilter);
+    if (typeFilter !== "ALL") targetQuery = targetQuery.eq("target_type", typeFilter);
     if (cityFilter !== "ALL") {
       const selectedCity = cities.find((c) => c.city_name === cityFilter);
       if (selectedCity) targetQuery = targetQuery.eq("city_id", selectedCity.id);
@@ -150,7 +152,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
       pct: totalTarget > 0 ? Math.min(100, Math.round((totalCompleted / totalTarget) * 100)) : 0,
     });
     setLoading(false);
-  }, [getDateRange, product, managerProductIds, productFilter, employeeFilter, cityFilter, cities, products]);
+  }, [getDateRange, product, managerProductIds, productFilter, employeeFilter, cityFilter, typeFilter, cities, products]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -212,6 +214,14 @@ export function TargetProgressSection({ product }: { product?: Product }) {
           <SelectContent>
             <SelectItem value="ALL">All Cities</SelectItem>
             {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Types</SelectItem>
+            <SelectItem value="ULP">ULP</SelectItem>
+            <SelectItem value="FT">FT</SelectItem>
           </SelectContent>
         </Select>
       </div>
