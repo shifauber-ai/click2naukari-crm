@@ -69,7 +69,7 @@ export default function WhatsAppPage() {
       .from("profiles")
       .select("*")
       .eq("is_active", true)
-      .eq("role", "EMPLOYEE")
+      .eq("role", "employee")
       .order("full_name")
       .then(({ data }) => setEmployees((data as Profile[]) || []));
   }, [load]);

@@ -171,7 +171,7 @@ export default function AdminDashboard() {
       supabase.from("issues").select("*", { count: "exact", head: true }).eq("issue_type", "VEHICLE_ISSUE").gte("created_at", fromIso).lte("created_at", toIso),
       pf(supabase.from("other_hero_leads").select("*", { count: "exact", head: true }).gte("created_at", fromIso).lte("created_at", toIso)),
       pf(supabase.from("leads").select("*", { count: "exact", head: true }).not("next_followup_at", "is", null).lt("next_followup_at", new Date().toISOString()).in("status", ["RINGING", "INTERESTED", "CALLBACK"])),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_active", true).eq("role", "EMPLOYEE"),
+      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_active", true).eq("role", "employee"),
       supabase.from("lead_status_history").select("*", { count: "exact", head: true }).gte("created_at", fromIso).lte("created_at", toIso),
     ]);
 

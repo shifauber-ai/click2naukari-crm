@@ -14,11 +14,11 @@ interface ProductAccessGuardProps {
 }
 
 const PRODUCT_CODE_MAP: Record<string, string[]> = {
-  car: ["MAINC001", "CAR", "C001"],
-  bike: ["MAINB001", "BIKE", "B001", "B002"],
-  auto: ["MAINA001", "AUTO", "A001"],
-  tempo: ["MAINT001", "TEMPO", "T001"],
-  hc: ["H001", "HC"],
+  car: ["car", "MAINC001", "CAR", "C001"],
+  bike: ["bike", "MAINB001", "BIKE", "B001", "B002"],
+  auto: ["auto", "MAINA001", "AUTO", "A001"],
+  tempo: ["tempo", "MAINT001", "TEMPO", "T001"],
+  hc: ["hc", "H001", "HC"],
 };
 
 export function ProductAccessGuard({ productSlug, children }: ProductAccessGuardProps) {

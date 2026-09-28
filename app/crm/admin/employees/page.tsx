@@ -85,7 +85,7 @@ export default function EmployeesPage() {
     setLoading(true);
     let query = supabase.from("profiles").select("*").order("created_at");
     if (roleFilter !== "ALL") {
-      query = query.eq("role", roleFilter);
+      query = query.eq("role", roleFilter.toLowerCase());
     }
     if (search) {
       query = query.or(

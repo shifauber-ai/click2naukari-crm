@@ -132,11 +132,11 @@ function filterSections(sections: NavSection[], isManager: boolean, assignedProd
 }
 
 const PRODUCT_SLUG_MAP: Record<string, string> = {
-  MAINC001: "car", CAR: "car", C001: "car",
-  MAINB001: "bike", BIKE: "bike", B001: "bike", B002: "bike",
-  MAINA001: "auto", AUTO: "auto", A001: "auto",
-  MAINT001: "tempo", TEMPO: "tempo", T001: "tempo",
-  H001: "hc", HC: "hc",
+  car: "car", MAINC001: "car", CAR: "car", C001: "car",
+  bike: "bike", MAINB001: "bike", BIKE: "bike", B001: "bike", B002: "bike",
+  auto: "auto", MAINA001: "auto", AUTO: "auto", A001: "auto",
+  tempo: "tempo", MAINT001: "tempo", TEMPO: "tempo", T001: "tempo",
+  hc: "hc", H001: "hc", HC: "hc",
 };
 
 export default function AdminLayout({

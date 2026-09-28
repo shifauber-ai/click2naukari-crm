@@ -181,6 +181,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   >(new Map());
   useEffect(() => {
     (async () => {
+      // Load employees from employee_product_cities
       const { data } = await supabase
         .from("employee_product_cities")
         .select("employee_id, city_id, employee:profiles!employee_id(*)")
@@ -198,17 +199,36 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
           });
         }
       });
+      // Also load all active employees so they can be added to the caller queue
+      // even if they're not yet in employee_product_cities
+      const { data: allEmps } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("is_active", true)
+        .eq("role", "employee")
+        .order("full_name");
+      (allEmps as Profile[] | null)?.forEach((emp) => {
+        if (!map.has(emp.id)) {
+          map.set(emp.id, { profile: emp, cityIds: new Set() });
+        }
+      });
       setProductAssignments(map);
     })();
   }, [product.id]);
 
-  // Available employees for Add: assigned to this product AND assigned to ALL selected cities.
-  // Exclude employees already in the queue for the exact same set of cities (to avoid exact duplicates).
+  // Available employees for Add: all active employees.
+  // When cities are selected, filter to those assigned to ALL selected cities
+  // via employee_product_cities (if any assignments exist). Employees without
+  // city assignments can still be added product-wide (no city filter).
   const availableEmployees = (() => {
     const result: Profile[] = [];
     productAssignments.forEach(({ profile, cityIds }) => {
-      for (const cid of Array.from(addCityIds)) {
-        if (!cityIds.has(cid)) return;
+      // If cities are selected, only show employees assigned to ALL of them
+      // OR employees with no city assignments (they can be added to any city)
+      if (addCityIds.size > 0 && cityIds.size > 0) {
+        for (const cid of Array.from(addCityIds)) {
+          if (!cityIds.has(cid)) return;
+        }
       }
       result.push(profile);
     });

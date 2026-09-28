@@ -94,7 +94,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const load = useCallback(async () => {
     setLoading(true);
     let query = supabase.from("profiles").select("*").order("created_at");
-    if (roleFilter !== "ALL") query = query.eq("role", roleFilter);
+    if (roleFilter !== "ALL") query = query.eq("role", roleFilter.toLowerCase());
     if (statusFilter === "ACTIVE") query = query.eq("is_active", true);
     if (statusFilter === "INACTIVE") query = query.eq("is_active", false);
     if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
