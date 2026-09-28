@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
       .select("role, is_active")
       .eq("id", callerId)
       .maybeSingle();
-    if (!callerProfile || callerProfile.role !== "ADMIN" || !callerProfile.is_active) {
+    if (!callerProfile || String(callerProfile.role).toUpperCase() !== "ADMIN" || !callerProfile.is_active) {
       return json({ error: "Admin only" }, 403);
     }
 
@@ -149,7 +149,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Assign products if manager
-      if (role === "MANAGER" && body.product_ids && body.product_ids.length > 0) {
+      if (String(body.role).toUpperCase() === "MANAGER" && body.product_ids && body.product_ids.length > 0) {
         const inserts = body.product_ids.map((pid) => ({
           manager_id: newUserId,
           product_id: pid,
@@ -214,7 +214,7 @@ Deno.serve(async (req: Request) => {
         .eq("id", body.user_id);
       if (error) return json({ error: error.message }, 400);
       // Sync manager product assignments
-      if (body.role === "MANAGER" && body.product_ids !== undefined) {
+      if (String(body.role).toUpperCase() === "MANAGER" && body.product_ids !== undefined) {
         await adminClient
           .from("manager_product_assignments")
           .delete()
@@ -289,7 +289,7 @@ Deno.serve(async (req: Request) => {
       if (!targetProfile) {
         return json({ error: "Employee not found" }, 404);
       }
-      if (targetProfile.role === "ADMIN") {
+      if (String(targetProfile.role).toUpperCase() === "ADMIN") {
         return json({ error: "Cannot delete an admin account" }, 400);
       }
 
