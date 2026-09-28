@@ -127,8 +127,8 @@ export default function AdminFollowupsPage() {
 
   const handleStatusUpdate = async () => {
     if (!statusLead) return;
-    if (newStatus === "CALLBACK" && (!callbackDate || !callbackTime)) {
-      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+    if ((newStatus === "CALLBACK" || newStatus === "INTERESTED") && (!callbackDate || !callbackTime)) {
+      toast({ title: "Follow-up Date and Time are required for Call Back and Interested statuses.", variant: "destructive" });
       return;
     }
     setStatusSaving(true);
@@ -137,8 +137,8 @@ export default function AdminFollowupsPage() {
         p_lead_id: statusLead.id,
         p_new_status: newStatus,
         p_remarks: statusRemarks.trim(),
-        p_callback_date: newStatus === "CALLBACK" ? callbackDate : null,
-        p_callback_time: newStatus === "CALLBACK" ? callbackTime : null,
+        p_callback_date: (newStatus === "CALLBACK" || newStatus === "INTERESTED") ? callbackDate : null,
+        p_callback_time: (newStatus === "CALLBACK" || newStatus === "INTERESTED") ? callbackTime : null,
       });
       if (error) {
         toast({ title: `Status update failed: ${error.message}`, variant: "destructive" });
@@ -170,6 +170,7 @@ export default function AdminFollowupsPage() {
               <TableHead>Lead</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Product</TableHead>
+              <TableHead>Platform</TableHead>
               <TableHead>Caller</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Scheduled</TableHead>
@@ -186,6 +187,9 @@ export default function AdminFollowupsPage() {
                 <TableCell className="text-sm">{lead.phone}</TableCell>
                 <TableCell className="text-sm">
                   {lead.product?.name || "—"}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {lead.platform || "—"}
                 </TableCell>
                 <TableCell className="text-sm">
                   {lead.current_caller?.full_name || "—"}
@@ -334,14 +338,14 @@ export default function AdminFollowupsPage() {
                 </SelectContent>
               </Select>
             </div>
-            {newStatus === "CALLBACK" && (
+            {(newStatus === "CALLBACK" || newStatus === "INTERESTED") && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-sm font-medium">Callback Date *</Label>
+                  <Label className="text-sm font-medium">Follow-up Date *</Label>
                   <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Callback Time *</Label>
+                  <Label className="text-sm font-medium">Follow-up Time *</Label>
                   <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1" />
                 </div>
               </div>

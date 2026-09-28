@@ -146,12 +146,10 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     NOT_ELIGIBLE: "Not Eligible",
   };
   const isSinglePlatform = productPlatforms.length <= 1;
-  const isMultiPlatform = !isSinglePlatform && productPlatforms.length > 1;
-  const PLATFORM_CONFIG = isSinglePlatform
-    ? ALL_PLATFORM_CONFIG.filter((pc) =>
-        productPlatforms.some((pp) => pp.name.toUpperCase() === pc.name.toUpperCase())
-      )
-    : ALL_PLATFORM_CONFIG;
+  const isMultiPlatform = productPlatforms.length > 1;
+  const PLATFORM_CONFIG = ALL_PLATFORM_CONFIG.filter((pc) =>
+    productPlatforms.some((pp) => pp.name.toUpperCase() === pc.name.toUpperCase())
+  );
 
   // Dynamic status options based on platform filter
   const availableStatuses = (() => {
@@ -515,8 +513,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
-    if (selected === "CALLBACK" && (!callbackDate || !callbackTime)) {
-      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+    if ((selected === "CALLBACK" || selected === "INTERESTED") && (!callbackDate || !callbackTime)) {
+      toast({ title: "Follow-up Date and Time are required for Call Back and Interested statuses.", variant: "destructive" });
       return;
     }
     setPlatformStatusSaving(platformName);
@@ -526,8 +524,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         p_platform_name: platformName,
         p_status: selected,
         p_remarks: statusRemarks.trim(),
-        p_callback_date: selected === "CALLBACK" ? callbackDate : null,
-        p_callback_time: selected === "CALLBACK" ? callbackTime : null,
+        p_callback_date: (selected === "CALLBACK" || selected === "INTERESTED") ? callbackDate : null,
+        p_callback_time: (selected === "CALLBACK" || selected === "INTERESTED") ? callbackTime : null,
       });
       if (error) {
         toast({ title: `Failed to update ${platformName} status: ${error.message}`, variant: "destructive" });
@@ -957,11 +955,11 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                           <Wallet className="h-3.5 w-3.5" />
                         </Button>
                       )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Status">
+                        <ListChecks className="h-3.5 w-3.5" />
+                      </Button>
                       {canManage && (
                         <>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openStatus(lead)} title="Status">
-                            <ListChecks className="h-3.5 w-3.5" />
-                          </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssign(lead)} title="Assign">
                             <UserPlus className="h-3.5 w-3.5" />
                           </Button>
@@ -1232,14 +1230,14 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                   </div>
                 </div>
               ))}
-              {Object.values(platformStatuses).some((s) => s === "CALLBACK") && (
+              {Object.values(platformStatuses).some((s) => s === "CALLBACK" || s === "INTERESTED") && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Callback Date *</Label>
+                    <Label className="text-sm">Follow-up Date *</Label>
                     <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Callback Time *</Label>
+                    <Label className="text-sm">Follow-up Time *</Label>
                     <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} />
                   </div>
                 </div>

@@ -81,11 +81,9 @@ export default function EmployeeLeadsPage() {
   const isCar = product.isCar;
   const isHC = product.isHC;
   const isSinglePlatform = platforms.length <= 1;
-  const PLATFORM_CONFIG = isSinglePlatform
-    ? ALL_PLATFORM_CONFIG.filter((pc) =>
-        platforms.some((p) => p.name.toUpperCase() === pc.name.toUpperCase())
-      )
-    : ALL_PLATFORM_CONFIG;
+  const PLATFORM_CONFIG = ALL_PLATFORM_CONFIG.filter((pc) =>
+    platforms.some((p) => p.name.toUpperCase() === pc.name.toUpperCase())
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inlineStatusSaving, setInlineStatusSaving] = useState<string | null>(null);
 
@@ -262,8 +260,8 @@ export default function EmployeeLeadsPage() {
       toast({ title: "Please select a status.", variant: "destructive" });
       return;
     }
-    if (selected === "CALLBACK" && (!callbackDate || !callbackTime)) {
-      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+    if ((selected === "CALLBACK" || selected === "INTERESTED") && (!callbackDate || !callbackTime)) {
+      toast({ title: "Follow-up Date and Time are required for Call Back and Interested statuses.", variant: "destructive" });
       return;
     }
     setPlatformStatusSaving(platformName);
@@ -273,8 +271,8 @@ export default function EmployeeLeadsPage() {
         p_platform_name: platformName,
         p_status: selected,
         p_remarks: statusRemarks.trim(),
-        p_callback_date: selected === "CALLBACK" ? callbackDate : null,
-        p_callback_time: selected === "CALLBACK" ? callbackTime : null,
+        p_callback_date: (selected === "CALLBACK" || selected === "INTERESTED") ? callbackDate : null,
+        p_callback_time: (selected === "CALLBACK" || selected === "INTERESTED") ? callbackTime : null,
       });
       if (error) {
         toast({ title: `Failed: ${error.message}`, variant: "destructive" });
@@ -880,14 +878,14 @@ function LeadDialogs({
                   </div>
                 </div>
               ))}
-              {Object.values(platformStatuses).some((s) => s === "CALLBACK") && (
+              {Object.values(platformStatuses).some((s) => s === "CALLBACK" || s === "INTERESTED") && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-slate-500">Callback Date *</label>
+                    <label className="text-xs font-medium text-slate-500">Follow-up Date *</label>
                     <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-slate-200" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-slate-500">Callback Time *</label>
+                    <label className="text-xs font-medium text-slate-500">Follow-up Time *</label>
                     <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-slate-200" />
                   </div>
                 </div>

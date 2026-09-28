@@ -32,6 +32,9 @@ interface FollowupNotification {
   name: string;
   phone: string;
   next_followup_at: string;
+  status: string;
+  platform: string | null;
+  product_id: string;
 }
 
 function getGreeting() {
@@ -68,7 +71,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const now = new Date().toISOString();
     const { data } = await supabase
       .from("leads")
-      .select("id, name, phone, next_followup_at")
+      .select("id, name, phone, next_followup_at, status, platform, product_id")
       .eq("current_caller_id", profile.id)
       .eq("product_id", selectedProduct.id)
       .not("next_followup_at", "is", null)
@@ -326,7 +329,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                         <div className="flex-1 overflow-hidden">
                           <div className="truncate text-sm font-medium text-slate-700">{n.name}</div>
                           <div className="text-xs text-slate-400">
-                            {format(new Date(n.next_followup_at), "dd MMM, HH:mm")}
+                            {n.platform && <span>{n.platform} · </span>}
+                            {n.status === "CALLBACK" ? "Call Back" : n.status === "INTERESTED" ? "Interested" : "Ringing"} · {format(new Date(n.next_followup_at), "dd MMM, HH:mm")}
                           </div>
                         </div>
                       </Link>
@@ -371,7 +375,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
           <div className="mt-3 space-y-1">
             <div className="font-medium text-slate-700">{showFollowupPopup.name}</div>
             <div className="text-xs text-slate-400">
-              Follow-up at {format(new Date(showFollowupPopup.next_followup_at), "HH:mm")}
+              {showFollowupPopup.platform && <span>{showFollowupPopup.platform} · </span>}
+              {showFollowupPopup.status === "CALLBACK" ? "Call Back" : showFollowupPopup.status === "INTERESTED" ? "Interested" : "Ringing"} · Follow-up at {format(new Date(showFollowupPopup.next_followup_at), "dd MMM, HH:mm")}
             </div>
           </div>
           <div className="mt-3 flex gap-2">

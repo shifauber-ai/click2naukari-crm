@@ -170,16 +170,16 @@ export default function EmployeeFollowupsPage() {
 
   const handleStatusUpdate = async () => {
     if (!statusLead) return;
-    if (newStatus === "CALLBACK" && (!callbackDate || !callbackTime)) {
-      toast({ title: "Callback Date and Callback Time are required for Call Back status.", variant: "destructive" });
+    if ((newStatus === "CALLBACK" || newStatus === "INTERESTED") && (!callbackDate || !callbackTime)) {
+      toast({ title: "Follow-up Date and Time are required for Call Back and Interested statuses.", variant: "destructive" });
       return;
     }
     setStatusSaving(true);
     try {
       const { error } = await supabase.rpc("update_lead_status", {
         p_lead_id: statusLead.id, p_new_status: newStatus, p_remarks: statusRemarks.trim(),
-        p_callback_date: newStatus === "CALLBACK" ? callbackDate : null,
-        p_callback_time: newStatus === "CALLBACK" ? callbackTime : null,
+        p_callback_date: (newStatus === "CALLBACK" || newStatus === "INTERESTED") ? callbackDate : null,
+        p_callback_time: (newStatus === "CALLBACK" || newStatus === "INTERESTED") ? callbackTime : null,
       });
       if (error) {
         toast({ title: `Status update failed: ${error.message}`, variant: "destructive" });
@@ -324,14 +324,14 @@ export default function EmployeeFollowupsPage() {
                 </SelectContent>
               </Select>
             </div>
-            {newStatus === "CALLBACK" && (
+            {(newStatus === "CALLBACK" || newStatus === "INTERESTED") && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-500">Callback Date *</label>
+                  <label className="text-xs font-medium text-slate-500">Follow-up Date *</label>
                   <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-slate-200" />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-500">Callback Time *</label>
+                  <label className="text-xs font-medium text-slate-500">Follow-up Time *</label>
                   <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-slate-200" />
                 </div>
               </div>
