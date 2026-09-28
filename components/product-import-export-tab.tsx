@@ -153,6 +153,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [importPlatformPreset, setImportPlatformPreset] = useState<string | null>(null);
   const [impPlatform, setImpPlatform] = useState<string>("");
   const [impCity, setImpCity] = useState<string>("");
+  const [impType, setImpType] = useState<string>("ULP");
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Reference data
@@ -181,6 +182,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
   const [exportCity, setExportCity] = useState("ALL");
   const [exportEmployee, setExportEmployee] = useState("ALL");
   const [exportSource, setExportSource] = useState("ALL");
+  const [exportType, setExportType] = useState("ALL");
   const [exportDateFrom, setExportDateFrom] = useState("");
   const [exportDateTo, setExportDateTo] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -517,6 +519,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
           source: row.source || null,
           status: (row.status as string) || "NEW",
           vehicle_no: row.vehicleNo || null,
+          lead_type: impType,
         };
       });
       leadInserts.push(...built);
@@ -713,6 +716,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     if (exportCity !== "ALL") query = query.eq("city", exportCity);
     if (exportEmployee !== "ALL") query = query.eq("current_caller_id", exportEmployee);
     if (exportSource !== "ALL") query = query.eq("source", exportSource);
+    if (exportType !== "ALL") query = query.eq("lead_type", exportType);
     if (exportDateFrom) query = query.gte("created_at", exportDateFrom);
     if (exportDateTo) {
       const end = new Date(exportDateTo); end.setDate(end.getDate() + 1);
@@ -875,6 +879,16 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                       <SelectTrigger className="h-8"><SelectValue placeholder="Select City" /></SelectTrigger>
                       <SelectContent>
                         {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Employee Type</Label>
+                    <Select value={impType} onValueChange={setImpType}>
+                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ULP">ULP</SelectItem>
+                        <SelectItem value="FT">FT</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1071,6 +1085,14 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                   <SelectContent>
                     <SelectItem value="ALL">All Sources</SelectItem>
                     {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={exportType} onValueChange={setExportType}>
+                  <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Types</SelectItem>
+                    <SelectItem value="ULP">ULP</SelectItem>
+                    <SelectItem value="FT">FT</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

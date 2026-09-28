@@ -31,9 +31,25 @@ export async function calculateAchievement(
   } else {
     const metricKey = metric?.key || target.target_type;
 
+    // Use the server-side RPC for ULP/FT targets for accurate city-filtered counts
+    if (metricKey === "ULP" || metricKey === "FT") {
+      const { data, error } = await supabase.rpc("get_target_achievement", {
+        p_target_id: target.id,
+      });
+      if (!error && data) {
+        const result = data as { achieved: number; remaining: number; progress_pct: number };
+        return {
+          achieved: result.achieved,
+          remaining: result.remaining,
+          progressPct: result.progress_pct,
+        };
+      }
+      // Fallback to client-side if RPC fails
+    }
+
     let q = supabase
       .from("leads")
-      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status")
+      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status, lead_type")
       .eq("current_caller_id", target.employee_id)
       .eq("product_id", target.product_id)
       .gte("created_at", start)
@@ -46,32 +62,23 @@ export async function calculateAchievement(
     const { data } = await q;
     const leads = data || [];
 
+    // Resolve city name for filtering
+    let cityFilter = "";
+    if (target.city_id) {
+      const { data: cityData } = await supabase
+        .from("product_cities")
+        .select("city_name")
+        .eq("id", target.city_id)
+        .maybeSingle();
+      cityFilter = (cityData as { city_name: string } | null)?.city_name || "";
+    }
+
     if (metricKey === "TAG_ADDED") {
-      const cityId = target.city_id;
-      let cityFilter = "";
-      if (cityId) {
-        const { data: cityData } = await supabase
-          .from("product_cities")
-          .select("city_name")
-          .eq("id", cityId)
-          .maybeSingle();
-        cityFilter = (cityData as { city_name: string } | null)?.city_name || "";
-      }
       achieved = leads.filter((l) =>
         l.status === "TAG_ADDED" &&
         (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase())
       ).length;
     } else if (metricKey === "TAG_FORM") {
-      const cityId = target.city_id;
-      let cityFilter = "";
-      if (cityId) {
-        const { data: cityData } = await supabase
-          .from("product_cities")
-          .select("city_name")
-          .eq("id", cityId)
-          .maybeSingle();
-        cityFilter = (cityData as { city_name: string } | null)?.city_name || "";
-      }
       achieved = leads.filter((l) =>
         (l as { form_status?: string }).form_status === "TAG_FORM" &&
         (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase())
@@ -82,7 +89,12 @@ export async function calculateAchievement(
       } else if (metricKey === "PUNE_ULP") {
         achieved = leads.filter((l) => l.uber_id_done === true && l.city?.toLowerCase() === "pune").length;
       } else {
-        achieved = leads.filter((l) => l.uber_id_done === true).length;
+        // ULP: city-filtered + uber_id_done + lead_type=ULP
+        achieved = leads.filter((l) =>
+          l.uber_id_done === true &&
+          (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase()) &&
+          (l as { lead_type?: string }).lead_type !== "FT"
+        ).length;
       }
     } else if (metricKey === "MUMBAI_OLA") {
       achieved = leads.filter((l) => l.ola_id_done === true && l.city?.toLowerCase() === "mumbai").length;
@@ -91,9 +103,16 @@ export async function calculateAchievement(
     } else if (metricKey === "RAPIDO") {
       achieved = leads.filter((l) => l.rapido_id_done === true).length;
     } else if (metricKey === "FT") {
-      achieved = leads.length;
+      // FT: city-filtered + lead_type=FT + ID_DONE
+      achieved = leads.filter((l) =>
+        l.status === "ID_DONE" &&
+        (!cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase()) &&
+        (l as { lead_type?: string }).lead_type === "FT"
+      ).length;
     } else {
-      achieved = leads.length;
+      achieved = leads.filter((l) =>
+        !cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase()
+      ).length;
     }
   }
 

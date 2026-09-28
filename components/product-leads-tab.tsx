@@ -81,6 +81,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [cityFilter, setCityFilter] = useState("ALL");
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
   const [sourceFilter, setSourceFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
@@ -346,6 +347,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
     if (sourceFilter !== "ALL") { cq = cq.eq("source", sourceFilter); q = q.eq("source", sourceFilter); }
+    if (typeFilter !== "ALL") { cq = cq.eq("lead_type", typeFilter); q = q.eq("lead_type", typeFilter); }
     if (dateFrom) { cq = cq.gte("created_at", dateFrom); q = q.gte("created_at", dateFrom); }
     if (dateTo) {
       const end = new Date(dateTo); end.setDate(end.getDate() + 1);
@@ -386,7 +388,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
       }
     }
     setLoading(false);
-  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, toast, idDoneOnly, isMultiPlatform, productPlatforms]);
+  }, [product.id, page, pageSize, statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, typeFilter, dateFrom, dateTo, search, toast, idDoneOnly, isMultiPlatform, productPlatforms]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
@@ -397,15 +399,15 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, dateFrom, dateTo, search, page, pageSize]);
+  }, [statusFilter, platformFilter, cityFilter, employeeFilter, sourceFilter, typeFilter, dateFrom, dateTo, search, page, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activeCities = cities.filter((c) => c.is_active);
-  const hasActiveFilters = statusFilter !== "ALL" || platformFilter !== "ALL" || cityFilter !== "ALL" || employeeFilter !== "ALL" || sourceFilter !== "ALL" || dateFrom || dateTo || search;
+  const hasActiveFilters = statusFilter !== "ALL" || platformFilter !== "ALL" || cityFilter !== "ALL" || employeeFilter !== "ALL" || sourceFilter !== "ALL" || typeFilter !== "ALL" || dateFrom || dateTo || search;
 
   const clearFilters = () => {
     setStatusFilter("ALL"); setPlatformFilter("ALL"); setCityFilter("ALL");
-    setEmployeeFilter("ALL"); setSourceFilter("ALL"); setDateFrom(""); setDateTo(""); setSearch("");
+    setEmployeeFilter("ALL"); setSourceFilter("ALL"); setTypeFilter("ALL"); setDateFrom(""); setDateTo(""); setSearch("");
     setPage(0);
   };
 
@@ -827,6 +829,14 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
           <SelectContent>
             <SelectItem value="ALL">All Sources</SelectItem>
             {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(0); }}>
+          <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Types</SelectItem>
+            <SelectItem value="ULP">ULP</SelectItem>
+            <SelectItem value="FT">FT</SelectItem>
           </SelectContent>
         </Select>
         <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(0); }} className="w-[140px]" />

@@ -7,6 +7,7 @@ import type { Profile } from "@/lib/types";
 export interface EmployeeContextValue {
   product: EmployeeProduct;
   profile: Profile;
+  employeeTypes: string[];
 }
 
 export const EmployeeProductContext = createContext<EmployeeContextValue | null>(null);

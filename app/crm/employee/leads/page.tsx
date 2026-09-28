@@ -57,6 +57,7 @@ export default function EmployeeLeadsPage() {
   const [platformFilter, setPlatformFilter] = useState<string>("ALL");
   const [sourceFilter, setSourceFilter] = useState<string>("ALL");
   const [cityFilter, setCityFilter] = useState<string>("ALL");
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [cities, setCities] = useState<ProductCity[]>([]);
@@ -142,6 +143,7 @@ export default function EmployeeLeadsPage() {
     if (!isHC && platformFilter !== "ALL") q = q.eq("platform", platformFilter);
     if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
     if (cityFilter !== "ALL") q = q.eq("city", cityFilter);
+    if (typeFilter !== "ALL") q = q.eq("lead_type", typeFilter);
     if (dateRange.start) q = q.gte("created_at", dateRange.start);
     if (dateRange.end) q = q.lte("created_at", dateRange.end);
     if (search.trim()) {
@@ -160,11 +162,11 @@ export default function EmployeeLeadsPage() {
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search, toast, isHC]);
+  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, typeFilter, dateRange, search, toast, isHC]);
 
   useEffect(() => { loadPlatformsAndCities(); }, [loadPlatformsAndCities]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
-  useEffect(() => { setPage(0); }, [statusFilter, platformFilter, sourceFilter, cityFilter, dateRange, search]);
+  useEffect(() => { setPage(0); }, [statusFilter, platformFilter, sourceFilter, cityFilter, typeFilter, dateRange, search]);
 
   useEffect(() => {
     if (!product) return;
@@ -580,6 +582,14 @@ export default function EmployeeLeadsPage() {
           <SelectContent>
             <SelectItem value="ALL">All Cities</SelectItem>
             {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[110px] border-slate-200"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Types</SelectItem>
+            <SelectItem value="ULP">ULP</SelectItem>
+            <SelectItem value="FT">FT</SelectItem>
           </SelectContent>
         </Select>
         <DateFilter range={dateRange} onRangeChange={setDateRange} />

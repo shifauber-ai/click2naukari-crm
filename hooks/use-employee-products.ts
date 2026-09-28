@@ -11,6 +11,7 @@ export interface EmployeeProduct extends Product {
   isBike: boolean;
   isTempo: boolean;
   isHC: boolean;
+  employeeTypes: string[]; // ["ULP"], ["FT"], or ["ULP", "FT"]
 }
 
 function classifyProduct(code: string, name: string) {
@@ -42,6 +43,19 @@ export function useEmployeeProducts() {
           .eq("employee_id", profile.id)
           .eq("is_active", true);
         if (error) return;
+
+        // Fetch employee types per product
+        const { data: typeData } = await supabase
+          .from("employee_product_cities")
+          .select("product_id, employee_type")
+          .eq("employee_id", profile.id)
+          .eq("is_active", true);
+        const typeMap = new Map<string, Set<string>>();
+        (typeData as { product_id: string; employee_type: string }[] | null)?.forEach((r) => {
+          if (!typeMap.has(r.product_id)) typeMap.set(r.product_id, new Set());
+          typeMap.get(r.product_id)!.add(r.employee_type);
+        });
+
         const productMap = new Map<string, EmployeeProduct>();
         (data as unknown as { product: Product }[] | null)?.forEach((row) => {
           if (row.product && !productMap.has(row.product.id)) {
@@ -49,6 +63,7 @@ export function useEmployeeProducts() {
             productMap.set(row.product.id, {
               ...row.product,
               ...flags,
+              employeeTypes: Array.from(typeMap.get(row.product.id) || ["ULP"]),
             });
           }
         });

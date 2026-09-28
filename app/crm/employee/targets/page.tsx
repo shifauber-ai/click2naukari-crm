@@ -140,6 +140,11 @@ export default function EmployeeTargetsPage() {
                           <div className="mb-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold text-slate-700">{label}</span>
+                              {(t.target_type === "ULP" || t.target_type === "FT") && (
+                                <Badge variant="outline" className="border-slate-200 text-slate-600 text-xs">
+                                  {t.target_type}
+                                </Badge>
+                              )}
                               {pct >= 100 && (
                                 <Badge className="bg-emerald-100 text-emerald-700 text-xs">
                                   <CheckCircle2 className="mr-0.5 h-3 w-3" /> Achieved

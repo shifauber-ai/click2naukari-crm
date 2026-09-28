@@ -75,6 +75,8 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [selectedCityIds, setSelectedCityIds] = useState<Set<string>>(new Set());
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  // employeeType per city: cityId -> 'ULP' | 'FT' | 'BOTH'
+  const [cityTypes, setCityTypes] = useState<Record<string, "ULP" | "FT" | "BOTH">>({});
 
   const [editTargetId, setEditTargetId] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
@@ -106,12 +108,15 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       // Fetch city assignments for this product (also used for assignment filter)
       const { data: cityAssigns } = await supabase
         .from("employee_product_cities")
-        .select("employee_id, city_id, city:product_cities!city_id(city_name)")
+        .select("employee_id, city_id, employee_type, city:product_cities!city_id(city_name)")
         .eq("product_id", product.id);
       const cityMap: Record<string, string[]> = {};
-      (cityAssigns as { employee_id: string; city_id: string; city: { city_name: string } }[] | null)?.forEach((a) => {
+      (cityAssigns as { employee_id: string; city_id: string; employee_type: string; city: { city_name: string } }[] | null)?.forEach((a) => {
         if (!cityMap[a.employee_id]) cityMap[a.employee_id] = [];
-        if (a.city?.city_name) cityMap[a.employee_id].push(a.city.city_name);
+        const label = a.city?.city_name ? `${a.city.city_name} (${a.employee_type})` : a.employee_type;
+        if (!cityMap[a.employee_id].some((l) => l.startsWith(a.city?.city_name || ""))) {
+          cityMap[a.employee_id].push(label);
+        }
       });
       // Build assigned set: caller_queue OR city assignment OR manager_product_assignment
       const assignedIds = new Set<string>();
@@ -149,6 +154,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     setRole("EMPLOYEE"); setIsActive(true);
     setSelectedCityIds(new Set());
     setSelectedProductIds(new Set([product.id]));
+    setCityTypes({});
     setShowPassword(false);
     setCreateOpen(true);
   };
@@ -161,14 +167,29 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
     setRole(p.role);
     setIsActive(p.is_active);
     (async () => {
-      // Load city assignments for this employee in this product
+      // Load city assignments with types for this employee in this product
       const { data: cityAssigns } = await supabase
         .from("employee_product_cities")
-        .select("city_id")
+        .select("city_id, employee_type")
         .eq("employee_id", p.id)
         .eq("product_id", product.id)
         .eq("is_active", true);
-      setSelectedCityIds(new Set((cityAssigns as { city_id: string }[] || []).map((a) => a.city_id)));
+      const cityIds = new Set<string>();
+      const typesMap: Record<string, "ULP" | "FT" | "BOTH"> = {};
+      const cityTypeSet: Record<string, Set<string>> = {};
+      (cityAssigns as { city_id: string; employee_type: string }[] || []).forEach((a) => {
+        cityIds.add(a.city_id);
+        if (!cityTypeSet[a.city_id]) cityTypeSet[a.city_id] = new Set();
+        cityTypeSet[a.city_id].add(a.employee_type);
+      });
+      Object.keys(cityTypeSet).forEach((cid) => {
+        const types = cityTypeSet[cid];
+        if (types.has("ULP") && types.has("FT")) typesMap[cid] = "BOTH";
+        else if (types.has("FT")) typesMap[cid] = "FT";
+        else typesMap[cid] = "ULP";
+      });
+      setSelectedCityIds(cityIds);
+      setCityTypes(typesMap);
       // Load product assignments if manager
       if (p.role === "MANAGER") {
         const { data: prodAssigns } = await supabase
@@ -209,11 +230,18 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         toast({ title: "Failed to create employee — unexpected response", variant: "destructive" });
         return;
       }
-      // Save city assignments for this product
+      // Save city assignments with type for this product
       if (selectedCityIds.size > 0) {
-        const cityInserts = Array.from(selectedCityIds).map((cid) => ({
-          employee_id: newUserId, product_id: product.id, city_id: cid, is_active: true,
-        }));
+        const cityInserts: { employee_id: string; product_id: string; city_id: string; is_active: boolean; employee_type: string }[] = [];
+        for (const cid of Array.from(selectedCityIds)) {
+          const t = cityTypes[cid] || "ULP";
+          if (t === "BOTH") {
+            cityInserts.push({ employee_id: newUserId, product_id: product.id, city_id: cid, is_active: true, employee_type: "ULP" });
+            cityInserts.push({ employee_id: newUserId, product_id: product.id, city_id: cid, is_active: true, employee_type: "FT" });
+          } else {
+            cityInserts.push({ employee_id: newUserId, product_id: product.id, city_id: cid, is_active: true, employee_type: t });
+          }
+        }
         const { error: cityErr } = await supabase.from("employee_product_cities").insert(cityInserts);
         if (cityErr) {
           toast({ title: `Account created, but city assignment failed: ${cityErr.message}`, variant: "destructive" });
@@ -246,14 +274,21 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         toast({ title: error || "Failed to update", variant: "destructive" });
         return;
       }
-      // Sync city assignments for this product
+      // Sync city assignments with type for this product
       if (editTargetId) {
         await supabase.from("employee_product_cities")
           .delete().eq("employee_id", editTargetId).eq("product_id", product.id);
         if (selectedCityIds.size > 0) {
-          const cityInserts = Array.from(selectedCityIds).map((cid) => ({
-            employee_id: editTargetId, product_id: product.id, city_id: cid, is_active: true,
-          }));
+          const cityInserts: { employee_id: string; product_id: string; city_id: string; is_active: boolean; employee_type: string }[] = [];
+          for (const cid of Array.from(selectedCityIds)) {
+            const t = cityTypes[cid] || "ULP";
+            if (t === "BOTH") {
+              cityInserts.push({ employee_id: editTargetId, product_id: product.id, city_id: cid, is_active: true, employee_type: "ULP" });
+              cityInserts.push({ employee_id: editTargetId, product_id: product.id, city_id: cid, is_active: true, employee_type: "FT" });
+            } else {
+              cityInserts.push({ employee_id: editTargetId, product_id: product.id, city_id: cid, is_active: true, employee_type: t });
+            }
+          }
           await supabase.from("employee_product_cities").insert(cityInserts);
         }
       }
@@ -309,7 +344,12 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   };
 
   const toggleCity = (cid: string) => {
-    setSelectedCityIds((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
+    setSelectedCityIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(cid)) { n.delete(cid); setCityTypes((t) => { const nt = { ...t }; delete nt[cid]; return nt; }); }
+      else { n.add(cid); setCityTypes((t) => ({ ...t, [cid]: t[cid] || "ULP" })); }
+      return n;
+    });
   };
   const toggleProduct = (pid: string) => {
     setSelectedProductIds((prev) => { const n = new Set(prev); n.has(pid) ? n.delete(pid) : n.add(pid); return n; });
@@ -424,9 +464,22 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
         {productCities.length > 0 ? (
           <div className="space-y-2 mt-2 rounded-lg border border-border/60 p-3">
             {productCities.map((c) => (
-              <div key={c.id} className="flex items-center gap-2">
+              <div key={c.id} className="flex items-center gap-3">
                 <Checkbox checked={selectedCityIds.has(c.id)} onCheckedChange={() => toggleCity(c.id)} id={`city-${c.id}`} />
-                <Label htmlFor={`city-${c.id}`} className="text-sm font-normal cursor-pointer">{c.city_name}</Label>
+                <Label htmlFor={`city-${c.id}`} className="text-sm font-normal cursor-pointer flex-1">{c.city_name}</Label>
+                {selectedCityIds.has(c.id) && (
+                  <Select
+                    value={cityTypes[c.id] || "ULP"}
+                    onValueChange={(v) => setCityTypes((t) => ({ ...t, [c.id]: v as "ULP" | "FT" | "BOTH" }))}
+                  >
+                    <SelectTrigger className="w-[100px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ULP">ULP</SelectItem>
+                      <SelectItem value="FT">FT</SelectItem>
+                      <SelectItem value="BOTH">Both</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             ))}
           </div>

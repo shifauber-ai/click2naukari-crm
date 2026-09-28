@@ -441,7 +441,7 @@ function EmployeeContentWrapper({
     );
   }
   return (
-    <EmployeeProductContext.Provider value={{ product, profile }}>
+    <EmployeeProductContext.Provider value={{ product, profile, employeeTypes: product.employeeTypes || ["ULP"] }}>
       {children}
     </EmployeeProductContext.Provider>
   );
