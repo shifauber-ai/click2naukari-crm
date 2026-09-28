@@ -479,6 +479,8 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
     // Only insert rows with status OK — EXISTING_LEAD_DUPLICATE rows already exist in DB
     const rowsToImport = parsedRows.filter((r) => r.rowStatus === "OK");
 
+    let batchId: string | null = null;
+    const leadInserts: Record<string, unknown>[] = [];
     try {
       const { data: batch, error: batchErr } = await supabase
         .from("import_batches").insert({
@@ -494,10 +496,10 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       if (batchErr || !batch) {
         throw new Error(batchErr?.message || "Could not create import batch.");
       }
-      const batchId = batch.id;
+      batchId = batch.id;
 
       // Build lead insert objects for OK rows only
-      const leadInserts: Record<string, unknown>[] = rowsToImport.map((row) => {
+      const built = rowsToImport.map((row) => {
         if (isHC) {
           return {
             name: row.name, phone: row.phone, product_id: product.id,
@@ -517,6 +519,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
           vehicle_no: row.vehicleNo || null,
         };
       });
+      leadInserts.push(...built);
 
       // Bulk insert leads in chunks of 250 via RPC
       const CHUNK_SIZE = 250;
@@ -609,7 +612,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       }
 
       // Update batch — only mark COMPLETED if leads were actually inserted
-      const batchStatus = imported > 0 ? "COMPLETED" : "failed";
+      const batchStatus = imported > 0 ? "COMPLETED" : "FAILED";
       const { error: batchUpdateErr } = await supabase.from("import_batches").update({
         imported, status: batchStatus, failed: failedInsert,
       }).eq("id", batchId);
@@ -653,7 +656,13 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
       loadDupRecords();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (batchId) {
+        await supabase.from("import_batches").update({
+          status: "FAILED", failed: leadInserts.length || (parsedRows.length - internalDup - existingDup - invalid - platformMissingCount),
+        }).eq("id", batchId);
+      }
       toast({ title: `Import failed: ${msg}`, variant: "destructive" });
+      loadBatches();
     } finally {
       setImporting(false);
       setImportProgress(null);
