@@ -14,6 +14,16 @@ import { format } from "date-fns";
 import type { Lead, Platform } from "@/lib/types";
 import { DateFilter } from "@/components/date-filter";
 import { type DateRange } from "@/lib/employee-filters";
+import { classifyProductCode } from "@/lib/target-config";
+
+const FT_STATUSES = ["PENDING", "RINGING", "FT_DONE", "OUT_OF_CITY", "TRIP_ISSUE"] as const;
+const FT_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  RINGING: "Ringing",
+  FT_DONE: "FT Done",
+  OUT_OF_CITY: "Out of City",
+  TRIP_ISSUE: "Trip Issue",
+};
 
 const PAGE_SIZE = 25;
 const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
@@ -30,6 +40,8 @@ export default function EmployeeIdDonePage() {
   const [platformFilter, setPlatformFilter] = useState<string>("ALL");
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [sources, setSources] = useState<string[]>(SOURCES);
+  const [ftUpdating, setFtUpdating] = useState<string | null>(null);
+  const isBike = product ? classifyProductCode(product.code, product.name).isBike : false;
 
   const loadPlatforms = useCallback(async () => {
     if (!product) return;
@@ -62,6 +74,7 @@ export default function EmployeeIdDonePage() {
       .eq("current_caller_id", profile.id)
       .eq("product_id", product.id)
       .eq("status", "ID_DONE")
+      .eq("uber_id_done", true)
       .order("updated_at", { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
@@ -90,6 +103,18 @@ export default function EmployeeIdDonePage() {
 
   const handleWhatsApp = (lead: Lead) => window.open(`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`, "_blank");
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const handleFtStatusChange = async (leadId: string, newStatus: string) => {
+    setFtUpdating(leadId);
+    const { error } = await supabase
+      .from("leads")
+      .update({ bike_ft_status: newStatus })
+      .eq("id", leadId);
+    if (!error) {
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, bike_ft_status: newStatus } : l));
+    }
+    setFtUpdating(null);
+  };
 
   return (
     <div className="space-y-4 p-4 lg:p-6">
@@ -137,6 +162,7 @@ export default function EmployeeIdDonePage() {
                     <th className="px-4 py-3">Platform</th>
                     <th className="px-4 py-3">Source</th>
                     <th className="px-4 py-3">City</th>
+                    {isBike && <th className="px-4 py-3">FT</th>}
                     <th className="px-4 py-3">ID Done Date</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
@@ -156,6 +182,24 @@ export default function EmployeeIdDonePage() {
                       <td className="px-4 py-3 text-slate-600">{lead.platform || "—"}</td>
                       <td className="px-4 py-3 text-slate-600">{lead.source || "—"}</td>
                       <td className="px-4 py-3 text-slate-600">{lead.city || "—"}</td>
+                      {isBike && (
+                        <td className="px-4 py-3">
+                          <Select
+                            value={(lead.bike_ft_status || "PENDING").toUpperCase()}
+                            onValueChange={(v) => handleFtStatusChange(lead.id, v)}
+                            disabled={ftUpdating === lead.id}
+                          >
+                            <SelectTrigger className="h-8 w-[130px] border-slate-200">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {FT_STATUSES.map((s) => (
+                                <SelectItem key={s} value={s}>{FT_LABELS[s]}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-xs text-slate-500">{format(new Date(lead.updated_at), "dd MMM yyyy")}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">

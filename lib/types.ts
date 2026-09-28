@@ -168,6 +168,7 @@ export interface Lead {
   callback_date?: string | null;
   callback_time?: string | null;
   lead_type?: string;
+  bike_ft_status?: string | null;
   product?: Product;
   current_caller?: Profile | null;
 }

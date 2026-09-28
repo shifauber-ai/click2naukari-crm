@@ -35,6 +35,16 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { PaymentModal } from "@/components/payment-modal";
+import { classifyProductCode } from "@/lib/target-config";
+
+const FT_STATUSES = ["PENDING", "RINGING", "FT_DONE", "OUT_OF_CITY", "TRIP_ISSUE"] as const;
+const FT_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  RINGING: "Ringing",
+  FT_DONE: "FT Done",
+  OUT_OF_CITY: "Out of City",
+  TRIP_ISSUE: "Trip Issue",
+};
 
 
 const PAGE_SIZES = [25, 50, 100];
@@ -192,11 +202,22 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const [detailPayments, setDetailPayments] = useState<{ id: string; amount: number; service_description: string; payment_mode: string; payment_status: string; qr_id: string | null; qr_name?: string | null; collected_by_name?: string | null; created_at: string }[]>([]);
   const [detailPlatformStatuses, setDetailPlatformStatuses] = useState<Record<string, string>>({});
   const [detailLoading, setDetailLoading] = useState(false);
+  const [ftUpdating, setFtUpdating] = useState<string | null>(null);
 
   const isAdmin = profile?.role === "ADMIN";
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
   const isCarProduct = product.code === "CAR" || product.code === "MAINC001" || product.code === "C001";
+  const isBikeProduct = classifyProductCode(product.code, product.name).isBike;
+
+  const handleFtStatusChange = async (leadId: string, newStatus: string) => {
+    setFtUpdating(leadId);
+    const { error } = await supabase.from("leads").update({ bike_ft_status: newStatus }).eq("id", leadId);
+    if (!error) {
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, bike_ft_status: newStatus } : l));
+    }
+    setFtUpdating(null);
+  };
 
   // Load reference data
   useEffect(() => {
@@ -897,6 +918,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                 {showPlatformColumn && <TableHead>Platform</TableHead>}
                 <TableHead>Source</TableHead>
                 {(showStatusColumn || isSinglePlatform || idDoneOnly) && <TableHead>Status</TableHead>}
+                {idDoneOnly && isBikeProduct && <TableHead>FT</TableHead>}
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Created</TableHead>
                 <TableHead>Follow-up</TableHead>
@@ -933,6 +955,24 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
                       ) : (
                         <StatusBadge status={lead.status} />
                       )}
+                    </TableCell>
+                  )}
+                  {idDoneOnly && isBikeProduct && (
+                    <TableCell>
+                      <Select
+                        value={(lead.bike_ft_status || "PENDING").toUpperCase()}
+                        onValueChange={(v) => handleFtStatusChange(lead.id, v)}
+                        disabled={ftUpdating === lead.id}
+                      >
+                        <SelectTrigger className="h-8 w-[130px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FT_STATUSES.map((s) => (
+                            <SelectItem key={s} value={s}>{FT_LABELS[s]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                   )}
                   {canManage && (

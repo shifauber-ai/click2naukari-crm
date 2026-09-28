@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import type { Product, EmployeeTarget, TargetMetric } from "@/lib/types";
-import { getTargetDateRange } from "@/lib/target-config";
+import { getTargetDateRange, classifyProductCode } from "@/lib/target-config";
 
 export interface AchievementResult {
   achieved: number;
@@ -46,10 +46,11 @@ export async function calculateAchievement(
     achieved = (data || []).reduce((sum, r) => sum + Number(r.amount || 0), 0);
   } else {
     const metricKey = metric?.key || target.target_type;
+    const { isBike } = classifyProductCode(product.code, product.name);
 
     let q = supabase
       .from("leads")
-      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status, lead_type")
+      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status, lead_type, bike_ft_status")
       .eq("product_id", target.product_id)
       .gte("created_at", start)
       .lte("created_at", end);
@@ -71,9 +72,17 @@ export async function calculateAchievement(
       !cityFilter || (l.city || "").toLowerCase() === cityFilter.toLowerCase();
 
     if (metricKey === "ULP") {
-      achieved = leads.filter((l) => l.uber_id_done === true && cityMatch(l) && l.lead_type !== "FT").length;
+      if (isBike) {
+        achieved = leads.filter((l) => l.uber_id_done === true && cityMatch(l) && (l as { lead_type?: string }).lead_type !== "FT").length;
+      } else {
+        achieved = leads.filter((l) => l.uber_id_done === true && cityMatch(l) && l.lead_type === "ULP").length;
+      }
     } else if (metricKey === "FT") {
-      achieved = leads.filter((l) => l.status === "ID_DONE" && cityMatch(l) && l.lead_type === "FT").length;
+      if (isBike) {
+        achieved = leads.filter((l) => l.uber_id_done === true && (l as { bike_ft_status?: string }).bike_ft_status === "FT Done" && cityMatch(l)).length;
+      } else {
+        achieved = leads.filter((l) => l.status === "ID_DONE" && cityMatch(l) && l.lead_type === "FT").length;
+      }
     } else if (metricKey === "OLA") {
       achieved = leads.filter((l) => l.ola_id_done === true && cityMatch(l)).length;
     } else if (metricKey === "RAPIDO") {

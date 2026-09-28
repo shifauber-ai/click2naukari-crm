@@ -14,6 +14,7 @@ import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } fro
 import type { Platform } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
 import { TargetProgressSection } from "@/components/target-progress-section";
+import { classifyProductCode } from "@/lib/target-config";
 
 type Preset = "today" | "yesterday" | "week" | "month" | "custom";
 
@@ -48,6 +49,7 @@ export default function EmployeeReportsPage() {
   const [sourceFilter, setSourceFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [bikeFtStats, setBikeFtStats] = useState({ ulpDone: 0, ftDone: 0, ftRemaining: 0 });
   const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
   useEffect(() => {
@@ -85,13 +87,22 @@ export default function EmployeeReportsPage() {
 
     // Fetch leads in range
     let leadQuery = supabase
-      .from("leads").select("id, status, platform, source, created_at, uber_id_done, ola_id_done, rapido_id_done")
+      .from("leads").select("id, status, platform, source, created_at, uber_id_done, ola_id_done, rapido_id_done, bike_ft_status")
       .eq("current_caller_id", profile.id).eq("product_id", product.id)
       .gte("created_at", from).lte("created_at", to);
     if (platformFilter !== "ALL") leadQuery = leadQuery.eq("platform", platformFilter);
     if (sourceFilter !== "ALL") leadQuery = leadQuery.eq("source", sourceFilter);
     if (statusFilter !== "ALL") leadQuery = leadQuery.eq("status", statusFilter);
     const { data: leads } = await leadQuery;
+
+    // For Bike: also fetch bike_ft_status for FT stats
+    let bikeFtDone = 0;
+    let bikeUlpDone = 0;
+    const isBike = product ? classifyProductCode(product.code, product.name).isBike : false;
+    if (isBike && leads) {
+      bikeUlpDone = leads.filter((l: any) => l.uber_id_done === true).length;
+      bikeFtDone = leads.filter((l: any) => l.uber_id_done === true && l.bike_ft_status === "FT Done").length;
+    }
 
     // Fetch calls in range
     const { data: calls } = await supabase
@@ -167,6 +178,9 @@ export default function EmployeeReportsPage() {
       conversion: totalLeads > 0 ? Math.round((idDoneCount / totalLeads) * 1000) / 10 : 0,
       dailyData, platformData, sourceData, statusData,
     });
+    if (isBike) {
+      setBikeFtStats({ ulpDone: bikeUlpDone, ftDone: bikeFtDone, ftRemaining: Math.max(0, bikeUlpDone - bikeFtDone) });
+    }
     setLoading(false);
   }, [profile?.id, product, dateRange, platformFilter, sourceFilter, statusFilter]);
 
@@ -365,6 +379,27 @@ export default function EmployeeReportsPage() {
       )}
 
       {/* Target Progress */}
+      {product && classifyProductCode(product.code, product.name).isBike && (
+        <Card className="border-slate-200">
+          <CardHeader><CardTitle className="text-base">Bike FT Summary</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-emerald-50 p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-700">{bikeFtStats.ulpDone}</div>
+                <div className="text-xs text-slate-500">ULP (Uber ID Done)</div>
+              </div>
+              <div className="rounded-lg bg-blue-50 p-3 text-center">
+                <div className="text-2xl font-bold text-blue-700">{bikeFtStats.ftDone}</div>
+                <div className="text-xs text-slate-500">FT Done</div>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-3 text-center">
+                <div className="text-2xl font-bold text-amber-700">{bikeFtStats.ftRemaining}</div>
+                <div className="text-xs text-slate-500">Remaining FT</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {product && <TargetProgressSection product={product} />}
     </div>
   );

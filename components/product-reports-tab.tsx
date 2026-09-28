@@ -65,8 +65,10 @@ export function ProductReportsTab({ product }: { product: Product }) {
   // Car payment
   const [paymentStats, setPaymentStats] = useState({ total: 0, successful: 0, failed: 0, pending: 0 });
   const [paymentEmployeePerf, setPaymentEmployeePerf] = useState<{ name: string; total: number; successful: number; failed: number; pending: number }[]>([]);
+  const [bikeFtStats, setBikeFtStats] = useState({ ulpDone: 0, ftDone: 0, ftRemaining: 0 });
   const isCar = product.code === "CAR" || product.name.toLowerCase() === "car";
   const { isHC } = classifyProductCode(product.code, product.name);
+  const { isBike } = classifyProductCode(product.code, product.name);
 
   useEffect(() => {
     (async () => {
@@ -111,7 +113,7 @@ export function ProductReportsTab({ product }: { product: Product }) {
     };
 
     const [leadData, callData, leadAssignData] = await Promise.all([
-      buildLeadQuery("id, status, platform, city, current_caller_id, created_at, form_status, uber_id_done, ola_id_done, rapido_id_done, lead_type, current_caller:profiles!current_caller_id(full_name)"),
+      buildLeadQuery("id, status, platform, city, current_caller_id, created_at, form_status, uber_id_done, ola_id_done, rapido_id_done, lead_type, bike_ft_status, current_caller:profiles!current_caller_id(full_name)"),
       supabase.from("call_history").select("call_status, caller_id, caller:profiles!caller_id(full_name), call_timestamp")
         .eq("product_id", product.id).gte("call_timestamp", fromIso).lte("call_timestamp", toIso),
       supabase.from("leads").select("id, current_caller_id, current_caller:profiles!current_caller_id(full_name)")
@@ -279,8 +281,15 @@ export function ProductReportsTab({ product }: { product: Product }) {
       setPaymentEmployeePerf(Object.values(payEmpMap).sort((a, b) => b.total - a.total));
     }
 
+    // Bike FT stats
+    if (isBike) {
+      const bikeUlpDone = leads.filter((l) => l.uber_id_done === true).length;
+      const bikeFtDone = leads.filter((l) => l.uber_id_done === true && (l as Record<string, unknown>).bike_ft_status === "FT Done").length;
+      setBikeFtStats({ ulpDone: bikeUlpDone, ftDone: bikeFtDone, ftRemaining: Math.max(0, bikeUlpDone - bikeFtDone) });
+    }
+
     setLoading(false);
-  }, [product.id, getDateRange, platformFilter, cityFilter, statusFilter, employeeFilter, typeFilter, isCar]);
+  }, [product.id, getDateRange, platformFilter, cityFilter, statusFilter, employeeFilter, typeFilter, isCar, isBike]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -566,6 +575,20 @@ export function ProductReportsTab({ product }: { product: Product }) {
                       </TableBody>
                     </Table>
                   ) : <p className="py-8 text-center text-sm text-muted-foreground">No payment data for selected filters</p>}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Bike FT Report */}
+          {isBike && (
+            <Card className="border-border/60">
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Bike FT Report</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3">
+                  <StatCard label="ULP (Uber ID Done)" value={bikeFtStats.ulpDone} icon={CheckCircle2} tone="success" />
+                  <StatCard label="FT Done" value={bikeFtStats.ftDone} icon={CheckCircle2} tone="primary" />
+                  <StatCard label="Remaining FT" value={bikeFtStats.ftRemaining} icon={AlertCircle} tone="warning" />
                 </div>
               </CardContent>
             </Card>
