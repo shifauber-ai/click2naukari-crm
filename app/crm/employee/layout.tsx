@@ -109,8 +109,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   if (loading || productsLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="animate-pulse text-slate-400">Loading...</div>
+      <div className="flex h-screen items-center justify-center bg-muted/30">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
@@ -118,11 +118,11 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   if (!profile) return null;
   if (products.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 p-6">
+      <div className="flex h-screen items-center justify-center bg-muted/30 p-6">
         <div className="max-w-md text-center">
-          <Building2 className="mx-auto mb-4 h-12 w-12 text-slate-300" />
-          <h2 className="text-xl font-semibold text-slate-700">No Products Assigned</h2>
-          <p className="mt-2 text-sm text-slate-500">
+          <Building2 className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+          <h2 className="text-xl font-semibold text-foreground">No Products Assigned</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
             You haven&apos;t been assigned to any product caller queue yet. Please contact your administrator.
           </p>
           <Button variant="outline" className="mt-4" onClick={() => signOut()}>Sign Out</Button>
@@ -168,12 +168,12 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   const SidebarContent = () => (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-sm">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
           C2N
         </div>
         <div>
-          <div className="text-sm font-bold text-slate-800">Click2Naukari</div>
-          <div className="text-[11px] text-slate-400">Employee CRM</div>
+          <div className="text-sm font-bold text-foreground">Click2Naukari</div>
+          <div className="text-[11px] text-muted-foreground">Employee CRM</div>
         </div>
       </div>
 
@@ -188,32 +188,32 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
               onClick={() => setSidebarOpen(false)}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 active
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
             >
-              <Icon className={`h-[18px] w-[18px] ${active ? "text-blue-600" : "text-slate-400"}`} />
+              <Icon className={`h-[18px] w-[18px] ${active ? "text-primary" : "text-muted-foreground/70"}`} />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-100 p-3">
+      <div className="border-t border-border/40 p-3">
         <div className="flex items-center gap-3 rounded-lg px-3 py-2">
-          <Avatar className="h-9 w-9 border border-slate-200">
-            <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
+          <Avatar className="h-9 w-9 border border-border/40">
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 overflow-hidden">
-            <div className="truncate text-sm font-medium text-slate-700">{profile.full_name}</div>
-            <div className="text-[11px] text-slate-400">Employee</div>
+            <div className="truncate text-sm font-medium text-foreground">{profile.full_name}</div>
+            <div className="text-[11px] text-muted-foreground">Employee</div>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:text-destructive"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
             onClick={() => signOut()}
             title="Sign Out"
           >
@@ -225,9 +225,9 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-muted/30">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white lg:block">
+      <aside className="hidden w-60 shrink-0 border-r border-border/40 bg-card lg:block">
         <SidebarContent />
       </aside>
 
@@ -241,7 +241,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/40 bg-card/60 px-4 backdrop-blur-sm lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -252,10 +252,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
               <Menu className="h-5 w-5" />
             </Button>
             <div>
-              <div className="text-base font-semibold text-slate-800">
+              <div className="text-sm font-semibold text-foreground">
                 {getGreeting()}, {firstName}
               </div>
-              <div className="text-xs text-slate-400">Welcome to Click2Naukari</div>
+              <div className="text-xs text-muted-foreground">Welcome to Click2Naukari</div>
             </div>
           </div>
 
@@ -264,10 +264,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             {products.length > 1 && (
               <Popover open={productMenuOpen} onOpenChange={setProductMenuOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1.5 border-slate-200">
-                    <Building2 className="h-4 w-4 text-slate-400" />
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">{selectedProduct?.name}</span>
-                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-48 p-1">
@@ -277,8 +277,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                       onClick={() => { selectProduct(p); setProductMenuOpen(false); }}
                       className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                         selectedProduct?.id === p.id
-                          ? "bg-blue-50 text-blue-700"
-                          : "text-slate-600 hover:bg-slate-50"
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted"
                       }`}
                     >
                       <Building2 className="h-4 w-4" />
@@ -289,7 +289,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
               </Popover>
             )}
             {products.length === 1 && (
-              <Badge variant="outline" className="border-slate-200 text-slate-600">
+              <Badge variant="outline" className="text-muted-foreground">
                 <Building2 className="mr-1 h-3.5 w-3.5" />
                 {selectedProduct?.name}
               </Badge>
@@ -299,21 +299,21 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="h-5 w-5 text-slate-500" />
+                  <Bell className="h-5 w-5 text-muted-foreground" />
                   {notifications.length > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
                       {notifications.length}
                     </span>
                   )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-80 p-0">
-                <div className="border-b border-slate-100 px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">Upcoming Follow Ups</div>
+                <div className="border-b border-border/40 px-4 py-3">
+                  <div className="text-sm font-semibold text-foreground">Upcoming Follow Ups</div>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-sm text-slate-400">
+                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                       No upcoming follow-ups
                     </div>
                   ) : (
@@ -321,14 +321,14 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                       <Link
                         key={n.id}
                         href="/crm/employee/followups"
-                        className="flex items-start gap-3 border-b border-slate-50 px-4 py-3 hover:bg-slate-50"
+                        className="flex items-start gap-3 border-b border-border/30 px-4 py-3 hover:bg-muted/50"
                       >
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50">
-                          <Calendar className="h-4 w-4 text-blue-600" />
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                          <Calendar className="h-4 w-4 text-primary" />
                         </div>
                         <div className="flex-1 overflow-hidden">
-                          <div className="truncate text-sm font-medium text-slate-700">{n.name}</div>
-                          <div className="text-xs text-slate-400">
+                          <div className="truncate text-sm font-medium text-foreground">{n.name}</div>
+                          <div className="text-xs text-muted-foreground">
                             {n.platform && <span>{n.platform} · </span>}
                             {n.status === "CALLBACK" ? "Call Back" : n.status === "INTERESTED" ? "Interested" : "Ringing"} · {format(new Date(n.next_followup_at), "dd MMM, HH:mm")}
                           </div>
@@ -352,13 +352,13 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
       {/* Follow-up Popup */}
       {showFollowupPopup && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
+        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-lg border border-border/60 bg-card p-4 shadow-xl">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-50">
-                <Bell className="h-4 w-4 text-amber-600" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-warning/60">
+                <Bell className="h-4 w-4 text-warning-foreground" />
               </div>
-              <div className="text-sm font-semibold text-slate-800">Upcoming Follow-up</div>
+              <div className="text-sm font-semibold text-foreground">Upcoming Follow-up</div>
             </div>
             <Button
               variant="ghost"
