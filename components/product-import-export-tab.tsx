@@ -372,7 +372,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         city = impCity;
       }
 
-      const status = isHC ? "TAG_ADDED" : "NEW";
+      const status = isHC ? "" : "NEW";
       const source = mapping.source ? getCol(cells, mapping.source) : impSource;
 
       if (!name && !phone) return { rowIndex: rowNum, name, phone, platform, city, source, status, rowStatus: "INVALID", error: "Both name and phone empty" };
@@ -505,7 +505,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
         if (isHC) {
           return {
             name: row.name, phone: row.phone, product_id: product.id,
-            platform: "UBER", city: row.city || null, status: "TAG_ADDED",
+            platform: "UBER", city: row.city || null, status: row.status || null,
             source: row.source || null,
             vehicle_no: row.vehicleNo || null, dl_no: row.dlNo || null,
             total_trips: row.totalTrips ? parseInt(row.totalTrips, 10) : null,
