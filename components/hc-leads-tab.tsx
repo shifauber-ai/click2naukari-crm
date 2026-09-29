@@ -281,8 +281,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
     try {
       const { data, error } = await supabase.rpc("admin_bulk_permanent_delete_leads", { p_lead_ids: ids });
       if (error) {
-        toast({ title: "Unable to delete selected HC leads. Please try again.", variant: "destructive" });
-        console.error("HC bulk delete error:", error.message);
+        toast({ title: `Bulk delete failed: ${error.message}`, variant: "destructive" });
         return;
       }
       const result = data as { deleted_count: number; not_found_count: number } | null;
@@ -297,8 +296,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
       load();
       loadStats();
     } catch (err) {
-      toast({ title: "Unable to delete selected HC leads. Please try again.", variant: "destructive" });
-      console.error("HC bulk delete exception:", err);
+      toast({ title: `Bulk delete failed: ${err instanceof Error ? err.message : "Unexpected error"}`, variant: "destructive" });
     } finally {
       setBulkDeleting(false);
     }
