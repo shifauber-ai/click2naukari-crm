@@ -419,11 +419,11 @@ export function HCLeadsTab({ product }: { product: Product }) {
                   <TableCell>{lead.last_trip_date ? format(new Date(lead.last_trip_date), "dd MMM yyyy") : "—"}</TableCell>
                   <TableCell>
                     <Select
-                      value={lead.status as HCLeadStatus}
+                      value={(lead.status as HCLeadStatus) || undefined}
                       onValueChange={(v) => handleStatusChange(lead.id, v as HCLeadStatus)}
                       disabled={updatingId === lead.id}
                     >
-                      <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="—" /></SelectTrigger>
                       <SelectContent>
                         {HC_LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{HC_STATUS_LABELS[s]}</SelectItem>)}
                       </SelectContent>
@@ -554,7 +554,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <DetailRow label="Platform" value="UBER" />
                 <DetailRow label="Product" value="AUTO" />
                 <DetailRow label="City" value={detailLead.city || "—"} />
-                <DetailRow label="Status" value={HC_STATUS_LABELS[detailLead.status as HCLeadStatus] || detailLead.status} />
+                <DetailRow label="Status" value={detailLead.status ? (HC_STATUS_LABELS[detailLead.status as HCLeadStatus] || detailLead.status) : "—"} />
                 <DetailRow label="Form" value={detailLead.form_status ? (HC_FORM_LABELS[(detailLead.form_status as HCFormStatus)] || detailLead.form_status) : "—"} />
                 <DetailRow label="Caller" value={detailLead.current_caller?.full_name || "Unassigned"} />
                 <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
