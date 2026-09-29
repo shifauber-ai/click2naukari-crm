@@ -285,7 +285,8 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
     let matchingLeadIds: string[] | null = null;
     let matchPlatformMap: Record<string, string> = {};
 
-    if (usePlatformStatus && (platformFilter !== "ALL" || statusFilter !== "ALL")) {
+    if (usePlatformStatus && statusFilter !== "ALL") {
+      // Status filter active: query lead_platform_status for exact platform+status match
       // Build query on lead_platform_status joined with platforms
       let psq = supabase
         .from("lead_platform_status")
@@ -356,6 +357,15 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
         if (matchingLeadIds.length > 0) {
           cq = cq.in("id", matchingLeadIds);
           q = q.in("id", matchingLeadIds);
+        }
+      } else if (platformFilter !== "ALL") {
+        // Platform selected, no status filter: filter by leads.platform to include blank-status leads
+        const platformName = productPlatforms.find(
+          (pp) => pp.name.toUpperCase() === platformFilter
+        )?.name;
+        if (platformName) {
+          cq = cq.ilike("platform", platformName);
+          q = q.ilike("platform", platformName);
         }
       }
       // When All Platforms + All Status, don't filter by platform or status at all
@@ -766,7 +776,7 @@ export function ProductLeadsTab({ product, idDoneOnly = false }: { product: Prod
   const getDisplayStatus = (lead: LeadWithCaller): LeadStatus => {
     if (platformFilter !== "ALL") {
       const platformName = productPlatforms.find((pp) => pp.name.toUpperCase() === platformFilter)?.name || "";
-      return (leadPlatformStatuses[lead.id]?.[platformName] || lead.status) as LeadStatus;
+      return (leadPlatformStatuses[lead.id]?.[platformName] || "NEW") as LeadStatus;
     }
     if (statusFilter !== "ALL" && leadMatchPlatform[lead.id]) {
       return (leadPlatformStatuses[lead.id]?.[leadMatchPlatform[lead.id]] || lead.status) as LeadStatus;
