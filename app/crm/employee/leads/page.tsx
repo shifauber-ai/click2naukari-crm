@@ -411,7 +411,7 @@ export default function EmployeeLeadsPage() {
                         <td className="px-3 py-3 text-muted-foreground">{lead.license_no || "—"}</td>
                         <td className="px-3 py-3">
                           <Select
-                            value={lead.status}
+                            value={lead.status && HC_INLINE_STATUSES.some((s) => s.value === lead.status) ? lead.status : undefined}
                             onValueChange={(v) => handleInlineStatusChange(lead.id, v)}
                             disabled={inlineStatusSaving === lead.id}
                           >
@@ -419,7 +419,7 @@ export default function EmployeeLeadsPage() {
                               {inlineStatusSaving === lead.id ? (
                                 <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving...</span>
                               ) : (
-                                <SelectValue />
+                                <SelectValue placeholder="Select Status" />
                               )}
                             </SelectTrigger>
                             <SelectContent>
