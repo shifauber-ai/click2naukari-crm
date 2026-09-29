@@ -34,7 +34,7 @@ export function PlatformBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded font-semibold uppercase tracking-wide",
+        "inline-flex items-center rounded font-semibold uppercase tracking-wide transition-shadow",
         size === "xs" ? "px-1 py-0.5 text-[10px]" : "px-2 py-0.5 text-xs",
         style,
         className

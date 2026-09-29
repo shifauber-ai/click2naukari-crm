@@ -218,7 +218,7 @@ export default function AdminLayout({
   return (
     <div className="flex min-h-screen bg-muted/30">
       {sidebarOpen && (
-        <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-30 bg-black/40 premium-backdrop lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       <aside
@@ -229,8 +229,8 @@ export default function AdminLayout({
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-border/40 px-4">
-          <Link href="/crm/admin" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-sm">
+          <Link href="/crm/admin" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-sm shadow-primary/20">
               <Phone className="h-5 w-5 text-primary-foreground" />
             </div>
             {!collapsed && (
@@ -264,15 +264,15 @@ export default function AdminLayout({
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                     active
-                      ? "bg-primary text-primary-foreground shadow-sm"
+                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
                       : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
                     collapsed && "justify-center px-2"
                   )}
                   title={collapsed ? item.label : undefined}
                 >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <Icon className={cn("h-4 w-4 flex-shrink-0 transition-transform duration-200", !active && "group-hover:scale-110")} />
                   {!collapsed && <span>{item.label}</span>}
                 </Link>
               );
@@ -308,13 +308,13 @@ export default function AdminLayout({
                           href={item.href}
                           onClick={() => setSidebarOpen(false)}
                           className={cn(
-                            "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all",
+                            "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200",
                             active
-                              ? "font-medium text-primary"
+                              ? "font-medium text-primary nav-active-bar"
                               : "text-muted-foreground hover:text-foreground"
                           )}
                         >
-                          <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+                          <ChevronRight className={cn("h-3 w-3 transition-colors", active ? "text-primary" : "text-muted-foreground/50")} />
                           <span>{item.label}</span>
                         </Link>
                       );
@@ -349,7 +349,7 @@ export default function AdminLayout({
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
-        <header className="flex h-16 items-center gap-3 border-b border-border/40 bg-card/60 px-4 backdrop-blur-sm lg:px-6">
+        <header className="flex h-16 items-center gap-3 border-b border-border/40 bg-card/60 px-4 premium-backdrop lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
@@ -363,7 +363,7 @@ export default function AdminLayout({
             <Shield className="h-3 w-3" /> {isManager ? "Manager" : "Admin"}
           </span>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 fade-in">{children}</main>
       </div>
     </div>
   );

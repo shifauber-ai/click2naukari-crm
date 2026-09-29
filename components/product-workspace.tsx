@@ -55,7 +55,7 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
   ];
 
   return (
-    <div>
+    <div className="fade-in-up">
       <PageHeader
         title={`${product.name} Dashboard`}
         description={showPayment
@@ -64,15 +64,15 @@ export function ProductWorkspace({ product, productSlug, showPayment }: ProductW
         icon={showPayment ? Wallet : Phone}
       />
 
-      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1">
+      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1 shadow-sm">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.key;
           return (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all",
-                active ? "bg-primary text-primary-foreground shadow-sm"
+                "flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                active ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               )}>
               <Icon className="h-4 w-4" />
@@ -134,28 +134,28 @@ export function HCDashboard({ product }: { product: Product }) {
   ];
 
   return (
-    <div>
+    <div className="fade-in-up">
       <PageHeader
         title="HC Dashboard"
         description="Hiring Campaign — separate workflow with driver-focused lead management"
         icon={PhoneCall}
       />
 
-      <div className="mb-4 rounded-lg border border-info/30 bg-info/5 px-4 py-3">
+      <div className="mb-4 rounded-lg border border-info/30 bg-info/5 px-4 py-3 hero-glow">
         <p className="text-sm text-info-foreground">
           <strong>HC</strong> uses Platform: Uber, Product: Auto. HC has its own statuses (Tag Added, Ringing) and does not use the standard product workflow.
         </p>
       </div>
 
-      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1">
+      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1 shadow-sm">
         {hcTabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.key;
           return (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all",
-                active ? "bg-primary text-primary-foreground shadow-sm"
+                "flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                active ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               )}>
               <Icon className="h-4 w-4" />

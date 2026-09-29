@@ -100,7 +100,7 @@ export function ProductDashboard({ product, showPayment }: ProductDashboardConfi
   ];
 
   return (
-    <div>
+    <div className="fade-in-up">
       <PageHeader
         title={`${product.name} Dashboard`}
         description={
@@ -111,16 +111,16 @@ export function ProductDashboard({ product, showPayment }: ProductDashboardConfi
         icon={showPayment ? Wallet : Phone}
       />
 
-      <div className="mb-6 flex gap-1 rounded-xl border border-border/60 bg-card p-1">
+      <div className="mb-6 flex gap-1 rounded-xl border border-border/60 bg-card p-1 shadow-sm">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                 activeTab === tab.key
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               }`}
             >

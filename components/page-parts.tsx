@@ -16,13 +16,13 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        "mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between fade-in-up",
         className
       )}
     >
       <div className="flex items-center gap-3">
         {Icon && (
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/8 text-primary">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm ring-1 ring-primary/5">
             <Icon className="h-[18px] w-[18px]" />
           </div>
         )}
@@ -64,21 +64,21 @@ export function StatCard({
     danger: "bg-destructive/10 text-destructive",
   };
   return (
-    <div className="rounded-lg border border-border/60 bg-card p-4 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md">
+    <div className="rounded-lg border border-border/60 bg-card p-4 shadow-[0_1px_3px_0_rgb(0_0_0/0.05)] card-lift fade-in-up overflow-hidden">
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-medium text-muted-foreground">
           {label}
         </span>
         <div
           className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-lg",
+            "flex h-8 w-8 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110",
             tones[tone]
           )}
         >
           <Icon className="h-3.5 w-3.5" />
         </div>
       </div>
-      <div className="mt-2 text-xl font-bold tracking-tight">{value}</div>
+      <div className="mt-2 text-xl font-bold tracking-tight tabular-nums">{value}</div>
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
@@ -94,8 +94,8 @@ export function EmptyState({
   description?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/60 bg-card/50 py-12 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/60 bg-card/50 py-12 text-center fade-in">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground/70">
         <Icon className="h-6 w-6" />
       </div>
       <div>
@@ -110,7 +110,7 @@ export function EmptyState({
 
 export function LoadingState({ label = "Loading..." }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+    <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground fade-in">
       <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted border-t-foreground" />
       <span className="text-sm">{label}</span>
     </div>

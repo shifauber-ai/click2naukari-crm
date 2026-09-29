@@ -168,7 +168,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   const SidebarContent = () => (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary font-bold text-sm shadow-sm shadow-primary/20">
           C2N
         </div>
         <div>
@@ -186,13 +186,13 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
               key={item.href}
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                 active
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-primary/10 text-primary nav-active-bar"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
             >
-              <Icon className={`h-[18px] w-[18px] ${active ? "text-primary" : "text-muted-foreground/70"}`} />
+              <Icon className={`h-[18px] w-[18px] transition-transform duration-200 ${active ? "text-primary" : "text-muted-foreground/70"}`} />
               {item.label}
             </Link>
           );
@@ -241,7 +241,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/40 bg-card/60 px-4 backdrop-blur-sm lg:px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/40 bg-card/60 px-4 premium-backdrop lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -343,7 +343,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto fade-in">
           <EmployeeContentWrapper product={selectedProduct} profile={profile}>
             {children}
           </EmployeeContentWrapper>
@@ -352,7 +352,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
       {/* Follow-up Popup */}
       {showFollowupPopup && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-lg border border-border/60 bg-card p-4 shadow-xl">
+        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-lg border border-border/60 bg-card p-4 shadow-2xl fade-in-up">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-warning/60">
