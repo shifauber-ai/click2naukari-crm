@@ -59,7 +59,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
   const [statsLoading, setStatsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [employeeFilter, setEmployeeFilter] = useState("ALL");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -138,7 +138,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (cityFilter !== "ALL") { cq = cq.eq("city", cityFilter); q = q.eq("city", cityFilter); }
-    if (statusFilter) { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
+    if (statusFilter !== "ALL") { cq = cq.eq("status", statusFilter); q = q.eq("status", statusFilter); }
     if (employeeFilter !== "ALL") { cq = cq.eq("current_caller_id", employeeFilter); q = q.eq("current_caller_id", employeeFilter); }
     if (search) {
       cq = cq.or(`name.ilike.%${search}%,phone.ilike.%${search}%,vehicle_no.ilike.%${search}%,dl_no.ilike.%${search}%,license_no.ilike.%${search}%`);
@@ -165,10 +165,10 @@ export function HCLeadsTab({ product }: { product: Product }) {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activeCities = cities.filter((c) => c.is_active);
-  const hasActiveFilters = cityFilter !== "ALL" || !!statusFilter || employeeFilter !== "ALL" || search;
+  const hasActiveFilters = cityFilter !== "ALL" || statusFilter !== "ALL" || employeeFilter !== "ALL" || search;
 
   const clearFilters = () => {
-    setCityFilter("ALL"); setStatusFilter(""); setEmployeeFilter("ALL"); setSearch("");
+    setCityFilter("ALL"); setStatusFilter("ALL"); setEmployeeFilter("ALL"); setSearch("");
     setPage(0);
   };
 
@@ -346,9 +346,10 @@ export function HCLeadsTab({ product }: { product: Product }) {
             {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={statusFilter || undefined} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Status" /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="ALL">All Status</SelectItem>
             {HC_LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{HC_STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
