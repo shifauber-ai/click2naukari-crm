@@ -369,6 +369,21 @@ export function HCLeadsTab({ product }: { product: Product }) {
         )}
       </div>
 
+      {/* Bulk action toolbar */}
+      {isAdmin && selectedIds.size > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium text-primary">
+            {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {loading && leads.length === 0 ? (
         <HCSkeleton />
@@ -494,16 +509,6 @@ export function HCLeadsTab({ product }: { product: Product }) {
               </Button>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ===== Bulk Delete Button ===== */}
-      {isAdmin && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3">
-          <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedIds.size})
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear Selection</Button>
         </div>
       )}
 
