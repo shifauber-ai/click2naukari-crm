@@ -198,50 +198,50 @@ export default function EmployeeFollowupsPage() {
     if (leads.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-12">
-          <Calendar className="mb-2 h-8 w-8 text-slate-300" />
-          <p className="text-sm text-slate-400">{emptyMsg}</p>
+          <Calendar className="mb-2 h-8 w-8 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground/70">{emptyMsg}</p>
         </div>
       );
     }
     return (
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-white/[0.04]">
         {leads.map((lead) => (
-          <div key={lead.id} className="flex items-center gap-3 p-4 hover:bg-slate-50/50">
+          <div key={lead.id} className="flex items-center gap-3 p-4 hover:bg-white/[0.04]">
             <Avatar className="h-10 w-10">
-              <AvatarFallback className="bg-blue-50 text-sm font-semibold text-blue-700">
+              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
                 {lead.name.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
-              <div className="font-medium text-slate-700">{lead.name}</div>
-              <div className="text-xs text-slate-400">{lead.phone} • {lead.platform || "—"}</div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+              <div className="font-medium text-foreground">{lead.name}</div>
+              <div className="text-xs text-muted-foreground/70">{lead.phone} • {lead.platform || "—"}</div>
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground/70">
                 <Clock className="h-3 w-3" />
                 {lead.next_followup_at ? format(new Date(lead.next_followup_at), "dd MMM yyyy, HH:mm") : "—"}
-                <span className="text-slate-300">•</span>
+                <span className="text-muted-foreground/50">•</span>
                 <StatusPill status={lead.status} />
                 {lead.callback_date && (
-                  <span className="text-slate-400">• Callback: {format(new Date(lead.callback_date), "dd MMM")}{lead.callback_time ? ` ${lead.callback_time}` : ""}</span>
+                  <span className="text-muted-foreground/70">• Callback: {format(new Date(lead.callback_date), "dd MMM")}{lead.callback_time ? ` ${lead.callback_time}` : ""}</span>
                 )}
               </div>
               {lead.remarks && (
-                <div className="mt-0.5 text-xs text-slate-400 truncate" title={lead.remarks}>{lead.remarks}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground/70 truncate" title={lead.remarks}>{lead.remarks}</div>
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)}>
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-chart-2 hover:bg-chart-2/10" onClick={() => handleCall(lead)}>
                 <Phone className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleWhatsApp(lead)}>
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-success-foreground hover:bg-success/15" onClick={() => handleWhatsApp(lead)}>
                 <MessageCircle className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)} title="View">
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => setViewLead(lead)} title="View">
                 <Eye className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Update Status">
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => openStatus(lead)} title="Update Status">
                 <Edit className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleComplete(lead)} disabled={completingId === lead.id} title="Complete">
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-success-foreground hover:bg-success/15" onClick={() => handleComplete(lead)} disabled={completingId === lead.id} title="Complete">
                 {completingId === lead.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               </Button>
             </div>
@@ -261,22 +261,22 @@ export default function EmployeeFollowupsPage() {
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-800">Follow Ups</h2>
-        <p className="text-sm text-slate-400">Manage your upcoming and completed follow-ups for {product.name}</p>
+        <h2 className="text-lg font-bold text-foreground">Follow Ups</h2>
+        <p className="text-sm text-muted-foreground/70">Manage your upcoming and completed follow-ups for {product.name}</p>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <DateFilter range={dateRange} onRangeChange={setDateRange} />
         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Source" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Sources</SelectItem>
             {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={platformFilter} onValueChange={setPlatformFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Platforms</SelectItem>
             {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
@@ -285,18 +285,18 @@ export default function EmployeeFollowupsPage() {
       </div>
 
       <Tabs defaultValue="overdue">
-        <TabsList className="bg-slate-100">
+        <TabsList className="bg-muted/40">
           <TabsTrigger value="overdue">Overdue ({overdue.length})</TabsTrigger>
           <TabsTrigger value="today">Today ({today.length})</TabsTrigger>
           <TabsTrigger value="tomorrow">Tomorrow ({tomorrow.length})</TabsTrigger>
           <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
           <TabsTrigger value="completed">Completed ({completed.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="overdue"><Card className="border-slate-200"><CardContent className="p-0">{renderLeadList(overdue, "No overdue follow-ups")}</CardContent></Card></TabsContent>
-        <TabsContent value="today"><Card className="border-slate-200"><CardContent className="p-0">{renderLeadList(today, "No follow-ups due today")}</CardContent></Card></TabsContent>
-        <TabsContent value="tomorrow"><Card className="border-slate-200"><CardContent className="p-0">{renderLeadList(tomorrow, "No follow-ups for tomorrow")}</CardContent></Card></TabsContent>
-        <TabsContent value="upcoming"><Card className="border-slate-200"><CardContent className="p-0">{renderLeadList(upcoming, "No upcoming follow-ups")}</CardContent></Card></TabsContent>
-        <TabsContent value="completed"><Card className="border-slate-200"><CardContent className="p-0">{renderLeadList(completed, "No completed follow-ups")}</CardContent></Card></TabsContent>
+        <TabsContent value="overdue"><Card className="border-white/[0.08]"><CardContent className="p-0">{renderLeadList(overdue, "No overdue follow-ups")}</CardContent></Card></TabsContent>
+        <TabsContent value="today"><Card className="border-white/[0.08]"><CardContent className="p-0">{renderLeadList(today, "No follow-ups due today")}</CardContent></Card></TabsContent>
+        <TabsContent value="tomorrow"><Card className="border-white/[0.08]"><CardContent className="p-0">{renderLeadList(tomorrow, "No follow-ups for tomorrow")}</CardContent></Card></TabsContent>
+        <TabsContent value="upcoming"><Card className="border-white/[0.08]"><CardContent className="p-0">{renderLeadList(upcoming, "No upcoming follow-ups")}</CardContent></Card></TabsContent>
+        <TabsContent value="completed"><Card className="border-white/[0.08]"><CardContent className="p-0">{renderLeadList(completed, "No completed follow-ups")}</CardContent></Card></TabsContent>
       </Tabs>
 
       {/* Status Update Dialog */}
@@ -307,16 +307,16 @@ export default function EmployeeFollowupsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-slate-500">Lead</label>
-              <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+              <label className="text-xs font-medium text-muted-foreground">Lead</label>
+              <div className="mt-1 text-sm font-medium text-foreground">{statusLead?.name} — {statusLead?.phone}</div>
               {statusLead?.platform && (
-                <div className="mt-0.5 text-xs text-slate-400">Platform: {statusLead.platform}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground/70">Platform: {statusLead.platform}</div>
               )}
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">New Status</label>
+              <label className="text-xs font-medium text-muted-foreground">New Status</label>
               <Select value={newStatus} onValueChange={(v) => setNewStatus(v as LeadStatus)}>
-                <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="mt-1 border-white/[0.08]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {availableStatuses.map((s) => (
                     <SelectItem key={s} value={s}>{statusLabelMap[s] || s}</SelectItem>
@@ -327,20 +327,20 @@ export default function EmployeeFollowupsPage() {
             {(newStatus === "CALLBACK" || newStatus === "INTERESTED") && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-500">Follow-up Date *</label>
-                  <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-slate-200" />
+                  <label className="text-xs font-medium text-muted-foreground">Follow-up Date *</label>
+                  <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-white/[0.08]" />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-500">Follow-up Time *</label>
-                  <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-slate-200" />
+                  <label className="text-xs font-medium text-muted-foreground">Follow-up Time *</label>
+                  <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-white/[0.08]" />
                 </div>
               </div>
             )}
             <div>
-              <label className="text-xs font-medium text-slate-500">Remarks</label>
-              <Textarea value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Add remarks (optional)" rows={2} className="mt-1 border-slate-200" />
+              <label className="text-xs font-medium text-muted-foreground">Remarks</label>
+              <Textarea value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Add remarks (optional)" rows={2} className="mt-1 border-white/[0.08]" />
             </div>
-            <Button className="w-full gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={handleStatusUpdate} disabled={statusSaving}>
+            <Button className="w-full gap-1.5 bg-primary hover:bg-primary/90" onClick={handleStatusUpdate} disabled={statusSaving}>
               {statusSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Update Status"}
             </Button>
           </div>
@@ -357,26 +357,26 @@ export default function EmployeeFollowupsPage() {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
-                  <AvatarFallback className="bg-blue-100 text-base font-semibold text-blue-700">
+                  <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
                     {viewLead.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="text-lg font-semibold text-slate-800">{viewLead.name}</div>
-                  <div className="text-sm text-slate-400">{viewLead.phone}</div>
+                  <div className="text-lg font-semibold text-foreground">{viewLead.name}</div>
+                  <div className="text-sm text-muted-foreground/70">{viewLead.phone}</div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Platform</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.platform || "—"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">City</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.city || "—"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Source</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.source || "—"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Status</div><div className="mt-0.5 text-sm font-medium text-slate-700">{STATUS_LABELS[viewLead.status as LeadStatus] || viewLead.status}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Follow-up</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.next_followup_at ? format(new Date(viewLead.next_followup_at), "dd MMM, HH:mm") : "None"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Remarks</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.remarks || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Platform</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.platform || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">City</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.city || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Source</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.source || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Status</div><div className="mt-0.5 text-sm font-medium text-foreground">{STATUS_LABELS[viewLead.status as LeadStatus] || viewLead.status}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Follow-up</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.next_followup_at ? format(new Date(viewLead.next_followup_at), "dd MMM, HH:mm") : "None"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Remarks</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.remarks || "—"}</div></div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}><Phone className="h-4 w-4" /> Call</Button>
-                <Button className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleWhatsApp(viewLead)}><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
+                <Button className="flex-1 gap-1.5 bg-chart-2 hover:bg-chart-2/90" onClick={() => handleCall(viewLead)}><Phone className="h-4 w-4" /> Call</Button>
+                <Button className="flex-1 gap-1.5 bg-success-foreground hover:bg-success-foreground/90" onClick={() => handleWhatsApp(viewLead)}><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
               </div>
             </div>
           )}
@@ -388,9 +388,9 @@ export default function EmployeeFollowupsPage() {
 
 function StatusPill({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    NEW: "bg-slate-100 text-slate-600", RINGING: "bg-amber-100 text-amber-700",
-    INTERESTED: "bg-green-100 text-green-700", CALLBACK: "bg-blue-100 text-blue-700",
-    ID_DONE: "bg-emerald-100 text-emerald-700", OTHER_HERO: "bg-indigo-100 text-indigo-700",
+    NEW: "bg-muted/40 text-muted-foreground", RINGING: "bg-warning/15 text-warning-foreground",
+    INTERESTED: "bg-chart-2/15 text-chart-2", CALLBACK: "bg-primary/15 text-primary",
+    ID_DONE: "bg-success/15 text-success-foreground", OTHER_HERO: "bg-chart-4/15 text-chart-4",
   };
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colors[status] || "bg-slate-100 text-slate-500"}`}>{STATUS_LABELS[status as LeadStatus] || status}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colors[status] || "bg-muted/40 text-muted-foreground"}`}>{STATUS_LABELS[status as LeadStatus] || status}</span>;
 }

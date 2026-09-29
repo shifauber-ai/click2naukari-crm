@@ -83,47 +83,47 @@ export default function EmployeePaymentPage() {
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-800">Payment Report</h2>
-        <p className="text-sm text-slate-400">Your payment collections for {product.name}</p>
+        <h2 className="text-lg font-bold text-foreground">Payment Report</h2>
+        <p className="text-sm text-muted-foreground/70">Your payment collections for {product.name}</p>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Payments" value={stats.totalPayments} icon={CreditCard} color="text-blue-600" bg="bg-blue-50" />
-        <StatCard label="Total Amount" value={`Rs ${stats.totalAmount.toLocaleString()}`} icon={TrendingUp} color="text-green-600" bg="bg-green-50" />
-        <StatCard label="UPI" value={stats.upi} icon={Wallet} color="text-purple-600" bg="bg-purple-50" />
-        <StatCard label="Cash" value={stats.cash} icon={Banknote} color="text-amber-600" bg="bg-amber-50" />
+        <StatCard label="Total Payments" value={stats.totalPayments} icon={CreditCard} color="text-primary" bg="bg-primary/10" />
+        <StatCard label="Total Amount" value={`Rs ${stats.totalAmount.toLocaleString()}`} icon={TrendingUp} color="text-chart-2" bg="bg-chart-2/10" />
+        <StatCard label="UPI" value={stats.upi} icon={Wallet} color="text-chart-4" bg="bg-chart-4/10" />
+        <StatCard label="Cash" value={stats.cash} icon={Banknote} color="text-warning-foreground" bg="bg-warning/15" />
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="text-xs font-medium text-slate-400">From Date</label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 w-[150px] border-slate-200" />
+          <label className="text-xs font-medium text-muted-foreground/70">From Date</label>
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 w-[150px] border-white/[0.08]" />
         </div>
         <div>
-          <label className="text-xs font-medium text-slate-400">To Date</label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="mt-1 w-[150px] border-slate-200" />
+          <label className="text-xs font-medium text-muted-foreground/70">To Date</label>
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="mt-1 w-[150px] border-white/[0.08]" />
         </div>
         <Button variant="outline" onClick={() => { setDateFrom(""); setDateTo(""); }}>Clear</Button>
       </div>
 
       {/* Payment Table */}
-      <Card className="border-slate-200">
+      <Card className="border-white/[0.08]">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
           ) : payments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <CreditCard className="mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-medium text-slate-500">No payment records</p>
-              <p className="text-xs text-slate-400">Payments you collect will appear here.</p>
+              <CreditCard className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">No payment records</p>
+              <p className="text-xs text-muted-foreground/70">Payments you collect will appear here.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                  <tr className="border-b border-white/[0.06] text-left text-xs font-medium text-muted-foreground/70">
                     <th className="px-4 py-3">Candidate</th>
                     <th className="px-4 py-3">Amount</th>
                     <th className="px-4 py-3">Mode</th>
@@ -134,22 +134,22 @@ export default function EmployeePaymentPage() {
                 </thead>
                 <tbody>
                   {payments.map((pay) => (
-                    <tr key={pay.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                      <td className="px-4 py-3 font-medium text-slate-700">{pay.candidate_name}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">Rs {Number(pay.amount).toLocaleString()}</td>
+                    <tr key={pay.id} className="border-b border-white/[0.04] hover:bg-white/[0.04]">
+                      <td className="px-4 py-3 font-medium text-foreground">{pay.candidate_name}</td>
+                      <td className="px-4 py-3 font-semibold text-foreground">Rs {Number(pay.amount).toLocaleString()}</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${pay.payment_mode === "UPI" ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-700"}`}>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${pay.payment_mode === "UPI" ? "bg-chart-4/15 text-chart-4" : "bg-warning/15 text-warning-foreground"}`}>
                           {pay.payment_mode || pay.payment_method}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          pay.payment_status === "PAID" || pay.payment_status === "SUCCESSFUL" || pay.payment_status === "COMPLETED" ? "bg-green-100 text-green-700" :
-                          pay.payment_status === "PENDING" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
+                          pay.payment_status === "PAID" || pay.payment_status === "SUCCESSFUL" || pay.payment_status === "COMPLETED" ? "bg-chart-2/15 text-chart-2" :
+                          pay.payment_status === "PENDING" ? "bg-warning/15 text-warning-foreground" : "bg-destructive/15 text-destructive"
                         }`}>{pay.payment_status}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{pay.service_description || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{format(new Date(pay.payment_date), "dd MMM yyyy")}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{pay.service_description || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{format(new Date(pay.payment_date), "dd MMM yyyy")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -161,7 +161,7 @@ export default function EmployeePaymentPage() {
 
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">Page {page + 1} of {totalPages}</p>
+          <p className="text-xs text-muted-foreground/70">Page {page + 1} of {totalPages}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
             <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
@@ -174,13 +174,13 @@ export default function EmployeePaymentPage() {
 
 function StatCard({ label, value, icon: Icon, color, bg }: { label: string; value: string | number; icon: typeof CreditCard; color: string; bg: string }) {
   return (
-    <Card className="border-slate-200">
+    <Card className="border-white/[0.08]">
       <CardContent className="p-4">
         <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-lg ${bg}`}>
           <Icon className={`h-4 w-4 ${color}`} />
         </div>
-        <div className="text-xl font-bold text-slate-800">{value}</div>
-        <div className="text-xs text-slate-400">{label}</div>
+        <div className="text-xl font-bold text-foreground">{value}</div>
+        <div className="text-xs text-muted-foreground/70">{label}</div>
       </CardContent>
     </Card>
   );

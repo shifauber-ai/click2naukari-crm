@@ -216,27 +216,28 @@ export default function AdminLayout({
   })();
 
   return (
-    <div className="flex min-h-screen bg-muted/30">
+    <div className="relative flex min-h-screen">
+      <div className="bg-orbs" />
       {sidebarOpen && (
-        <div className="fixed inset-0 z-30 bg-black/40 premium-backdrop lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-md lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border/40 bg-card transition-all duration-300 lg:static",
+          "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-white/[0.06] bg-card/70 backdrop-blur-xl transition-all duration-300 lg:static",
           collapsed ? "w-16" : "w-64",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b border-border/40 px-4">
+        <div className="flex h-16 items-center justify-between border-b border-white/[0.06] px-4">
           <Link href="/crm/admin" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-sm shadow-primary/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-[0_0_16px_-2px_hsl(var(--primary)/0.4)]">
               <Phone className="h-5 w-5 text-primary-foreground" />
             </div>
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="text-sm font-bold tracking-tight text-foreground">Click2Naukari</span>
-                <span className="text-[10px] text-muted-foreground">CRM Dashboard</span>
+                <span className="text-[10px] text-muted-foreground/80">CRM Dashboard</span>
               </div>
             )}
           </Link>
@@ -248,7 +249,7 @@ export default function AdminLayout({
           </Button>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-2.5">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-2.5 scrollbar-thin">
           {visibleSections.map((section) => {
             const isExpanded = expandedSections.has(section.label);
             const hasMultipleItems = section.items.length > 1;
@@ -264,10 +265,10 @@ export default function AdminLayout({
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                     active
-                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                      : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
+                      ? "bg-primary/15 text-primary shadow-[0_0_12px_-2px_hsl(var(--primary)/0.25)] backdrop-blur-sm border border-primary/20"
+                      : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground hover:translate-x-0.5",
                     collapsed && "justify-center px-2"
                   )}
                   title={collapsed ? item.label : undefined}
@@ -283,13 +284,13 @@ export default function AdminLayout({
                 <button
                   onClick={() => toggleSection(section.label)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                    "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
+                    "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                    "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
                     collapsed && "justify-center px-2"
                   )}
                   title={collapsed ? section.label : undefined}
                 >
-                  <SectionIcon className="h-4 w-4 flex-shrink-0" />
+                  <SectionIcon className="h-4 w-4 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
                   {!collapsed && (
                     <>
                       <span className="flex-1 text-left">{section.label}</span>
@@ -298,7 +299,7 @@ export default function AdminLayout({
                   )}
                 </button>
                 {!collapsed && isExpanded && (
-                  <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border/40 pl-3">
+                  <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/[0.06] pl-3">
                     {section.items.map((item) => {
                       const active = isActive(item.href);
                       const Icon = item.icon;
@@ -308,10 +309,10 @@ export default function AdminLayout({
                           href={item.href}
                           onClick={() => setSidebarOpen(false)}
                           className={cn(
-                            "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200",
+                            "group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200",
                             active
-                              ? "font-medium text-primary nav-active-bar"
-                              : "text-muted-foreground hover:text-foreground"
+                              ? "font-medium text-primary nav-active-bar bg-primary/10 backdrop-blur-sm"
+                              : "text-muted-foreground hover:text-foreground hover:translate-x-0.5"
                           )}
                         >
                           <ChevronRight className={cn("h-3 w-3 transition-colors", active ? "text-primary" : "text-muted-foreground/50")} />
@@ -326,10 +327,10 @@ export default function AdminLayout({
           })}
         </nav>
 
-        <div className="border-t border-border/40 p-3">
+        <div className="border-t border-white/[0.06] p-3">
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <Avatar className="h-9 w-9 border border-border/40">
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+            <Avatar className="h-9 w-9 border border-white/[0.08] shadow-[0_0_12px_-2px_hsl(var(--primary)/0.2)]">
+              <AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
                 {initials || "AD"}
               </AvatarFallback>
             </Avatar>
@@ -348,18 +349,18 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col min-w-0">
-        <header className="flex h-16 items-center gap-3 border-b border-border/40 bg-card/60 px-4 premium-backdrop lg:px-6">
+      <div className="relative z-10 flex flex-1 flex-col min-w-0">
+        <header className="flex h-16 items-center gap-3 border-b border-white/[0.06] bg-card/50 backdrop-blur-xl px-4 lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex-1">
             <p className="text-sm font-semibold text-foreground">
-              {greeting}, {profile.full_name.split(" ")[0]}
+              {greeting}, <span className="gradient-text">{profile.full_name.split(" ")[0]}</span>
             </p>
-            <p className="text-xs text-muted-foreground">Welcome to Click2Naukari</p>
+            <p className="text-xs text-muted-foreground/80">Welcome to Click2Naukari</p>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary backdrop-blur-sm">
             <Shield className="h-3 w-3" /> {isManager ? "Manager" : "Admin"}
           </span>
         </header>

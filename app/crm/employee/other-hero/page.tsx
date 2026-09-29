@@ -46,9 +46,9 @@ export default function EmployeeOtherHeroPage() {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="max-w-md text-center">
-          <Building2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <h2 className="text-lg font-semibold text-slate-700">Not Available</h2>
-          <p className="mt-2 text-sm text-slate-500">
+          <Building2 className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+          <h2 className="text-lg font-semibold text-foreground">Not Available</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
             Other Hero is not available for {product.name}.
           </p>
           <Link href="/crm/employee" className="mt-4 inline-block">
@@ -73,25 +73,25 @@ export default function EmployeeOtherHeroPage() {
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-800">Other Hero</h2>
-        <p className="text-sm text-slate-400">{total} leads marked as Other Hero in {product.name}</p>
+        <h2 className="text-lg font-bold text-foreground">Other Hero</h2>
+        <p className="text-sm text-muted-foreground/70">{total} leads marked as Other Hero in {product.name}</p>
       </div>
 
-      <Card className="border-slate-200">
+      <Card className="border-white/[0.08]">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
           ) : leads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Star className="mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-medium text-slate-500">No Other Hero leads</p>
-              <p className="text-xs text-slate-400">Leads marked as Other Hero will appear here.</p>
+              <Star className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">No Other Hero leads</p>
+              <p className="text-xs text-muted-foreground/70">Leads marked as Other Hero will appear here.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                  <tr className="border-b border-white/[0.06] text-left text-xs font-medium text-muted-foreground/70">
                     <th className="px-4 py-3">Driver Name</th>
                     <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3">Platform</th>
@@ -102,22 +102,22 @@ export default function EmployeeOtherHeroPage() {
                 </thead>
                 <tbody>
                   {leads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                    <tr key={lead.id} className="border-b border-white/[0.04] hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <Avatar className="h-8 w-8"><AvatarFallback className="bg-indigo-50 text-xs font-semibold text-indigo-700">{lead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                          <span className="font-medium text-slate-700">{lead.name}</span>
+                          <Avatar className="h-8 w-8"><AvatarFallback className="bg-chart-4/10 text-xs font-semibold text-chart-4">{lead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                          <span className="font-medium text-foreground">{lead.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{lead.phone}</td>
-                      <td className="px-4 py-3 text-slate-600">{lead.platform || "—"}</td>
-                      <td className="px-4 py-3 text-slate-600">{lead.city || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{format(new Date(lead.updated_at), "dd MMM yyyy")}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.phone}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.platform || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.city || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{format(new Date(lead.updated_at), "dd MMM yyyy")}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)}><Phone className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => window.open(`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50"><Eye className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-chart-2 hover:bg-chart-2/10" onClick={() => handleCall(lead)}><Phone className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-success-foreground hover:bg-success/15" onClick={() => window.open(`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10"><Eye className="h-4 w-4" /></Button>
                         </div>
                       </td>
                     </tr>
@@ -131,7 +131,7 @@ export default function EmployeeOtherHeroPage() {
 
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">Page {page + 1} of {totalPages}</p>
+          <p className="text-xs text-muted-foreground/70">Page {page + 1} of {totalPages}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
             <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>

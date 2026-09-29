@@ -315,34 +315,34 @@ export default function EmployeeLeadsPage() {
       <div className="space-y-4 p-4 lg:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">All Leads</h2>
-            <p className="text-sm text-slate-400">{total} leads assigned to you in {product.name}</p>
+            <h2 className="text-lg font-bold text-foreground">All Leads</h2>
+            <p className="text-sm text-muted-foreground/70">{total} leads assigned to you in {product.name}</p>
           </div>
           {selectedIds.size > 0 && (
-            <span className="text-sm font-medium text-blue-600">{selectedIds.size} selected</span>
+            <span className="text-sm font-medium text-primary">{selectedIds.size} selected</span>
           )}
         </div>
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
             <Input
               placeholder="Search name, phone, vehicle, DL, license..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="border-slate-200 pl-9"
+              className="border-white/[0.08] pl-9"
             />
           </div>
           <Select value={cityFilter} onValueChange={setCityFilter}>
-            <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="All Cities" /></SelectTrigger>
+            <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="All Cities" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Cities</SelectItem>
               {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="All Status" /></SelectTrigger>
+            <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="All Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Status</SelectItem>
               <SelectItem value="RINGING">Ringing</SelectItem>
@@ -353,21 +353,21 @@ export default function EmployeeLeadsPage() {
         </div>
 
         {/* Leads Table */}
-        <Card className="border-slate-200">
+        <Card className="border-white/[0.08]">
           <CardContent className="p-0">
             {loading ? (
               <div className="space-y-2 p-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
             ) : leads.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16">
-                <Users className="mb-3 h-10 w-10 text-slate-300" />
-                <p className="text-sm font-medium text-slate-500">No leads found</p>
-                <p className="text-xs text-slate-400">Try adjusting your filters.</p>
+                <Users className="mb-3 h-10 w-10 text-muted-foreground/50" />
+                <p className="text-sm font-medium text-muted-foreground">No leads found</p>
+                <p className="text-xs text-muted-foreground/70">Try adjusting your filters.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                    <tr className="border-b border-white/[0.06] text-left text-xs font-medium text-muted-foreground/70">
                       <th className="px-3 py-3 w-10">
                         <Checkbox
                           checked={leads.length > 0 && selectedIds.size === leads.length}
@@ -387,7 +387,7 @@ export default function EmployeeLeadsPage() {
                   </thead>
                   <tbody>
                     {leads.map((lead) => (
-                      <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                      <tr key={lead.id} className="border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors">
                         <td className="px-3 py-3">
                           <Checkbox
                             checked={selectedIds.has(lead.id)}
@@ -397,25 +397,25 @@ export default function EmployeeLeadsPage() {
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2.5">
                             <Avatar className="h-8 w-8">
-                              <AvatarFallback className="bg-blue-50 text-xs font-semibold text-blue-700">
+                              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                                 {lead.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="font-medium text-slate-700">{lead.name}</span>
+                            <span className="font-medium text-foreground">{lead.name}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-slate-600">{lead.phone}</td>
-                        <td className="px-3 py-3 text-slate-600">{lead.vehicle_no || "—"}</td>
-                        <td className="px-3 py-3 text-slate-600">{lead.dl_no || "—"}</td>
-                        <td className="px-3 py-3 text-slate-600">{lead.total_trips != null ? lead.total_trips : "—"}</td>
-                        <td className="px-3 py-3 text-slate-600">{lead.license_no || "—"}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{lead.phone}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{lead.vehicle_no || "—"}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{lead.dl_no || "—"}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{lead.total_trips != null ? lead.total_trips : "—"}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{lead.license_no || "—"}</td>
                         <td className="px-3 py-3">
                           <Select
                             value={lead.status}
                             onValueChange={(v) => handleInlineStatusChange(lead.id, v)}
                             disabled={inlineStatusSaving === lead.id}
                           >
-                            <SelectTrigger className="h-8 w-[120px] border-slate-200 text-xs font-medium">
+                            <SelectTrigger className="h-8 w-[120px] border-white/[0.08] text-xs font-medium">
                               {inlineStatusSaving === lead.id ? (
                                 <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving...</span>
                               ) : (
@@ -431,14 +431,14 @@ export default function EmployeeLeadsPage() {
                         </td>
                         <td className="px-3 py-3">
                           <a href={`tel:${lead.phone}`}>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" title="Call">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-chart-2 hover:bg-chart-2/10" title="Call">
                               <Phone className="h-4 w-4" />
                             </Button>
                           </a>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
                               <Eye className="h-4 w-4" />
                             </Button>
                           </div>
@@ -455,7 +455,7 @@ export default function EmployeeLeadsPage() {
         {/* Pagination */}
         {total > PAGE_SIZE && (
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground/70">
               Page {page + 1} of {totalPages} — {total} total
             </p>
             <div className="flex gap-2">
@@ -475,13 +475,13 @@ export default function EmployeeLeadsPage() {
               <div className="mt-4 space-y-4 overflow-y-auto">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-blue-100 text-base font-semibold text-blue-700">
+                    <AvatarFallback className="bg-primary/15 text-base font-semibold text-primary">
                       {viewLead.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <div className="text-lg font-semibold text-slate-800">{viewLead.name}</div>
-                    <div className="text-sm text-slate-400">{viewLead.phone}</div>
+                    <div className="text-lg font-semibold text-foreground">{viewLead.name}</div>
+                    <div className="text-sm text-muted-foreground/70">{viewLead.phone}</div>
                   </div>
                 </div>
 
@@ -502,13 +502,13 @@ export default function EmployeeLeadsPage() {
 
                 {viewLead.remarks && (
                   <div>
-                    <div className="text-xs font-medium text-slate-400">Notes</div>
-                    <div className="mt-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{viewLead.remarks}</div>
+                    <div className="text-xs font-medium text-muted-foreground/70">Notes</div>
+                    <div className="mt-1 rounded-lg bg-white/[0.04] p-3 text-sm text-muted-foreground">{viewLead.remarks}</div>
                   </div>
                 )}
 
                 <div className="flex gap-2 pt-2">
-                  <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}>
+                  <Button className="flex-1 gap-1.5 bg-chart-2 hover:bg-chart-2/80" onClick={() => handleCall(viewLead)}>
                     <Phone className="h-4 w-4" /> Call
                   </Button>
                 </div>
@@ -535,10 +535,10 @@ export default function EmployeeLeadsPage() {
     <div className="space-y-4 p-4 lg:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">All Leads</h2>
-          <p className="text-sm text-slate-400">{total} leads assigned to you in {product.name}</p>
+          <h2 className="text-lg font-bold text-foreground">All Leads</h2>
+          <p className="text-sm text-muted-foreground/70">{total} leads assigned to you in {product.name}</p>
         </div>
-        <Button onClick={() => setAddLeadOpen(true)} className="gap-1.5 bg-blue-600 hover:bg-blue-700">
+        <Button onClick={() => setAddLeadOpen(true)} className="gap-1.5 bg-primary hover:bg-primary/90">
           <Plus className="h-4 w-4" /> Add Lead
         </Button>
       </div>
@@ -546,16 +546,16 @@ export default function EmployeeLeadsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
           <Input
             placeholder="Search by name or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border-slate-200 pl-9"
+            className="border-white/[0.08] pl-9"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px] border-slate-200"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-[140px] border-white/[0.08]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
             {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
@@ -563,7 +563,7 @@ export default function EmployeeLeadsPage() {
         </Select>
         {!isSinglePlatform && (
         <Select value={platformFilter} onValueChange={setPlatformFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Platforms</SelectItem>
             {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
@@ -571,21 +571,21 @@ export default function EmployeeLeadsPage() {
         </Select>
         )}
         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Source" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Sources</SelectItem>
             {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={cityFilter} onValueChange={setCityFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="City" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="City" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Cities</SelectItem>
             {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[110px] border-slate-200"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger className="w-[110px] border-white/[0.08]"><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Types</SelectItem>
             <SelectItem value="ULP">ULP</SelectItem>
@@ -596,21 +596,21 @@ export default function EmployeeLeadsPage() {
       </div>
 
       {/* Leads Table */}
-      <Card className="border-slate-200">
+      <Card className="border-white/[0.08]">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
           ) : leads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Users className="mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-medium text-slate-500">No leads found</p>
-              <p className="text-xs text-slate-400">Try adjusting your filters or add a new lead.</p>
+              <Users className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">No leads found</p>
+              <p className="text-xs text-muted-foreground/70">Try adjusting your filters or add a new lead.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                  <tr className="border-b border-white/[0.06] text-left text-xs font-medium text-muted-foreground/70">
                     <th className="px-4 py-3">Driver Name</th>
                     <th className="px-4 py-3">Phone</th>
                     {!isSinglePlatform && <th className="px-4 py-3">Platform</th>}
@@ -623,44 +623,44 @@ export default function EmployeeLeadsPage() {
                 </thead>
                 <tbody>
                   {leads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                    <tr key={lead.id} className="border-b border-white/[0.04] hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-blue-50 text-xs font-semibold text-blue-700">
+                            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                               {lead.name.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium text-slate-700">{lead.name}</span>
+                          <span className="font-medium text-foreground">{lead.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{lead.phone}</td>
-                      {!isSinglePlatform && <td className="px-4 py-3 text-slate-600">{lead.platform || "—"}</td>}
-                      <td className="px-4 py-3 text-slate-600">{lead.source || "—"}</td>
-                      <td className="px-4 py-3 text-slate-600">{lead.city || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.phone}</td>
+                      {!isSinglePlatform && <td className="px-4 py-3 text-muted-foreground">{lead.platform || "—"}</td>}
+                      <td className="px-4 py-3 text-muted-foreground">{lead.source || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.city || "—"}</td>
                       <td className="px-4 py-3">
                         <StatusPill status={lead.status} />
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {lead.next_followup_at ? format(new Date(lead.next_followup_at), "dd MMM, HH:mm") : "—"}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => { setViewLead(lead); loadPlatformStatuses(lead.id, "detail"); }} title="View">
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)} title="Call">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-chart-2 hover:bg-chart-2/10" onClick={() => handleCall(lead)} title="Call">
                             <Phone className="h-4 w-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleWhatsApp(lead)} title="WhatsApp">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-success-foreground hover:bg-success/15" onClick={() => handleWhatsApp(lead)} title="WhatsApp">
                             <MessageCircle className="h-4 w-4" />
                           </Button>
                           {isCar && (
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-600 hover:bg-amber-50" onClick={() => setPaymentLead(lead)} title="Payment">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-warning-foreground hover:bg-warning/15" onClick={() => setPaymentLead(lead)} title="Payment">
                               <Wallet className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => openStatus(lead)} title="Update Status">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => openStatus(lead)} title="Update Status">
                             <Edit className="h-4 w-4" />
                           </Button>
                         </div>
@@ -677,7 +677,7 @@ export default function EmployeeLeadsPage() {
       {/* Pagination */}
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted-foreground/70">
             Page {page + 1} of {totalPages} — {total} total
           </p>
           <div className="flex gap-2">
@@ -786,13 +786,13 @@ function LeadDialogs({
             <div className="mt-4 space-y-4 overflow-y-auto">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
-                  <AvatarFallback className="bg-blue-100 text-base font-semibold text-blue-700">
+                  <AvatarFallback className="bg-primary/15 text-base font-semibold text-primary">
                     {viewLead.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="text-lg font-semibold text-slate-800">{viewLead.name}</div>
-                  <div className="text-sm text-slate-400">{viewLead.phone}</div>
+                  <div className="text-lg font-semibold text-foreground">{viewLead.name}</div>
+                  <div className="text-sm text-muted-foreground/70">{viewLead.phone}</div>
                 </div>
               </div>
 
@@ -811,18 +811,18 @@ function LeadDialogs({
 
               {viewLead.remarks && (
                 <div>
-                  <div className="text-xs font-medium text-slate-400">Notes</div>
-                  <div className="mt-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{viewLead.remarks}</div>
+                  <div className="text-xs font-medium text-muted-foreground/70">Notes</div>
+                  <div className="mt-1 rounded-lg bg-white/[0.04] p-3 text-sm text-muted-foreground">{viewLead.remarks}</div>
                 </div>
               )}
 
               <div>
-                <div className="text-xs font-medium text-slate-400">Platform Done</div>
+                <div className="text-xs font-medium text-muted-foreground/70">Platform Done</div>
                 <div className="mt-2 space-y-2">
                   {platformConfig.map((pc) => (
-                    <div key={pc.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                      <span className="text-sm text-slate-600">{pc.name}</span>
-                      <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-slate-700" : "text-slate-400"}`}>
+                    <div key={pc.name} className="flex items-center justify-between rounded-lg border border-white/[0.06] px-3 py-2">
+                      <span className="text-sm text-muted-foreground">{pc.name}</span>
+                      <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-foreground" : "text-muted-foreground/70"}`}>
                         {detailPlatformStatuses[pc.name] ? (PLATFORM_STATUS_LABELS[detailPlatformStatuses[pc.name]] || detailPlatformStatuses[pc.name]) : "Pending"}
                       </span>
                     </div>
@@ -831,10 +831,10 @@ function LeadDialogs({
               </div>
 
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}>
+                <Button className="flex-1 gap-1.5 bg-chart-2 hover:bg-chart-2/80" onClick={() => handleCall(viewLead)}>
                   <Phone className="h-4 w-4" /> Call
                 </Button>
-                <Button className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleWhatsApp(viewLead)}>
+                <Button className="flex-1 gap-1.5 bg-success-foreground/20 hover:bg-success-foreground/30 border border-success/30 text-success-foreground" onClick={() => handleWhatsApp(viewLead)}>
                   <MessageCircle className="h-4 w-4" /> WhatsApp
                 </Button>
               </div>
@@ -850,19 +850,19 @@ function LeadDialogs({
             <DialogTitle>Update Status</DialogTitle>
           </DialogHeader>
           {platformStatusLoading ? (
-            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground/70" /></div>
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-slate-500">Lead</label>
-                <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+                <label className="text-xs font-medium text-muted-foreground">Lead</label>
+                <div className="mt-1 text-sm font-medium text-foreground">{statusLead?.name} — {statusLead?.phone}</div>
               </div>
               {platformConfig.map((pc) => (
-                <div key={pc.name} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div key={pc.name} className="rounded-lg border border-white/[0.08] bg-white/[0.04] p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-700">{pc.name}</span>
+                    <span className="text-sm font-semibold text-foreground">{pc.name}</span>
                     {platformStatuses[pc.name] && (
-                      <span className="text-xs text-slate-400">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
+                      <span className="text-xs text-muted-foreground/70">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -870,7 +870,7 @@ function LeadDialogs({
                       value={platformStatuses[pc.name] || undefined}
                       onValueChange={(v) => setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))}
                     >
-                      <SelectTrigger className="flex-1 border-slate-200"><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectTrigger className="flex-1 border-white/[0.08]"><SelectValue placeholder="Select status" /></SelectTrigger>
                       <SelectContent>
                         {pc.statuses.map((s) => (
                           <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>
@@ -881,7 +881,7 @@ function LeadDialogs({
                       size="sm"
                       onClick={() => handlePlatformStatusUpdate(pc.name)}
                       disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       {platformStatusSaving === pc.name ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
                     </Button>
@@ -891,18 +891,18 @@ function LeadDialogs({
               {Object.values(platformStatuses).some((s) => s === "CALLBACK" || s === "INTERESTED") && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-slate-500">Follow-up Date *</label>
-                    <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-slate-200" />
+                    <label className="text-xs font-medium text-muted-foreground">Follow-up Date *</label>
+                    <Input type="date" value={callbackDate} onChange={(e) => setCallbackDate(e.target.value)} className="mt-1 border-white/[0.08]" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-slate-500">Follow-up Time *</label>
-                    <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-slate-200" />
+                    <label className="text-xs font-medium text-muted-foreground">Follow-up Time *</label>
+                    <Input type="time" value={callbackTime} onChange={(e) => setCallbackTime(e.target.value)} className="mt-1 border-white/[0.08]" />
                   </div>
                 </div>
               )}
               <div>
-                <label className="text-xs font-medium text-slate-500">Remarks</label>
-                <Textarea value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Add remarks (optional)" rows={2} className="mt-1 border-slate-200" />
+                <label className="text-xs font-medium text-muted-foreground">Remarks</label>
+                <Textarea value={statusRemarks} onChange={(e) => setStatusRemarks(e.target.value)} placeholder="Add remarks (optional)" rows={2} className="mt-1 border-white/[0.08]" />
               </div>
               <Button variant="outline" className="w-full" onClick={() => setStatusLead(null)}>Close</Button>
             </div>
@@ -1007,31 +1007,31 @@ function LeadDialogs({
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="mt-0.5 text-sm font-medium text-slate-700">{value}</div>
+    <div className="rounded-lg bg-white/[0.04] p-3">
+      <div className="text-xs text-muted-foreground/70">{label}</div>
+      <div className="mt-0.5 text-sm font-medium text-foreground">{value}</div>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    NEW: "bg-slate-100 text-slate-600",
-    RINGING: "bg-amber-100 text-amber-700",
-    INTERESTED: "bg-green-100 text-green-700",
-    CALLBACK: "bg-blue-100 text-blue-700",
-    ID_DONE: "bg-emerald-100 text-emerald-700",
-    ID_BLOCK: "bg-red-100 text-red-700",
-    DOC_ISSUE: "bg-red-100 text-red-700",
-    VEHICLE_ISSUE: "bg-red-100 text-red-700",
-    OTHER_ISSUE: "bg-slate-100 text-slate-500",
-    OTHER_HERO: "bg-indigo-100 text-indigo-700",
-    ADMIN_REVIEW: "bg-slate-100 text-slate-500",
-    TAG_ADDED: "bg-blue-100 text-blue-700",
-    NOT_INTERESTED: "bg-slate-100 text-slate-500",
+    NEW: "bg-muted/40 text-muted-foreground",
+    RINGING: "bg-warning/15 text-warning-foreground",
+    INTERESTED: "bg-chart-2/15 text-chart-2",
+    CALLBACK: "bg-primary/15 text-primary",
+    ID_DONE: "bg-success/20 text-success-foreground",
+    ID_BLOCK: "bg-destructive/15 text-destructive",
+    DOC_ISSUE: "bg-destructive/15 text-destructive",
+    VEHICLE_ISSUE: "bg-destructive/15 text-destructive",
+    OTHER_ISSUE: "bg-muted/40 text-muted-foreground",
+    OTHER_HERO: "bg-chart-4/15 text-chart-4",
+    ADMIN_REVIEW: "bg-muted/40 text-muted-foreground",
+    TAG_ADDED: "bg-primary/15 text-primary",
+    NOT_INTERESTED: "bg-muted/40 text-muted-foreground",
   };
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] || "bg-slate-100 text-slate-500"}`}>
+    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] || "bg-muted/40 text-muted-foreground"}`}>
       {STATUS_LABELS[status as LeadStatus] || status}
     </span>
   );
@@ -1126,57 +1126,57 @@ function AddLeadDrawer({
         </SheetHeader>
         <div className="mt-4 space-y-4 overflow-y-auto">
           <div>
-            <label className="text-xs font-medium text-slate-500">Driver Name *</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter name" className="mt-1 border-slate-200" />
+            <label className="text-xs font-medium text-muted-foreground">Driver Name *</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter name" className="mt-1 border-white/[0.08]" />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">Phone Number *</label>
+            <label className="text-xs font-medium text-muted-foreground">Phone Number *</label>
             <Input
               value={phone}
               onChange={(e) => { setPhone(e.target.value); checkDuplicate(e.target.value); }}
               placeholder="Enter phone number"
-              className="mt-1 border-slate-200"
+              className="mt-1 border-white/[0.08]"
             />
             {dupLead && (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <div className="text-sm font-medium text-amber-800">Lead Already Exists</div>
-                <div className="text-xs text-amber-600">
+              <div className="mt-2 rounded-lg border border-warning/20 bg-warning/15 p-3">
+                <div className="text-sm font-medium text-warning-foreground">Lead Already Exists</div>
+                <div className="text-xs text-warning-foreground">
                   This phone number already exists for {product.name} as &quot;{dupLead.name}&quot;.
                 </div>
               </div>
             )}
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">Platform *</label>
+            <label className="text-xs font-medium text-muted-foreground">Platform *</label>
             <Select value={platform} onValueChange={setPlatform}>
-              <SelectTrigger className="mt-1 border-slate-200"><SelectValue placeholder="Select Platform" /></SelectTrigger>
+              <SelectTrigger className="mt-1 border-white/[0.08]"><SelectValue placeholder="Select Platform" /></SelectTrigger>
               <SelectContent>
                 {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">Source</label>
+            <label className="text-xs font-medium text-muted-foreground">Source</label>
             <Select value={source} onValueChange={setSource}>
-              <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1 border-white/[0.08]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">City</label>
+            <label className="text-xs font-medium text-muted-foreground">City</label>
             <Select value={city} onValueChange={setCity}>
-              <SelectTrigger className="mt-1 border-slate-200"><SelectValue placeholder="Select City" /></SelectTrigger>
+              <SelectTrigger className="mt-1 border-white/[0.08]"><SelectValue placeholder="Select City" /></SelectTrigger>
               <SelectContent>
                 {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">Status</label>
+            <label className="text-xs font-medium text-muted-foreground">Status</label>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="mt-1 border-slate-200"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1 border-white/[0.08]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {LEAD_STATUSES.filter((s) => s !== "ADMIN_REVIEW").map((s) => (
                   <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
@@ -1185,10 +1185,10 @@ function AddLeadDrawer({
             </Select>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-500">Notes</label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" className="mt-1 border-slate-200" />
+            <label className="text-xs font-medium text-muted-foreground">Notes</label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" className="mt-1 border-white/[0.08]" />
           </div>
-          <Button className="w-full gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={handleSave} disabled={saving || !!dupLead}>
+          <Button className="w-full gap-1.5 bg-primary hover:bg-primary/90" onClick={handleSave} disabled={saving || !!dupLead}>
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Plus className="h-4 w-4" /> Add Lead</>}
           </Button>
         </div>

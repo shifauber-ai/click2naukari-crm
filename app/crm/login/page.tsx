@@ -208,10 +208,11 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-secondary to-accent/30 p-4">
+    <div className="relative flex min-h-screen items-center justify-center p-4">
+      <div className="bg-orbs" />
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_0_32px_-4px_hsl(var(--primary)/0.4)]">
             <Phone className="h-8 w-8" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Click2Naukari</h1>
@@ -219,7 +220,7 @@ export default function LoginPage() {
             Sign in to your CRM workspace
           </p>
         </div>
-        <Card className="border-border/60 shadow-xl shadow-primary/5">
+        <Card className="shadow-[0_24px_64px_-12px_hsl(0_0%_0%/0.5)]">
           <CardHeader>
             <CardTitle className="text-xl">Welcome back</CardTitle>
             <CardDescription>

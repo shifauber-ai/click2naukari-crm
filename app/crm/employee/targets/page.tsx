@@ -83,10 +83,10 @@ export default function EmployeeTargetsPage() {
     <div className="space-y-6 p-4 lg:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">My Targets</h2>
-          <p className="text-sm text-slate-400">Performance targets for {product?.name}</p>
+          <h2 className="text-lg font-bold text-foreground">My Targets</h2>
+          <p className="text-sm text-muted-foreground/70">Performance targets for {product?.name}</p>
         </div>
-        <Badge variant="outline" className="border-slate-200 text-slate-600 w-fit">
+        <Badge variant="outline" className="border-white/[0.08] text-muted-foreground w-fit">
           <Target className="mr-1 h-3.5 w-3.5" />
           {totalTargets} Active Target{totalTargets !== 1 ? "s" : ""}
         </Badge>
@@ -95,7 +95,7 @@ export default function EmployeeTargetsPage() {
       {loading ? (
         <div className="space-y-4">
           {Array.from({ length: 2 }).map((_, i) => (
-            <Card key={i} className="border-slate-200">
+            <Card key={i} className="border-white/[0.08]">
               <CardContent className="p-5">
                 <Skeleton className="mb-4 h-6 w-40" />
                 <Skeleton className="mb-3 h-4 w-full" />
@@ -119,16 +119,16 @@ export default function EmployeeTargetsPage() {
               : "";
 
             return (
-              <Card key={gi} className="border-slate-200">
+              <Card key={gi} className="border-white/[0.08]">
                 <CardContent className="p-5">
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     {group.city && (
-                      <Badge variant="outline" className="border-slate-200 text-slate-600">
+                      <Badge variant="outline" className="border-white/[0.08] text-muted-foreground">
                         <MapPin className="mr-1 h-3 w-3" /> {group.city.city_name}
                       </Badge>
                     )}
-                    <Badge variant="outline" className="border-slate-200 text-slate-600">{periodLabel}</Badge>
-                    <Badge variant="outline" className="border-slate-200 text-slate-600">{dateRange}</Badge>
+                    <Badge variant="outline" className="border-white/[0.08] text-muted-foreground">{periodLabel}</Badge>
+                    <Badge variant="outline" className="border-white/[0.08] text-muted-foreground">{dateRange}</Badge>
                   </div>
 
                   <div className="space-y-3">
@@ -143,42 +143,42 @@ export default function EmployeeTargetsPage() {
                         pct >= 50 ? "bg-amber-500" : "bg-rose-500";
 
                       return (
-                        <div key={t.id} className="rounded-lg border border-slate-100 p-3">
+                        <div key={t.id} className="rounded-lg border border-white/[0.06] p-3">
                           <div className="mb-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-slate-700">{label}</span>
+                              <span className="text-sm font-semibold text-foreground">{label}</span>
                               {(t.target_type === "ULP" || t.target_type === "FT") && (
-                                <Badge variant="outline" className="border-slate-200 text-slate-600 text-xs">
+                                <Badge variant="outline" className="border-white/[0.08] text-muted-foreground text-xs">
                                   {t.target_type}
                                 </Badge>
                               )}
                               {pct >= 100 && (
-                                <Badge className="bg-emerald-100 text-emerald-700 text-xs">
+                                <Badge className="bg-success/20 text-success-foreground text-xs">
                                   <CheckCircle2 className="mr-0.5 h-3 w-3" /> Achieved
                                 </Badge>
                               )}
                             </div>
-                            <span className="flex items-center gap-1 text-sm font-bold text-slate-700">
+                            <span className="flex items-center gap-1 text-sm font-bold text-foreground">
                               <TrendingUp className="h-3.5 w-3.5" />{pct}%
                             </span>
                           </div>
 
                           <div className="mb-2 grid grid-cols-3 gap-2">
-                            <div className="rounded bg-slate-50 p-2 text-center">
-                              <div className="text-xs text-slate-400">Target</div>
-                              <div className="font-bold text-slate-700">{fmt(t.target_value)}</div>
+                            <div className="rounded bg-white/[0.04] p-2 text-center">
+                              <div className="text-xs text-muted-foreground/70">Target</div>
+                              <div className="font-bold text-foreground">{fmt(t.target_value)}</div>
                             </div>
-                            <div className="rounded bg-emerald-50 p-2 text-center">
-                              <div className="text-xs text-slate-400">Achieved</div>
-                              <div className="font-bold text-emerald-600">{fmt(t.achievement.achieved)}</div>
+                            <div className="rounded bg-success/15 p-2 text-center">
+                              <div className="text-xs text-muted-foreground/70">Achieved</div>
+                              <div className="font-bold text-success-foreground">{fmt(t.achievement.achieved)}</div>
                             </div>
-                            <div className="rounded bg-amber-50 p-2 text-center">
-                              <div className="text-xs text-slate-400">Remaining</div>
-                              <div className="font-bold text-amber-600">{fmt(t.achievement.remaining)}</div>
+                            <div className="rounded bg-warning/15 p-2 text-center">
+                              <div className="text-xs text-muted-foreground/70">Remaining</div>
+                              <div className="font-bold text-warning-foreground">{fmt(t.achievement.remaining)}</div>
                             </div>
                           </div>
 
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-muted/40">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                               style={{ width: `${Math.min(100, pct)}%` }}

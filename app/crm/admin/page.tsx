@@ -349,7 +349,7 @@ export default function AdminDashboard() {
       />
 
       {range === "custom" && (
-        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3">
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-white/[0.06] bg-card/65 backdrop-blur-xl p-3">
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Start Date</label>
             <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-40" />
@@ -384,7 +384,7 @@ export default function AdminDashboard() {
 
           {/* Charts */}
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-border/40 shadow-sm">
+            <Card>
               <CardHeader><CardTitle className="text-base">Daily Leads & ID Done</CardTitle></CardHeader>
               <CardContent>
                 {dailyData.length > 0 ? (
@@ -403,7 +403,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/40 shadow-sm">
+            <Card>
               <CardHeader><CardTitle className="text-base">Status Distribution</CardTitle></CardHeader>
               <CardContent>
                 {statusData.length > 0 ? (
@@ -424,7 +424,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Product Performance Table */}
-          <Card className="border-border/40 shadow-sm">
+          <Card>
             <CardHeader><CardTitle className="text-base">Product Performance</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto scrollbar-thin">
               {productData.length > 0 ? (
@@ -467,7 +467,7 @@ export default function AdminDashboard() {
           {/* Leaderboards */}
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Caller Leaderboard */}
-            <Card className="border-border/40 shadow-sm">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Trophy className="h-4 w-4 text-warning-foreground" /> Caller Leaderboard
@@ -475,9 +475,9 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {employeeData.length > 0 ? employeeData.slice(0, 10).map((emp, i) => (
-                  <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 hover:bg-secondary/50 transition-colors">
+                  <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] p-3 hover:bg-white/[0.04] transition-colors">
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-orange-500/20 text-orange-600" : "bg-secondary text-muted-foreground"
+                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-chart-3/15 text-chart-3" : "bg-secondary text-muted-foreground"
                     }`}>
                       {i < 3 ? <Medal className="h-4 w-4" /> : `#${i + 1}`}
                     </div>
@@ -495,7 +495,7 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Product Leaderboard */}
-            <Card className="border-border/40 shadow-sm">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Award className="h-4 w-4 text-primary" /> Product Leaderboard
@@ -503,9 +503,9 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {productLeaderboard.length > 0 ? productLeaderboard.map((prod, i) => (
-                  <div key={prod.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 hover:bg-secondary/50 transition-colors">
+                  <div key={prod.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] p-3 hover:bg-white/[0.04] transition-colors">
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-orange-500/20 text-orange-600" : "bg-secondary text-muted-foreground"
+                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-chart-3/15 text-chart-3" : "bg-secondary text-muted-foreground"
                     }`}>
                       {i < 3 ? <Award className="h-4 w-4" /> : `#${i + 1}`}
                     </div>
@@ -524,7 +524,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Platform Breakdown */}
-          <Card className="border-border/40 shadow-sm">
+          <Card>
             <CardHeader><CardTitle className="text-base">Platform-wise Breakdown</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto scrollbar-thin">
               <Table>

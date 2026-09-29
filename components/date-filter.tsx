@@ -43,8 +43,8 @@ export function DateFilter({ range, onRangeChange }: DateFilterProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select value={preset} onValueChange={handlePresetChange}>
-        <SelectTrigger className="w-[140px] border-slate-200">
-          <Calendar className="mr-1 h-3.5 w-3.5 text-slate-400" />
+        <SelectTrigger className="w-[140px] border-white/[0.08]">
+          <Calendar className="mr-1 h-3.5 w-3.5 text-muted-foreground/70" />
           <SelectValue placeholder="Date" />
         </SelectTrigger>
         <SelectContent>
@@ -62,23 +62,23 @@ export function DateFilter({ range, onRangeChange }: DateFilterProps) {
             type="date"
             value={customStart}
             onChange={(e) => setCustomStart(e.target.value)}
-            className="w-[140px] border-slate-200"
+            className="w-[140px] border-white/[0.08]"
             placeholder="Start"
           />
           <Input
             type="date"
             value={customEnd}
             onChange={(e) => setCustomEnd(e.target.value)}
-            className="w-[140px] border-slate-200"
+            className="w-[140px] border-white/[0.08]"
             placeholder="End"
           />
-          <Button size="sm" variant="default" onClick={handleApplyCustom} className="bg-blue-600 hover:bg-blue-700">
+          <Button size="sm" variant="default" onClick={handleApplyCustom} className="bg-primary hover:bg-primary/90">
             Apply
           </Button>
         </>
       )}
       {(range.start || range.end) && (
-        <Button size="sm" variant="ghost" onClick={handleClear} className="text-slate-500">
+        <Button size="sm" variant="ghost" onClick={handleClear} className="text-muted-foreground">
           Clear
         </Button>
       )}

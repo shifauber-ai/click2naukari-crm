@@ -241,7 +241,7 @@ export default function TagAddedPage() {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-blue-50 text-xs font-semibold text-blue-700">
+                          <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                             {lead.name.charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
@@ -332,13 +332,13 @@ export default function TagAddedPage() {
             <div className="mt-4 space-y-4 overflow-y-auto">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
-                  <AvatarFallback className="bg-blue-100 text-base font-semibold text-blue-700">
+                  <AvatarFallback className="bg-primary/15 text-base font-semibold text-primary">
                     {viewLead.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="text-lg font-semibold text-slate-800">{viewLead.name}</div>
-                  <div className="text-sm text-slate-400">{viewLead.phone}</div>
+                  <div className="text-lg font-semibold text-foreground">{viewLead.name}</div>
+                  <div className="text-sm text-muted-foreground/70">{viewLead.phone}</div>
                 </div>
               </div>
 
@@ -353,18 +353,18 @@ export default function TagAddedPage() {
 
               {viewLead.remarks && (
                 <div>
-                  <div className="text-xs font-medium text-slate-400">Notes</div>
-                  <div className="mt-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{viewLead.remarks}</div>
+                  <div className="text-xs font-medium text-muted-foreground/70">Notes</div>
+                  <div className="mt-1 rounded-lg bg-white/[0.04] p-3 text-sm text-muted-foreground">{viewLead.remarks}</div>
                 </div>
               )}
 
               <div>
-                <div className="text-xs font-medium text-slate-400">Platform Done</div>
+                <div className="text-xs font-medium text-muted-foreground/70">Platform Done</div>
                 <div className="mt-2 space-y-2">
                   {PLATFORM_CONFIG.map((pc) => (
-                    <div key={pc.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                      <span className="text-sm text-slate-600">{pc.name}</span>
-                      <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-slate-700" : "text-slate-400"}`}>
+                    <div key={pc.name} className="flex items-center justify-between rounded-lg border border-white/[0.06] px-3 py-2">
+                      <span className="text-sm text-muted-foreground">{pc.name}</span>
+                      <span className={`text-sm font-medium ${detailPlatformStatuses[pc.name] ? "text-foreground" : "text-muted-foreground/70"}`}>
                         {detailPlatformStatuses[pc.name] ? (PLATFORM_STATUS_LABELS[detailPlatformStatuses[pc.name]] || detailPlatformStatuses[pc.name]) : "Pending"}
                       </span>
                     </div>
@@ -373,10 +373,10 @@ export default function TagAddedPage() {
               </div>
 
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}>
+                <Button className="flex-1 gap-1.5 bg-chart-2 hover:bg-chart-2/80" onClick={() => handleCall(viewLead)}>
                   <Phone className="h-4 w-4" /> Call
                 </Button>
-                <Button className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleWhatsApp(viewLead)}>
+                <Button className="flex-1 gap-1.5 bg-success-foreground/20 hover:bg-success-foreground/30 border border-success/30 text-success-foreground" onClick={() => handleWhatsApp(viewLead)}>
                   <MessageCircle className="h-4 w-4" /> WhatsApp
                 </Button>
               </div>
@@ -392,19 +392,19 @@ export default function TagAddedPage() {
             <DialogTitle>Update Status</DialogTitle>
           </DialogHeader>
           {platformStatusLoading ? (
-            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground/70" /></div>
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-slate-500">Lead</label>
-                <div className="mt-1 text-sm font-medium text-slate-700">{statusLead?.name} — {statusLead?.phone}</div>
+                <label className="text-xs font-medium text-muted-foreground">Lead</label>
+                <div className="mt-1 text-sm font-medium text-foreground">{statusLead?.name} — {statusLead?.phone}</div>
               </div>
               {PLATFORM_CONFIG.map((pc) => (
-                <div key={pc.name} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div key={pc.name} className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-700">{pc.name}</span>
+                    <span className="text-sm font-semibold text-foreground">{pc.name}</span>
                     {platformStatuses[pc.name] && (
-                      <span className="text-xs text-slate-400">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
+                      <span className="text-xs text-muted-foreground/70">Current: {PLATFORM_STATUS_LABELS[platformStatuses[pc.name]] || platformStatuses[pc.name]}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -412,7 +412,7 @@ export default function TagAddedPage() {
                       value={platformStatuses[pc.name] || undefined}
                       onValueChange={(v) => setPlatformStatuses((prev) => ({ ...prev, [pc.name]: v }))}
                     >
-                      <SelectTrigger className="flex-1 border-slate-200"><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectTrigger className="flex-1 border-white/[0.08]"><SelectValue placeholder="Select status" /></SelectTrigger>
                       <SelectContent>
                         {pc.statuses.map((s) => (
                           <SelectItem key={s} value={s}>{PLATFORM_STATUS_LABELS[s] || s}</SelectItem>
@@ -423,7 +423,7 @@ export default function TagAddedPage() {
                       size="sm"
                       onClick={() => handlePlatformStatusUpdate(pc.name)}
                       disabled={platformStatusSaving === pc.name || !platformStatuses[pc.name]}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       {platformStatusSaving === pc.name ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
                     </Button>
@@ -524,9 +524,9 @@ export default function TagAddedPage() {
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="mt-0.5 text-sm font-medium text-slate-700">{value}</div>
+    <div className="rounded-lg bg-white/[0.04] p-3">
+      <div className="text-xs text-muted-foreground/70">{label}</div>
+      <div className="mt-0.5 text-sm font-medium text-foreground">{value}</div>
     </div>
   );
 }

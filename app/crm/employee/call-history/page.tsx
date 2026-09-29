@@ -95,27 +95,27 @@ export default function EmployeeCallHistoryPage() {
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-800">Call History</h2>
-        <p className="text-sm text-slate-400">Your call records for {product.name}</p>
+        <h2 className="text-lg font-bold text-foreground">Call History</h2>
+        <p className="text-sm text-muted-foreground/70">Your call records for {product.name}</p>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Total Calls" value={stats.total} icon={Phone} color="text-blue-600" bg="bg-blue-50" />
-        <StatCard label="Incoming" value={stats.incoming} icon={PhoneIncoming} color="text-orange-600" bg="bg-orange-50" />
-        <StatCard label="Outgoing" value={stats.outgoing} icon={PhoneOutgoing} color="text-teal-600" bg="bg-teal-50" />
-        <StatCard label="Answered" value={stats.answered} icon={Phone} color="text-green-600" bg="bg-green-50" />
-        <StatCard label="Missed" value={stats.missed} icon={Phone} color="text-red-600" bg="bg-red-50" />
+        <StatCard label="Total Calls" value={stats.total} icon={Phone} color="text-primary" bg="bg-primary/10" />
+        <StatCard label="Incoming" value={stats.incoming} icon={PhoneIncoming} color="text-chart-3" bg="bg-chart-3/10" />
+        <StatCard label="Outgoing" value={stats.outgoing} icon={PhoneOutgoing} color="text-primary" bg="bg-primary/10" />
+        <StatCard label="Answered" value={stats.answered} icon={Phone} color="text-chart-2" bg="bg-chart-2/10" />
+        <StatCard label="Missed" value={stats.missed} icon={Phone} color="text-destructive" bg="bg-destructive/10" />
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input placeholder="Search by phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="border-slate-200 pl-9" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+          <Input placeholder="Search by phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="border-white/[0.08] pl-9" />
         </div>
         <Select value={directionFilter} onValueChange={setDirectionFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Direction" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Direction" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Directions</SelectItem>
             <SelectItem value="INCOMING">Incoming</SelectItem>
@@ -123,7 +123,7 @@ export default function EmployeeCallHistoryPage() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Call Status" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Call Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
             <SelectItem value="INITIATED">Initiated</SelectItem>
@@ -137,21 +137,21 @@ export default function EmployeeCallHistoryPage() {
       </div>
 
       {/* Call History Table */}
-      <Card className="border-slate-200">
+      <Card className="border-white/[0.08]">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
           ) : calls.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <Phone className="mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-medium text-slate-500">No call history</p>
-              <p className="text-xs text-slate-400">Your calls will appear here once you start calling leads.</p>
+              <Phone className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">No call history</p>
+              <p className="text-xs text-muted-foreground/70">Your calls will appear here once you start calling leads.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                  <tr className="border-b border-white/[0.06] text-left text-xs font-medium text-muted-foreground/70">
                     <th className="px-4 py-3">Date & Time</th>
                     <th className="px-4 py-3">Driver</th>
                     <th className="px-4 py-3">Phone</th>
@@ -163,18 +163,18 @@ export default function EmployeeCallHistoryPage() {
                 </thead>
                 <tbody>
                   {calls.map((call) => (
-                    <tr key={call.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                      <td className="px-4 py-3 text-xs text-slate-500">{format(new Date(call.call_timestamp), "dd MMM yyyy, HH:mm")}</td>
-                      <td className="px-4 py-3 text-slate-700">{call.lead?.name || "Unknown"}</td>
-                      <td className="px-4 py-3 text-slate-600">{call.phone_number}</td>
+                    <tr key={call.id} className="border-b border-white/[0.04] hover:bg-white/[0.04]">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{format(new Date(call.call_timestamp), "dd MMM yyyy, HH:mm")}</td>
+                      <td className="px-4 py-3 text-foreground">{call.lead?.name || "Unknown"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{call.phone_number}</td>
                       <td className="px-4 py-3">
                         {call.direction === "INCOMING" ? (
-                          <span className="flex items-center gap-1 text-xs font-medium text-orange-600"><PhoneIncoming className="h-3.5 w-3.5" /> Incoming</span>
+                          <span className="flex items-center gap-1 text-xs font-medium text-chart-3"><PhoneIncoming className="h-3.5 w-3.5" /> Incoming</span>
                         ) : (
-                          <span className="flex items-center gap-1 text-xs font-medium text-teal-600"><PhoneOutgoing className="h-3.5 w-3.5" /> Outgoing</span>
+                          <span className="flex items-center gap-1 text-xs font-medium text-primary"><PhoneOutgoing className="h-3.5 w-3.5" /> Outgoing</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}m ${call.duration_seconds % 60}s` : "—"}
                       </td>
                       <td className="px-4 py-3">
@@ -182,7 +182,7 @@ export default function EmployeeCallHistoryPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {call.lead && (
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" title="View Lead">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" title="View Lead">
                             <Eye className="h-4 w-4" />
                           </Button>
                         )}
@@ -198,7 +198,7 @@ export default function EmployeeCallHistoryPage() {
 
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">Page {page + 1} of {totalPages}</p>
+          <p className="text-xs text-muted-foreground/70">Page {page + 1} of {totalPages}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
             <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
@@ -211,13 +211,13 @@ export default function EmployeeCallHistoryPage() {
 
 function StatCard({ label, value, icon: Icon, color, bg }: { label: string; value: number; icon: typeof Phone; color: string; bg: string }) {
   return (
-    <Card className="border-slate-200">
+    <Card className="border-white/[0.08]">
       <CardContent className="p-4">
         <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-lg ${bg}`}>
           <Icon className={`h-4 w-4 ${color}`} />
         </div>
-        <div className="text-2xl font-bold text-slate-800">{value}</div>
-        <div className="text-xs text-slate-400">{label}</div>
+        <div className="text-2xl font-bold text-foreground">{value}</div>
+        <div className="text-xs text-muted-foreground/70">{label}</div>
       </CardContent>
     </Card>
   );
@@ -225,13 +225,13 @@ function StatCard({ label, value, icon: Icon, color, bg }: { label: string; valu
 
 function CallStatusPill({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    INITIATED: "bg-slate-100 text-slate-600", ANSWERED: "bg-green-100 text-green-700",
-    COMPLETED: "bg-emerald-100 text-emerald-700", MISSED: "bg-red-100 text-red-700",
-    REJECTED: "bg-red-100 text-red-700", FAILED: "bg-red-100 text-red-700",
+    INITIATED: "bg-muted/40 text-muted-foreground", ANSWERED: "bg-chart-2/15 text-chart-2",
+    COMPLETED: "bg-success/15 text-success-foreground", MISSED: "bg-destructive/15 text-destructive",
+    REJECTED: "bg-destructive/15 text-destructive", FAILED: "bg-destructive/15 text-destructive",
   };
   const labels: Record<string, string> = {
     INITIATED: "Initiated", ANSWERED: "Answered", COMPLETED: "Completed",
     MISSED: "Missed", REJECTED: "Rejected", FAILED: "Failed", NO_ANSWER: "No Answer",
   };
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] || "bg-slate-100 text-slate-500"}`}>{labels[status] || status}</span>;
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] || "bg-muted/40 text-muted-foreground"}`}>{labels[status] || status}</span>;
 }

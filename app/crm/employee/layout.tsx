@@ -168,12 +168,12 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   const SidebarContent = () => (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary font-bold text-sm shadow-sm shadow-primary/20">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary font-bold text-sm shadow-[0_0_16px_-2px_hsl(var(--primary)/0.4)]">
           C2N
         </div>
         <div>
           <div className="text-sm font-bold text-foreground">Click2Naukari</div>
-          <div className="text-[11px] text-muted-foreground">Employee CRM</div>
+          <div className="text-[11px] text-muted-foreground/80">Employee CRM</div>
         </div>
       </div>
 
@@ -186,22 +186,22 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
               key={item.href}
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                 active
-                  ? "bg-primary/10 text-primary nav-active-bar"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  ? "bg-primary/15 text-primary shadow-[0_0_12px_-2px_hsl(var(--primary)/0.25)] border border-primary/20 backdrop-blur-sm"
+                  : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground hover:translate-x-0.5"
               }`}
             >
-              <Icon className={`h-[18px] w-[18px] transition-transform duration-200 ${active ? "text-primary" : "text-muted-foreground/70"}`} />
+              <Icon className={`h-[18px] w-[18px] transition-transform duration-200 ${active ? "text-primary" : "text-muted-foreground/70 group-hover:scale-110"}`} />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-border/40 p-3">
+      <div className="border-t border-white/[0.06] p-3">
         <div className="flex items-center gap-3 rounded-lg px-3 py-2">
-          <Avatar className="h-9 w-9 border border-border/40">
+          <Avatar className="h-9 w-9 border border-white/[0.08] shadow-[0_0_12px_-2px_hsl(var(--primary)/0.2)]">
             <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
               {initials}
             </AvatarFallback>
@@ -225,9 +225,11 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-muted/30">
+    <div className="relative flex h-screen overflow-hidden">
+      <div className="bg-orbs" />
+
       {/* Desktop Sidebar */}
-      <aside className="hidden w-60 shrink-0 border-r border-border/40 bg-card lg:block">
+      <aside className="relative z-10 hidden w-60 shrink-0 border-r border-white/[0.06] bg-card/70 backdrop-blur-xl lg:block">
         <SidebarContent />
       </aside>
 
@@ -239,9 +241,9 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
       </Sheet>
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/40 bg-card/60 px-4 premium-backdrop lg:px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.06] bg-card/50 backdrop-blur-xl px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -253,9 +255,9 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             </Button>
             <div>
               <div className="text-sm font-semibold text-foreground">
-                {getGreeting()}, {firstName}
+                {getGreeting()}, <span className="gradient-text">{firstName}</span>
               </div>
-              <div className="text-xs text-muted-foreground">Welcome to Click2Naukari</div>
+              <div className="text-xs text-muted-foreground/80">Welcome to Click2Naukari</div>
             </div>
           </div>
 
@@ -352,10 +354,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
       {/* Follow-up Popup */}
       {showFollowupPopup && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-lg border border-border/60 bg-card p-4 shadow-2xl fade-in-up">
+        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border border-white/[0.08] bg-card/85 backdrop-blur-2xl p-4 shadow-[0_1px_0_0_hsl(0_0%_100%/0.06)_inset,0_24px_64px_-12px_hsl(0_0%_0%/0.6)] fade-in-up">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-warning/60">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-warning/20 border border-warning/25">
                 <Bell className="h-4 w-4 text-warning-foreground" />
               </div>
               <div className="text-sm font-semibold text-foreground">Upcoming Follow-up</div>
@@ -373,8 +375,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             </Button>
           </div>
           <div className="mt-3 space-y-1">
-            <div className="font-medium text-slate-700">{showFollowupPopup.name}</div>
-            <div className="text-xs text-slate-400">
+            <div className="font-medium text-foreground">{showFollowupPopup.name}</div>
+            <div className="text-xs text-muted-foreground">
               {showFollowupPopup.platform && <span>{showFollowupPopup.platform} · </span>}
               {showFollowupPopup.status === "CALLBACK" ? "Call Back" : showFollowupPopup.status === "INTERESTED" ? "Interested" : "Ringing"} · Follow-up at {format(new Date(showFollowupPopup.next_followup_at), "dd MMM, HH:mm")}
             </div>
@@ -382,7 +384,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
           <div className="mt-3 flex gap-2">
             <Button
               size="sm"
-              className="h-8 bg-blue-600 hover:bg-blue-700"
+              className="h-8"
               onClick={() => {
                 window.location.href = `tel:${showFollowupPopup.phone}`;
                 setPopupDismissed((s) => new Set(s).add(showFollowupPopup.id));
@@ -434,8 +436,8 @@ function EmployeeContentWrapper({
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="text-center">
-          <Building2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm text-slate-400">Please select a product to view your dashboard.</p>
+          <Building2 className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground/70">Please select a product to view your dashboard.</p>
         </div>
       </div>
     );

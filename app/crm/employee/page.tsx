@@ -137,17 +137,17 @@ export default function EmployeeDashboard() {
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
   const kpiCards = [
-    { label: "Total Leads", value: data.totalLeads, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "New Leads", value: data.newLeads, icon: Users, color: "text-slate-600", bg: "bg-slate-100" },
-    { label: "Interested", value: data.interested, icon: TrendingUp, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Callback", value: data.callback, icon: PhoneCall, color: "text-amber-600", bg: "bg-amber-50" },
-    { label: "Follow Ups", value: data.followUps, icon: Calendar, color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "ID Done", value: data.idDone, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Issues", value: data.issues, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50" },
-    { label: "Other Hero", value: data.otherHero, icon: Star, color: "text-indigo-600", bg: "bg-indigo-50" },
-    { label: "Calls Made", value: data.callsMade, icon: PhoneOutgoing, color: "text-cyan-600", bg: "bg-cyan-50" },
-    { label: "Incoming", value: data.incomingCalls, icon: PhoneIncoming, color: "text-orange-600", bg: "bg-orange-50" },
-    { label: "Outgoing", value: data.outgoingCalls, icon: PhoneOutgoing, color: "text-teal-600", bg: "bg-teal-50" },
+    { label: "Total Leads", value: data.totalLeads, icon: Users, color: "text-primary", bg: "bg-primary/15" },
+    { label: "New Leads", value: data.newLeads, icon: Users, color: "text-muted-foreground", bg: "bg-muted/40" },
+    { label: "Interested", value: data.interested, icon: TrendingUp, color: "text-chart-2", bg: "bg-chart-2/12" },
+    { label: "Callback", value: data.callback, icon: PhoneCall, color: "text-warning-foreground", bg: "bg-warning/20" },
+    { label: "Follow Ups", value: data.followUps, icon: Calendar, color: "text-chart-4", bg: "bg-chart-4/12" },
+    { label: "ID Done", value: data.idDone, icon: CheckCircle2, color: "text-success-foreground", bg: "bg-success/25" },
+    { label: "Issues", value: data.issues, icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/12" },
+    { label: "Other Hero", value: data.otherHero, icon: Star, color: "text-chart-5", bg: "bg-chart-5/12" },
+    { label: "Calls Made", value: data.callsMade, icon: PhoneOutgoing, color: "text-info-foreground", bg: "bg-info/20" },
+    { label: "Incoming", value: data.incomingCalls, icon: PhoneIncoming, color: "text-chart-3", bg: "bg-chart-3/12" },
+    { label: "Outgoing", value: data.outgoingCalls, icon: PhoneOutgoing, color: "text-primary", bg: "bg-primary/15" },
   ];
 
   const performanceLabel = datePreset === "all" ? "All Time Performance" :
@@ -161,7 +161,7 @@ export default function EmployeeDashboard() {
       {/* Date Filter + KPI Grid */}
       <div>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-bold text-slate-800">{product.name} Dashboard</h2>
+          <h2 className="text-lg font-bold gradient-text">{product.name} Dashboard</h2>
           <DateFilter range={dateRange} onRangeChange={(r) => { setDateRange(r); if (r.start || r.end) setDatePreset("custom"); }} />
         </div>
         <div className="mb-3 flex gap-2">
@@ -170,7 +170,7 @@ export default function EmployeeDashboard() {
               key={p}
               size="sm"
               variant={datePreset === p ? "default" : "outline"}
-              className={datePreset === p ? "bg-blue-600 hover:bg-blue-700" : "border-slate-200"}
+              className={datePreset === p ? "" : ""}
               onClick={() => { setDatePreset(p); setDateRange(getPresetRange(p)); }}
             >
               {p === "today" ? "Today" : p === "yesterday" ? "Yesterday" : p === "this_week" ? "This Week" : p === "this_month" ? "This Month" : "All Time"}
@@ -180,7 +180,7 @@ export default function EmployeeDashboard() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {loading
             ? Array.from({ length: 11 }).map((_, i) => (
-                <Card key={i} className="border-slate-200">
+                <Card key={i}>
                   <CardContent className="p-4">
                     <Skeleton className="mb-3 h-8 w-8 rounded-lg" />
                     <Skeleton className="h-6 w-16" />
@@ -191,13 +191,13 @@ export default function EmployeeDashboard() {
             : kpiCards.map((kpi) => {
                 const Icon = kpi.icon;
                 return (
-                  <Card key={kpi.label} className="border-slate-200 transition-shadow hover:shadow-md">
+                  <Card key={kpi.label} className="group">
                     <CardContent className="p-4">
                       <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${kpi.bg}`}>
                         <Icon className={`h-4 w-4 ${kpi.color}`} />
                       </div>
-                      <div className="text-2xl font-bold text-slate-800">{kpi.value}</div>
-                      <div className="text-xs text-slate-400">{kpi.label}</div>
+                      <div className="text-2xl font-bold text-foreground">{kpi.value}</div>
+                      <div className="text-xs text-muted-foreground/80">{kpi.label}</div>
                     </CardContent>
                   </Card>
                 );
@@ -207,9 +207,9 @@ export default function EmployeeDashboard() {
 
       {/* Performance + Recent Leads */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="border-slate-200 lg:col-span-1">
+        <Card className="lg:col-span-1">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-slate-700">{performanceLabel}</CardTitle>
+            <CardTitle className="text-base font-semibold">{performanceLabel}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {loading ? (
@@ -220,10 +220,10 @@ export default function EmployeeDashboard() {
                 <PerfRow label="Calls" value={data.todayCalls} />
                 <PerfRow label="Follow Ups" value={data.todayFollowups} />
                 <PerfRow label="ID Done" value={data.todayIdDone} />
-                <div className="border-t border-slate-100 pt-3">
+                <div className="border-t border-white/[0.06] pt-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600">Conversion</span>
-                    <span className="text-lg font-bold text-blue-600">{data.conversion}%</span>
+                    <span className="text-sm font-medium text-muted-foreground">Conversion</span>
+                    <span className="text-lg font-bold text-primary">{data.conversion}%</span>
                   </div>
                 </div>
               </>
@@ -231,11 +231,11 @@ export default function EmployeeDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 lg:col-span-2">
+        <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base font-semibold text-slate-700">Recent Leads</CardTitle>
+            <CardTitle className="text-base font-semibold">Recent Leads</CardTitle>
             <Link href="/crm/employee/leads">
-              <Button variant="ghost" size="sm" className="gap-1 text-blue-600 hover:text-blue-700">
+              <Button variant="ghost" size="sm" className="gap-1 text-primary">
                 View All <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
@@ -244,23 +244,23 @@ export default function EmployeeDashboard() {
             {loading ? (
               <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : recentLeads.length === 0 ? (
-              <div className="py-8 text-center text-sm text-slate-400">No leads assigned yet</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">No leads assigned yet</div>
             ) : (
               <div className="space-y-1">
                 {recentLeads.map((lead) => (
-                  <div key={lead.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-50">
+                  <div key={lead.id} className="flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-white/[0.04]">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                         {lead.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-slate-700">{lead.name}</div>
-                        <div className="text-xs text-slate-400">{lead.phone}</div>
+                        <div className="text-sm font-medium text-foreground">{lead.name}</div>
+                        <div className="text-xs text-muted-foreground">{lead.phone}</div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-medium text-slate-600">{lead.platform || "—"}</div>
-                      <div className="text-[11px] text-slate-400">{format(new Date(lead.created_at), "dd MMM")}</div>
+                      <div className="text-xs font-medium text-muted-foreground">{lead.platform || "—"}</div>
+                      <div className="text-[11px] text-muted-foreground/70">{format(new Date(lead.created_at), "dd MMM")}</div>
                     </div>
                   </div>
                 ))}
@@ -276,8 +276,8 @@ export default function EmployeeDashboard() {
 function PerfRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className="text-sm font-bold text-slate-800">{value}</span>
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-bold text-foreground">{value}</span>
     </div>
   );
 }

@@ -596,10 +596,10 @@ export function ProductTargetsTab({ product }: { product: Product }) {
       {/* Save result */}
       {saveResult && (
         <div className="flex flex-wrap gap-3 rounded-lg border border-border/60 bg-card p-3">
-          <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-success-foreground">
             <CheckCircle2 className="h-4 w-4" /> Saved: {saveResult.saved}
           </span>
-          <span className="flex items-center gap-1.5 text-sm font-medium text-blue-600">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-primary">
             <CheckCircle2 className="h-4 w-4" /> Updated: {saveResult.updated}
           </span>
           {saveResult.errors > 0 && (
@@ -630,12 +630,12 @@ export function ProductTargetsTab({ product }: { product: Product }) {
 
       {/* Inactive metrics notice */}
       {inactiveMetrics.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <span className="text-sm font-medium text-amber-700">Inactive columns:</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/20 bg-warning/15 p-3">
+          <span className="text-sm font-medium text-warning-foreground">Inactive columns:</span>
           {inactiveMetrics.map((m) => (
             <Badge key={m.id} variant="secondary" className="gap-1">
               {m.name}
-              <button onClick={() => toggleMetricActive(m)} className="ml-1 text-xs text-amber-700 underline">
+              <button onClick={() => toggleMetricActive(m)} className="ml-1 text-xs text-warning-foreground underline">
                 Reactivate
               </button>
             </Badge>

@@ -317,7 +317,7 @@ export default function AdminReportsPage() {
           </div>
 
           {/* Product Performance Chart */}
-          <Card className="border-border/40 shadow-sm">
+          <Card className="">
             <CardHeader><CardTitle className="text-base">Product Performance</CardTitle></CardHeader>
             <CardContent>
               {chartData.length > 0 ? (
@@ -337,7 +337,7 @@ export default function AdminReportsPage() {
           </Card>
 
           {/* Product Performance Table */}
-          <Card className="border-border/40 shadow-sm">
+          <Card className="">
             <CardHeader><CardTitle className="text-base">Product Performance Table</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto scrollbar-thin">
               {productPerf.length > 0 ? (
@@ -379,7 +379,7 @@ export default function AdminReportsPage() {
 
           {/* Employee Performance + Product-wise ID Done Conversion */}
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="border-border/40 shadow-sm lg:col-span-2">
+            <Card className=" lg:col-span-2">
               <CardHeader><CardTitle className="text-base">Employee Performance</CardTitle></CardHeader>
               <CardContent className="overflow-x-auto scrollbar-thin">
                 {employeePerf.length > 0 ? (
@@ -418,7 +418,7 @@ export default function AdminReportsPage() {
             </Card>
 
             {/* Product-wise ID Done Conversion */}
-            <Card className="border-border/40 shadow-sm">
+            <Card className="">
               <CardHeader><CardTitle className="text-base">ID Done Conversion</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {productPerf.length > 0 ? productPerf.map((p) => {
@@ -444,7 +444,7 @@ export default function AdminReportsPage() {
 
           {/* Leaderboards */}
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-border/40 shadow-sm">
+            <Card className="">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Trophy className="h-4 w-4 text-warning-foreground" /> Caller Leaderboard
@@ -452,9 +452,9 @@ export default function AdminReportsPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {employeePerf.length > 0 ? employeePerf.slice(0, 10).map((emp, i) => (
-                  <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 hover:bg-secondary/50 transition-colors">
+                  <div key={emp.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] p-3 hover:bg-white/[0.04] transition-colors">
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-orange-500/20 text-orange-600" : "bg-secondary text-muted-foreground"
+                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-chart-3/15 text-chart-3" : "bg-secondary text-muted-foreground"
                     }`}>
                       {i < 3 ? <Medal className="h-4 w-4" /> : `#${i + 1}`}
                     </div>
@@ -471,7 +471,7 @@ export default function AdminReportsPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/40 shadow-sm">
+            <Card className="">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Award className="h-4 w-4 text-primary" /> Product Leaderboard
@@ -479,9 +479,9 @@ export default function AdminReportsPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {productLeaderboard.length > 0 ? productLeaderboard.map((prod, i) => (
-                  <div key={prod.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 hover:bg-secondary/50 transition-colors">
+                  <div key={prod.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] p-3 hover:bg-white/[0.04] transition-colors">
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-orange-500/20 text-orange-600" : "bg-secondary text-muted-foreground"
+                      i === 0 ? "bg-warning/20 text-warning-foreground" : i === 1 ? "bg-muted text-foreground" : i === 2 ? "bg-chart-3/15 text-chart-3" : "bg-secondary text-muted-foreground"
                     }`}>
                       {i < 3 ? <Award className="h-4 w-4" /> : `#${i + 1}`}
                     </div>
@@ -506,7 +506,7 @@ export default function AdminReportsPage() {
 
 function KpiCard({ label, value, icon: Icon }: { label: string; value: number | string; icon: any }) {
   return (
-    <div className="rounded-xl border border-border/40 bg-card p-4 shadow-sm">
+    <div className="rounded-xl border border-white/[0.06] bg-card/65 backdrop-blur-xl p-4 shadow-[0_1px_0_0_hsl(0_0%_100%/0.04)_inset,0_8px_32px_-8px_hsl(0_0%_0%/0.4)] card-lift">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>

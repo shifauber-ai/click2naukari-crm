@@ -117,22 +117,22 @@ export default function EmployeeIssuesPage() {
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-800">Issues</h2>
-        <p className="text-sm text-slate-400">{total} leads with issues in {product.name}</p>
+        <h2 className="text-lg font-bold text-foreground">Issues</h2>
+        <p className="text-sm text-muted-foreground/70">{total} leads with issues in {product.name}</p>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <DateFilter range={dateRange} onRangeChange={setDateRange} />
         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Source" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Sources</SelectItem>
             {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={platformFilter} onValueChange={setPlatformFilter}>
-          <SelectTrigger className="w-[130px] border-slate-200"><SelectValue placeholder="Platform" /></SelectTrigger>
+          <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="Platform" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Platforms</SelectItem>
             {platforms.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
@@ -140,21 +140,21 @@ export default function EmployeeIssuesPage() {
         </Select>
       </div>
 
-      <Card className="border-slate-200">
+      <Card className="border-white/[0.08]">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
           ) : issues.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <AlertTriangle className="mb-3 h-10 w-10 text-slate-300" />
-              <p className="text-sm font-medium text-slate-500">No issue leads</p>
-              <p className="text-xs text-slate-400">Leads with ID Block, Doc Issue, or Vehicle Issue will appear here.</p>
+              <AlertTriangle className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">No issue leads</p>
+              <p className="text-xs text-muted-foreground/70">Leads with ID Block, Doc Issue, or Vehicle Issue will appear here.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-400">
+                  <tr className="border-b border-white/[0.06] text-left text-xs font-medium text-muted-foreground/70">
                     <th className="px-4 py-3">Driver</th>
                     <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3">Platform</th>
@@ -165,24 +165,24 @@ export default function EmployeeIssuesPage() {
                 </thead>
                 <tbody>
                   {issues.map((lead) => (
-                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                    <tr key={lead.id} className="border-b border-white/[0.04] hover:bg-white/[0.04]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <Avatar className="h-8 w-8"><AvatarFallback className="bg-red-50 text-xs font-semibold text-red-700">{lead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                          <span className="font-medium text-slate-700">{lead.name}</span>
+                          <Avatar className="h-8 w-8"><AvatarFallback className="bg-destructive/10 text-xs font-semibold text-destructive">{lead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                          <span className="font-medium text-foreground">{lead.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{lead.phone}</td>
-                      <td className="px-4 py-3 text-slate-600">{lead.platform || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.phone}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{lead.platform || "—"}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">{statusLabel(lead.status)}</span>
+                        <span className="inline-flex rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">{statusLabel(lead.status)}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{format(new Date(lead.created_at), "dd MMM yyyy")}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{format(new Date(lead.created_at), "dd MMM yyyy")}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600 hover:bg-green-50" onClick={() => handleCall(lead)}><Phone className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => window.open(`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => setViewLead(lead)}><Eye className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-chart-2 hover:bg-chart-2/10" onClick={() => handleCall(lead)}><Phone className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-success-foreground hover:bg-success/15" onClick={() => window.open(`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => setViewLead(lead)}><Eye className="h-4 w-4" /></Button>
                         </div>
                       </td>
                     </tr>
@@ -196,7 +196,7 @@ export default function EmployeeIssuesPage() {
 
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">Page {page + 1} of {totalPages}</p>
+          <p className="text-xs text-muted-foreground/70">Page {page + 1} of {totalPages}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
             <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
@@ -210,20 +210,20 @@ export default function EmployeeIssuesPage() {
             <SheetHeader><SheetTitle>Issue Details</SheetTitle></SheetHeader>
             <div className="mt-4 space-y-4">
               <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12"><AvatarFallback className="bg-red-100 text-base font-semibold text-red-700">{viewLead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                <div><div className="text-lg font-semibold text-slate-800">{viewLead.name}</div><div className="text-sm text-slate-400">{viewLead.phone}</div></div>
+                <Avatar className="h-12 w-12"><AvatarFallback className="bg-destructive/15 text-base font-semibold text-destructive">{viewLead.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                <div><div className="text-lg font-semibold text-foreground">{viewLead.name}</div><div className="text-sm text-muted-foreground/70">{viewLead.phone}</div></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Platform</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.platform || "—"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Source</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.source || "—"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">City</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.city || "—"}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Issue</div><div className="mt-0.5 text-sm font-medium text-red-600">{statusLabel(viewLead.status)}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Created</div><div className="mt-0.5 text-sm font-medium text-slate-700">{format(new Date(viewLead.created_at), "dd MMM yyyy")}</div></div>
-                <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-400">Remarks</div><div className="mt-0.5 text-sm font-medium text-slate-700">{viewLead.remarks || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Platform</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.platform || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Source</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.source || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">City</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.city || "—"}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Issue</div><div className="mt-0.5 text-sm font-medium text-destructive">{statusLabel(viewLead.status)}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Created</div><div className="mt-0.5 text-sm font-medium text-foreground">{format(new Date(viewLead.created_at), "dd MMM yyyy")}</div></div>
+                <div className="rounded-lg bg-white/[0.04] p-3"><div className="text-xs text-muted-foreground/70">Remarks</div><div className="mt-0.5 text-sm font-medium text-foreground">{viewLead.remarks || "—"}</div></div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => handleCall(viewLead)}><Phone className="h-4 w-4" /> Call</Button>
-                <Button className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => window.open(`https://wa.me/${viewLead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
+                <Button className="flex-1 gap-1.5 bg-chart-2 hover:bg-chart-2/80" onClick={() => handleCall(viewLead)}><Phone className="h-4 w-4" /> Call</Button>
+                <Button className="flex-1 gap-1.5 bg-success-foreground/20 hover:bg-success-foreground/30 border border-success/30 text-success-foreground" onClick={() => window.open(`https://wa.me/${viewLead.phone.replace(/[^0-9]/g, "")}`, "_blank")}><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
               </div>
             </div>
           </SheetContent>
