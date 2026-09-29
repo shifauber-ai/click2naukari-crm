@@ -36,9 +36,9 @@ BEGIN
   );
 END $$;
 
-INSERT INTO public.products (name, code, is_active) VALUES
-  ('Hero Job Pack', 'HERO', true),
-  ('SIM Activation', 'SIM', true),
-  ('Driver Onboarding', 'DRIVE', true),
-  ('Vehicle Finance', 'VEHFIN', true)
+INSERT INTO public.products (name, code, slug, is_active) VALUES
+  ('Hero Job Pack', 'HERO', 'hero', true),
+  ('SIM Activation', 'SIM', 'sim', true),
+  ('Driver Onboarding', 'DRIVE', 'drive', true),
+  ('Vehicle Finance', 'VEHFIN', 'vehfin', true)
 ON CONFLICT DO NOTHING;
