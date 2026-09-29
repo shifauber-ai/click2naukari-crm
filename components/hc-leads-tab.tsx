@@ -346,7 +346,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
             {activeCities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
+        <Select value={statusFilter || undefined} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Status" /></SelectTrigger>
           <SelectContent>
             {HC_LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{HC_STATUS_LABELS[s]}</SelectItem>)}
@@ -430,11 +430,11 @@ export function HCLeadsTab({ product }: { product: Product }) {
                   </TableCell>
                   <TableCell>
                     <Select
-                      value={(lead.form_status as HCFormStatus) || "PENDING"}
+                      value={(lead.form_status as HCFormStatus) || undefined}
                       onValueChange={(v) => handleFormChange(lead.id, v as HCFormStatus)}
                       disabled={updatingFormId === lead.id}
                     >
-                      <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="—" /></SelectTrigger>
                       <SelectContent>
                         {HC_FORM_STATUSES.map((f) => <SelectItem key={f} value={f}>{HC_FORM_LABELS[f]}</SelectItem>)}
                       </SelectContent>
@@ -554,7 +554,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <DetailRow label="Product" value="AUTO" />
                 <DetailRow label="City" value={detailLead.city || "—"} />
                 <DetailRow label="Status" value={HC_STATUS_LABELS[detailLead.status as HCLeadStatus] || detailLead.status} />
-                <DetailRow label="Form" value={HC_FORM_LABELS[(detailLead.form_status as HCFormStatus) || "PENDING"] || detailLead.form_status || "Pending"} />
+                <DetailRow label="Form" value={detailLead.form_status ? (HC_FORM_LABELS[(detailLead.form_status as HCFormStatus)] || detailLead.form_status) : "—"} />
                 <DetailRow label="Caller" value={detailLead.current_caller?.full_name || "Unassigned"} />
                 <DetailRow label="Created" value={format(new Date(detailLead.created_at), "dd MMM yyyy, HH:mm")} />
                 <DetailRow label="Follow-up" value={detailLead.next_followup_at ? format(new Date(detailLead.next_followup_at), "dd MMM, HH:mm") : "—"} />
