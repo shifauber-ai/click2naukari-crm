@@ -8,11 +8,25 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreditCard, Wallet, Banknote, TrendingUp } from "lucide-react";
+import { CreditCard, Wallet, Banknote, TrendingUp, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import type { PaymentRecord, Platform } from "@/lib/types";
 
 const PAGE_SIZE = 25;
+
+const UPI_STATUS_OPTIONS = [
+  { value: "PENDING", label: "Pending" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
+] as const;
+
+const STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-warning/15 text-warning-foreground",
+  COMPLETED: "bg-chart-2/15 text-chart-2",
+  CANCELLED: "bg-destructive/15 text-destructive",
+  PAID: "bg-chart-2/15 text-chart-2",
+  SUCCESSFUL: "bg-chart-2/15 text-chart-2",
+};
 
 export default function EmployeePaymentPage() {
   const { product, profile } = useEmployeeContext();
@@ -25,6 +39,7 @@ export default function EmployeePaymentPage() {
   const [dateTo, setDateTo] = useState("");
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [stats, setStats] = useState({ totalPayments: 0, totalAmount: 0, upi: 0, cash: 0 });
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPlatforms() {
@@ -77,6 +92,21 @@ export default function EmployeePaymentPage() {
 
   useEffect(() => { loadPayments(); }, [loadPayments]);
   useEffect(() => { setPage(0); }, [dateFrom, dateTo]);
+
+  const handleStatusChange = async (paymentId: string, newStatus: string) => {
+    setUpdatingStatusId(paymentId);
+    const { error } = await supabase
+      .from("payment_records")
+      .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
+      .eq("id", paymentId);
+    if (error) {
+      alert("Failed to update payment status. Please try again.");
+    } else {
+      setPayments((prev) => prev.map((p) => p.id === paymentId ? { ...p, payment_status: newStatus } : p));
+      loadPayments();
+    }
+    setUpdatingStatusId(null);
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -143,10 +173,30 @@ export default function EmployeePaymentPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          pay.payment_status === "PAID" || pay.payment_status === "SUCCESSFUL" || pay.payment_status === "COMPLETED" ? "bg-chart-2/15 text-chart-2" :
-                          pay.payment_status === "PENDING" ? "bg-warning/15 text-warning-foreground" : "bg-destructive/15 text-destructive"
-                        }`}>{pay.payment_status}</span>
+                        {pay.payment_mode === "UPI" ? (
+                          <Select
+                            value={pay.payment_status}
+                            onValueChange={(v) => handleStatusChange(pay.id, v)}
+                            disabled={updatingStatusId === pay.id}
+                          >
+                            <SelectTrigger className="h-8 w-[130px]">
+                              {updatingStatusId === pay.id ? (
+                                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Updating...</span>
+                              ) : (
+                                <SelectValue placeholder="Select Status" />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              {UPI_STATUS_OPTIONS.map((s) => (
+                                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[pay.payment_status] || "bg-muted/15 text-muted-foreground"}`}>
+                            {pay.payment_status}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{pay.service_description || "—"}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{format(new Date(pay.payment_date), "dd MMM yyyy")}</td>
