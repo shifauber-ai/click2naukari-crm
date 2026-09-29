@@ -16,6 +16,7 @@ import {
   AlertTriangle, BarChart3, Phone, CreditCard, Bell,
   Menu, LogOut, ChevronDown, Building2, X, PhoneCall, Tag, Target,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { format } from "date-fns";
 import { EmployeeProductContext } from "@/lib/employee-context";
 import type { EmployeeProduct } from "@/hooks/use-employee-products";
@@ -262,6 +263,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3">
+            <ThemeToggle />
+
             {/* Product Switcher */}
             {products.length > 1 && (
               <Popover open={productMenuOpen} onOpenChange={setProductMenuOpen}>

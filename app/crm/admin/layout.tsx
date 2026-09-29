@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface NavItem {
   href: string;
@@ -360,9 +361,12 @@ export default function AdminLayout({
             </p>
             <p className="text-xs text-muted-foreground/80">Welcome to Click2Naukari</p>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary backdrop-blur-sm">
-            <Shield className="h-3 w-3" /> {isManager ? "Manager" : "Admin"}
-          </span>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary backdrop-blur-sm">
+              <Shield className="h-3 w-3" /> {isManager ? "Manager" : "Admin"}
+            </span>
+          </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 fade-in">{children}</main>
       </div>

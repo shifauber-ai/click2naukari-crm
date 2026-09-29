@@ -35,6 +35,48 @@
     --chart-4: 232 45% 68%;
     --chart-5: 340 55% 62%;
     --radius: 0.625rem;
+    /* Glass overlay colors — re-mapped per theme */
+    --glass-overlay: 0 0% 100%;
+    --glass-overlay-opacity: 0.06;
+    --glass-shadow: 0 0% 0%;
+    --glass-shadow-opacity: 0.4;
+  }
+
+  html.light {
+    --background: 220 20% 97%;
+    --foreground: 222 28% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 28% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 28% 12%;
+    --primary: 213 72% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 222 22% 25%;
+    --muted: 220 16% 93%;
+    --muted-foreground: 220 10% 42%;
+    --accent: 214 30% 90%;
+    --accent-foreground: 213 60% 38%;
+    --destructive: 0 68% 48%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 14% 86%;
+    --input: 220 14% 86%;
+    --ring: 213 72% 48%;
+    --success: 142 50% 92%;
+    --success-foreground: 142 60% 28%;
+    --warning: 36 80% 92%;
+    --warning-foreground: 36 80% 30%;
+    --info: 205 60% 90%;
+    --info-foreground: 205 60% 28%;
+    --chart-1: 213 72% 52%;
+    --chart-2: 142 52% 48%;
+    --chart-3: 28 72% 52%;
+    --chart-4: 232 48% 58%;
+    --chart-5: 340 52% 52%;
+    --glass-overlay: 220 20% 80%;
+    --glass-overlay-opacity: 0.12;
+    --glass-shadow: 220 20% 30%;
+    --glass-shadow-opacity: 0.1;
   }
 }
 
@@ -54,6 +96,12 @@
       radial-gradient(ellipse 60% 40% at 80% 100%, hsl(232 45% 60% / 0.08), transparent 60%),
       radial-gradient(ellipse 50% 40% at 10% 60%, hsl(213 72% 50% / 0.06), transparent 60%);
     background-attachment: fixed;
+  }
+  html.light body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(213 72% 56% / 0.06), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, hsl(232 45% 60% / 0.04), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 10% 60%, hsl(213 72% 50% / 0.03), transparent 60%);
   }
   h1, h2, h3 {
     letter-spacing: -0.02em;
@@ -84,34 +132,34 @@
     background: hsl(var(--card) / 0.65);
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid hsl(0 0% 100% / 0.06);
+    border: 1px solid hsl(var(--glass-overlay) / var(--glass-overlay-opacity));
     box-shadow:
-      0 1px 0 0 hsl(0 0% 100% / 0.04) inset,
-      0 8px 32px -8px hsl(0 0% 0% / 0.4);
+      0 1px 0 0 hsl(var(--glass-overlay) / calc(var(--glass-overlay-opacity) * 0.6)) inset,
+      0 8px 32px -8px hsl(var(--glass-shadow) / var(--glass-shadow-opacity));
   }
 
   .glass-panel {
     background: hsl(var(--card) / 0.5);
     backdrop-filter: blur(12px) saturate(160%);
     -webkit-backdrop-filter: blur(12px) saturate(160%);
-    border: 1px solid hsl(0 0% 100% / 0.05);
+    border: 1px solid hsl(var(--glass-overlay) / calc(var(--glass-overlay-opacity) * 0.8));
   }
 
   .glass-subtle {
     background: hsl(var(--secondary) / 0.4);
     backdrop-filter: blur(8px) saturate(140%);
     -webkit-backdrop-filter: blur(8px) saturate(140%);
-    border: 1px solid hsl(0 0% 100% / 0.04);
+    border: 1px solid hsl(var(--glass-overlay) / calc(var(--glass-overlay-opacity) * 0.7));
   }
 
   .glass-hover {
     transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   .glass-hover:hover {
-    border-color: hsl(0 0% 100% / 0.1);
+    border-color: hsl(var(--glass-overlay) / calc(var(--glass-overlay-opacity) * 1.5));
     box-shadow:
-      0 1px 0 0 hsl(0 0% 100% / 0.06) inset,
-      0 12px 40px -8px hsl(0 0% 0% / 0.5),
+      0 1px 0 0 hsl(var(--glass-overlay) / calc(var(--glass-overlay-opacity) * 0.8)) inset,
+      0 12px 40px -8px hsl(var(--glass-shadow) / calc(var(--glass-shadow-opacity) * 1.2)),
       0 0 0 1px hsl(var(--primary) / 0.08);
     transform: translateY(-2px);
   }
@@ -145,8 +193,8 @@
   .card-lift:hover {
     transform: translateY(-2px);
     box-shadow:
-      0 1px 0 0 hsl(0 0% 100% / 0.06) inset,
-      0 12px 40px -8px hsl(0 0% 0% / 0.5),
+      0 1px 0 0 hsl(var(--glass-overlay) / calc(var(--glass-overlay-opacity) * 0.8)) inset,
+      0 12px 40px -8px hsl(var(--glass-shadow) / calc(var(--glass-shadow-opacity) * 1.2)),
       0 0 0 1px hsl(var(--primary) / 0.08);
   }
 
@@ -360,3 +408,62 @@
     animation: none !important;
   }
 }
+
+/* ===== Theme transition ===== */
+html.theme-ready,
+html.theme-ready *,
+html.theme-ready *::before,
+html.theme-ready *::after {
+  transition:
+    background-color 250ms ease,
+    border-color 250ms ease,
+    color 250ms ease,
+    box-shadow 250ms ease,
+    fill 250ms ease,
+    stroke 250ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-ready,
+  html.theme-ready *,
+  html.theme-ready *::before,
+  html.theme-ready *::after {
+    transition: none !important;
+  }
+}
+
+/* ===== Light theme adjustments ===== */
+html.light .gradient-text {
+  background: linear-gradient(135deg, hsl(222 28% 20%), hsl(213 72% 42%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html.light .bg-orbs::before {
+  background: radial-gradient(circle, hsl(213 72% 50% / 0.06), transparent 70%);
+}
+
+html.light .bg-orbs::after {
+  background: radial-gradient(circle, hsl(232 45% 55% / 0.04), transparent 70%);
+}
+
+/* ===== Light theme: override hardcoded white overlays =====
+   The dark theme uses border-white/[0.06] and hover:bg-white/[0.04]
+   for subtle glass highlights. In light mode these are invisible,
+   so we remap them to dark-tinted equivalents. */
+html.light .border-white\/\[0\.06\] { border-color: hsl(220 14% 80%) !important; }
+html.light .border-white\/\[0\.08\] { border-color: hsl(220 14% 78%) !important; }
+html.light .border-white\/\[0\.04\] { border-color: hsl(220 14% 84%) !important; }
+html.light .hover\:bg-white\/\[0\.04\]:hover { background-color: hsl(220 16% 88% / 0.6) !important; }
+html.light .hover\:bg-white\/\[0\.06\]:hover { background-color: hsl(220 16% 86% / 0.6) !important; }
+html.light .bg-white\/\[0\.04\] { background-color: hsl(220 16% 90% / 0.5) !important; }
+html.light .bg-white\/\[0\.06\] { background-color: hsl(220 16% 88% / 0.5) !important; }
+html.light .border-white\/\[0\.1\] { border-color: hsl(220 14% 75%) !important; }
+html.light .border-white\/\[0\.1\]:hover { border-color: hsl(220 14% 72%) !important; }
+html.light .bg-white\/5 { background-color: hsl(220 16% 90% / 0.4) !important; }
+html.light .bg-white\/10 { background-color: hsl(220 16% 85% / 0.5) !important; }
+html.light .border-white\/10 { border-color: hsl(220 14% 80%) !important; }
+html.light .border-white\/5 { border-color: hsl(220 14% 85%) !important; }
+html.light .bg-black\/40 { background-color: hsl(220 20% 30% / 0.08) !important; }
+html.light .bg-black\/60 { background-color: hsl(220 20% 30% / 0.25) !important; }
