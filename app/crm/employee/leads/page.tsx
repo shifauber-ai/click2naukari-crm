@@ -54,6 +54,7 @@ export default function EmployeeLeadsPage() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [formFilter, setFormFilter] = useState<string>("ALL");
   const [platformFilter, setPlatformFilter] = useState<string>("ALL");
   const [sourceFilter, setSourceFilter] = useState<string>("ALL");
   const [cityFilter, setCityFilter] = useState<string>("ALL");
@@ -156,6 +157,10 @@ export default function EmployeeLeadsPage() {
       .order("created_at", { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (statusFilter !== "ALL") q = q.eq("status", statusFilter);
+    if (isHC && formFilter !== "ALL") {
+      if (formFilter === "TAG_FORM") q = q.eq("form_status", "TAG_FORM");
+      else if (formFilter === "TAG_NOT_ADDED") q = q.or("form_status.is.null,form_status.neq.TAG_FORM");
+    }
     if (!isHC && platformFilter !== "ALL") q = q.eq("platform", platformFilter);
     if (sourceFilter !== "ALL") q = q.eq("source", sourceFilter);
     if (cityFilter !== "ALL") q = q.eq("city", cityFilter);
@@ -178,11 +183,11 @@ export default function EmployeeLeadsPage() {
       setTotal(count || 0);
     }
     setLoading(false);
-  }, [profile?.id, product, page, statusFilter, platformFilter, sourceFilter, cityFilter, typeFilter, dateRange, search, toast, isHC]);
+  }, [profile?.id, product, page, statusFilter, formFilter, platformFilter, sourceFilter, cityFilter, typeFilter, dateRange, search, toast, isHC]);
 
   useEffect(() => { loadPlatformsAndCities(); }, [loadPlatformsAndCities]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
-  useEffect(() => { setPage(0); }, [statusFilter, platformFilter, sourceFilter, cityFilter, typeFilter, dateRange, search]);
+  useEffect(() => { setPage(0); }, [statusFilter, formFilter, platformFilter, sourceFilter, cityFilter, typeFilter, dateRange, search]);
 
   useEffect(() => {
     if (!product) return;
@@ -355,6 +360,14 @@ export default function EmployeeLeadsPage() {
             <SelectContent>
               <SelectItem value="ALL">All Cities</SelectItem>
               {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={formFilter} onValueChange={setFormFilter}>
+            <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="All Forms" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Forms</SelectItem>
+              <SelectItem value="TAG_NOT_ADDED">Tag Not Added</SelectItem>
+              <SelectItem value="TAG_FORM">Tag Form</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>

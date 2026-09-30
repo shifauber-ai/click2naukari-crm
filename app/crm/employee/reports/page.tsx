@@ -89,7 +89,7 @@ export default function EmployeeReportsPage() {
 
     // Fetch leads in range
     let leadQuery = supabase
-      .from("leads").select("id, status, platform, source, created_at, uber_id_done, ola_id_done, rapido_id_done, bike_ft_status")
+      .from("leads").select("id, status, platform, source, created_at, uber_id_done, ola_id_done, rapido_id_done, bike_ft_status, form_status")
       .eq("current_caller_id", profile.id).eq("product_id", product.id)
       .gte("created_at", from).lte("created_at", to);
     if (platformFilter !== "ALL") leadQuery = leadQuery.eq("platform", platformFilter);
