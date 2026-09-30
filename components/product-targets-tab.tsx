@@ -33,6 +33,7 @@ import {
   Columns3, Pencil, Power, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { format } from "date-fns";
+import { classifyProductCode } from "@/lib/target-config";
 
 interface CityRow { id: string; city_name: string; is_active: boolean; }
 interface EmployeeTargetRow extends Omit<EmployeeTarget, "employee" | "metric"> {
@@ -57,6 +58,7 @@ type PeriodKey = "DAILY" | "WEEKLY";
 export function ProductTargetsTab({ product }: { product: Product }) {
   const { profile } = useAuth();
   const { toast } = useToast();
+  const isHC = classifyProductCode(product.code, product.name).isHC;
 
   const [metrics, setMetrics] = useState<TargetMetric[]>([]);
   const [allMetrics, setAllMetrics] = useState<TargetMetric[]>([]);
@@ -527,6 +529,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
             </Select>
           </div>
 
+          {!isHC && (
           <div className="space-y-1.5">
             <Label className="text-xs">Employee Type</Label>
             <Select value={selectedType} onValueChange={setSelectedType}>
@@ -537,6 +540,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
               </SelectContent>
             </Select>
           </div>
+          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs">Start Date</Label>
@@ -580,7 +584,7 @@ export function ProductTargetsTab({ product }: { product: Product }) {
         {selectedCity && (
           <Badge variant="outline" className="border-border/60">{selectedCity.city_name}</Badge>
         )}
-        <Badge variant="outline" className="border-border/60">{selectedType}</Badge>
+        {!isHC && <Badge variant="outline" className="border-border/60">{selectedType}</Badge>}
         <Badge variant="outline" className="border-border/60">{PERIOD_LABELS[period]}</Badge>
         <Badge variant="outline" className="border-border/60">
           {format(new Date(startDate), "dd MMM yyyy")}

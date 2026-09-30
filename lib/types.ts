@@ -1,11 +1,10 @@
 export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
 
-export type HCLeadStatus = "TAG_ADDED" | "RINGING" | "SWITCH_OFF";
-export const HC_LEAD_STATUSES: HCLeadStatus[] = ["TAG_ADDED", "RINGING", "SWITCH_OFF"];
+export type HCLeadStatus = "TAG_NOT_ADDED" | "TAG_ADDED";
+export const HC_LEAD_STATUSES: HCLeadStatus[] = ["TAG_NOT_ADDED", "TAG_ADDED"];
 export const HC_STATUS_LABELS: Record<HCLeadStatus, string> = {
+  TAG_NOT_ADDED: "Tag Not Added",
   TAG_ADDED: "Tag Added",
-  RINGING: "Ringing",
-  SWITCH_OFF: "Switch Off",
 };
 
 export type HCFormStatus = "PENDING" | "TAG_FORM";

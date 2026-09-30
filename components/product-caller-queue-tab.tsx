@@ -28,6 +28,7 @@ import {
   Loader2, Users, UserCheck, UserX, ListOrdered, X, Pencil, MapPin,
 } from "lucide-react";
 import { format } from "date-fns";
+import { classifyProductCode } from "@/lib/target-config";
 
 interface QueueRow extends CallerQueue {
   employee?: Profile;
@@ -102,6 +103,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
   const isAdmin = profile?.role === "ADMIN";
   const isManager = profile?.role === "MANAGER";
   const canManage = isAdmin || isManager;
+  const isHC = classifyProductCode(product.code, product.name).isHC;
 
   useEffect(() => {
     (async () => {
@@ -613,6 +615,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
             </SelectContent>
           </Select>
         )}
+        {!isHC && (
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
@@ -621,6 +624,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
             <SelectItem value="FT">FT</SelectItem>
           </SelectContent>
         </Select>
+        )}
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-3.5 w-3.5" /> Clear
@@ -776,6 +780,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
                 </Button>
               )}
             </div>
+            {!isHC && (
             <div>
               <Label>Employee Type</Label>
               <Select value={addType} onValueChange={handleAddTypeChange}>
@@ -787,6 +792,7 @@ export function ProductCallerQueueTab({ product }: { product: Product }) {
               </Select>
               <p className="mt-1 text-xs text-muted-foreground">Only employees assigned to this product with this type will appear.</p>
             </div>
+            )}
             <div>
               <Label>Caller</Label>
               <Select value={addEmpId} onValueChange={setAddEmpId}>

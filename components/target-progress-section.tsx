@@ -15,6 +15,7 @@ import {
 import { EmptyState, StatCard } from "@/components/page-parts";
 import { Target, Loader2, TrendingUp, CheckCircle2, CircleDashed } from "lucide-react";
 import { startOfWeek, startOfMonth, startOfDay, subDays, format } from "date-fns";
+import { classifyProductCode } from "@/lib/target-config";
 
 type RangeKey = "today" | "week" | "month" | "all";
 
@@ -38,6 +39,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
   const { profile, assignedProducts } = useAuth();
   const isManager = profile?.role === "MANAGER";
   const managerProductIds = isManager ? new Set(assignedProducts.map((p) => p.id)) : null;
+  const isHC = product ? classifyProductCode(product.code, product.name).isHC : false;
 
   const [range, setRange] = useState<RangeKey>("week");
   const [productFilter, setProductFilter] = useState("ALL");
@@ -219,6 +221,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
             {cities.map((c) => <SelectItem key={c.id} value={c.city_name}>{c.city_name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {(!isHC || !product) && (
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
@@ -227,6 +230,7 @@ export function TargetProgressSection({ product }: { product?: Product }) {
             <SelectItem value="FT">FT</SelectItem>
           </SelectContent>
         </Select>
+        )}
       </div>
 
       {loading ? (

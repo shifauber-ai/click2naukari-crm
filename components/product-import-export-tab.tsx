@@ -882,6 +882,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                       </SelectContent>
                     </Select>
                   </div>
+                  {!isHC && (
                   <div>
                     <Label className="text-xs">Employee Type</Label>
                     <Select value={impType} onValueChange={setImpType}>
@@ -892,6 +893,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                       </SelectContent>
                     </Select>
                   </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={() => downloadTemplate("csv")}><FileUp className="mr-1 h-4 w-4" /> CSV Template</Button>
@@ -1087,6 +1089,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {!isHC && (
                 <Select value={exportType} onValueChange={setExportType}>
                   <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
                   <SelectContent>
@@ -1095,6 +1098,7 @@ export function ProductImportExportTab({ product, isHC }: { product: Product; is
                     <SelectItem value="FT">FT</SelectItem>
                   </SelectContent>
                 </Select>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Select value="__none__" onValueChange={(v) => { if (v === "__none__") return; const r = QUICK_DATE_RANGES.find((r) => r.value === v); if (r) { setExportDateFrom(r.getFrom()); setExportDateTo(r.getTo()); } }}>

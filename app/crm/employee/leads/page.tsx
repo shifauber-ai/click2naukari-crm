@@ -37,9 +37,8 @@ const PAGE_SIZE = 25;
 const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 
 const HC_INLINE_STATUSES = [
+  { value: "TAG_NOT_ADDED", label: "Tag Not Added" },
   { value: "TAG_ADDED", label: "Tag Added" },
-  { value: "RINGING", label: "Ringing" },
-  { value: "SWITCH_OFF", label: "Switch Off" },
 ];
 
 interface LeadWithDetails extends Lead {
@@ -115,7 +114,7 @@ export default function EmployeeLeadsPage() {
     if (error) {
       toast({ title: `Failed: ${error.message}`, variant: "destructive" });
     } else {
-      toast({ title: `Status updated to ${newStatus === "TAG_ADDED" ? "Tag Added" : "Ringing"}` });
+      toast({ title: `Status updated to ${newStatus === "TAG_ADDED" ? "Tag Added" : "Tag Not Added"}` });
       setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus as LeadStatus } : l));
     }
     setInlineStatusSaving(null);
@@ -362,9 +361,8 @@ export default function EmployeeLeadsPage() {
             <SelectTrigger className="w-[130px] border-white/[0.08]"><SelectValue placeholder="All Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Status</SelectItem>
-              <SelectItem value="RINGING">Ringing</SelectItem>
+              <SelectItem value="TAG_NOT_ADDED">Tag Not Added</SelectItem>
               <SelectItem value="TAG_ADDED">Tag Added</SelectItem>
-              <SelectItem value="SWITCH_OFF">Switch Off</SelectItem>
             </SelectContent>
           </Select>
           <DateFilter range={dateRange} onRangeChange={setDateRange} />

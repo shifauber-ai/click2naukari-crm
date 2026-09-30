@@ -115,7 +115,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
     const [totalRes, tagRes, ringRes, unassignedRes] = await Promise.all([
       supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id),
       supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "TAG_ADDED"),
-      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "RINGING"),
+      supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).eq("status", "TAG_NOT_ADDED"),
       supabase.from("leads").select("*", { count: "exact", head: true }).eq("product_id", product.id).is("current_caller_id", null),
     ]);
     setStats({
@@ -316,7 +316,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
       {/* Info banner */}
       <div className="rounded-lg border border-info/30 bg-info/5 px-4 py-3">
         <p className="text-sm text-info-foreground">
-          HC uses Platform: Uber, Product: Auto. Statuses: Tag Added, Ringing. No WhatsApp.
+          HC uses Platform: Uber, Product: Auto. Statuses: Tag Not Added, Tag Added. No WhatsApp.
         </p>
       </div>
 
@@ -325,7 +325,7 @@ export function HCLeadsTab({ product }: { product: Product }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label="Total" value={stats.total} icon={Users} tone="default" />
           <StatCard label="Tag Added" value={stats.tagAdded} icon={Phone} tone="info" />
-          <StatCard label="Ringing" value={stats.ringing} icon={Phone} tone="warning" />
+          <StatCard label="Tag Not Added" value={stats.ringing} icon={Phone} tone="warning" />
           <StatCard label="Unassigned" value={stats.unassigned} icon={UserPlus} tone="danger" />
         </div>
       )}

@@ -50,7 +50,7 @@ export async function calculateAchievement(
 
     let q = supabase
       .from("leads")
-      .select("id, status, platform, city, uber_id_done, ola_id_done, rapido_id_done, form_status, lead_type, bike_ft_status")
+      .select("id, status, platform, city, current_caller_id, uber_id_done, ola_id_done, rapido_id_done, form_status, lead_type, bike_ft_status")
       .eq("product_id", target.product_id)
       .gte("created_at", start)
       .lte("created_at", end);
@@ -88,9 +88,9 @@ export async function calculateAchievement(
     } else if (metricKey === "RAPIDO") {
       achieved = leads.filter((l) => l.rapido_id_done === true && cityMatch(l)).length;
     } else if (metricKey === "TAG_ADDED") {
-      achieved = leads.filter((l) => l.status === "TAG_ADDED" && cityMatch(l)).length;
+      achieved = leads.filter((l) => l.status === "TAG_ADDED" && cityMatch(l) && l.current_caller_id === target.employee_id).length;
     } else if (metricKey === "TAG_FORM") {
-      achieved = leads.filter((l) => (l as { form_status?: string }).form_status === "TAG_FORM" && cityMatch(l)).length;
+      achieved = leads.filter((l) => (l as { form_status?: string }).form_status === "TAG_FORM" && cityMatch(l) && l.current_caller_id === target.employee_id).length;
     } else {
       achieved = leads.filter(cityMatch).length;
     }
