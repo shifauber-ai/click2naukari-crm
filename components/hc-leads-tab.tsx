@@ -408,8 +408,8 @@ export function HCLeadsTab({ product }: { product: Product }) {
                 <TableHead>Total Trips</TableHead>
                 <TableHead>License No</TableHead>
                 <TableHead>Last Trip</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Form</TableHead>
+                <TableHead>Status</TableHead>
                 {canManage && <TableHead>Caller</TableHead>}
                 <TableHead>Call</TableHead>
                 {canManage && <TableHead className="text-right">Actions</TableHead>}
@@ -432,18 +432,6 @@ export function HCLeadsTab({ product }: { product: Product }) {
                   <TableCell>{lead.last_trip_date ? format(new Date(lead.last_trip_date), "dd MMM yyyy") : "—"}</TableCell>
                   <TableCell>
                     <Select
-                      value={lead.status && HC_LEAD_STATUSES.includes(lead.status as HCLeadStatus) ? (lead.status as HCLeadStatus) : undefined}
-                      onValueChange={(v) => handleStatusChange(lead.id, v as HCLeadStatus)}
-                      disabled={updatingId === lead.id}
-                    >
-                      <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        {HC_LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{HC_STATUS_LABELS[s]}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Select
                       value={(lead.form_status as HCFormStatus) || undefined}
                       onValueChange={(v) => handleFormChange(lead.id, v as HCFormStatus)}
                       disabled={updatingFormId === lead.id}
@@ -451,6 +439,18 @@ export function HCLeadsTab({ product }: { product: Product }) {
                       <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="—" /></SelectTrigger>
                       <SelectContent>
                         {HC_FORM_STATUSES.map((f) => <SelectItem key={f} value={f}>{HC_FORM_LABELS[f]}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={lead.status && HC_LEAD_STATUSES.includes(lead.status as HCLeadStatus) ? (lead.status as HCLeadStatus) : undefined}
+                      onValueChange={(v) => handleStatusChange(lead.id, v as HCLeadStatus)}
+                      disabled={updatingId === lead.id}
+                    >
+                      <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        {HC_LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{HC_STATUS_LABELS[s]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </TableCell>

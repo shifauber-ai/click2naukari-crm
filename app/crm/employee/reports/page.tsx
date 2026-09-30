@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, Users, Phone, CheckCircle2 } from "lucide-react";
+import { TrendingUp, Users, Phone, CheckCircle2, FileCheck, Target } from "lucide-react";
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import type { Platform } from "@/lib/types";
 import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
@@ -50,7 +50,9 @@ export default function EmployeeReportsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [bikeFtStats, setBikeFtStats] = useState({ ulpDone: 0, ftDone: 0, ftRemaining: 0 });
+  const [hcStats, setHcStats] = useState({ assigned: 0, tagAdded: 0, tagForm: 0 });
   const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
+  const isHC = product ? classifyProductCode(product.code, product.name).isHC : false;
 
   useEffect(() => {
     async function loadPlatforms() {
@@ -181,6 +183,12 @@ export default function EmployeeReportsPage() {
     if (isBike) {
       setBikeFtStats({ ulpDone: bikeUlpDone, ftDone: bikeFtDone, ftRemaining: Math.max(0, bikeUlpDone - bikeFtDone) });
     }
+    if (isHC && leads) {
+      const hcAssigned = leads.length;
+      const hcTagAdded = leads.filter((l: any) => l.status === "TAG_ADDED").length;
+      const hcTagForm = leads.filter((l: any) => l.form_status === "TAG_FORM").length;
+      setHcStats({ assigned: hcAssigned, tagAdded: hcTagAdded, tagForm: hcTagForm });
+    }
     setLoading(false);
   }, [profile?.id, product, dateRange, platformFilter, sourceFilter, statusFilter]);
 
@@ -221,6 +229,7 @@ export default function EmployeeReportsPage() {
               </div>
             </>
           )}
+          {!isHC && (
           <div>
             <label className="text-xs font-medium text-muted-foreground/70">Platform</label>
             <Select value={platformFilter} onValueChange={setPlatformFilter}>
@@ -231,6 +240,8 @@ export default function EmployeeReportsPage() {
               </SelectContent>
             </Select>
           </div>
+          )}
+          {!isHC && (
           <div>
             <label className="text-xs font-medium text-muted-foreground/70">Source</label>
             <Select value={sourceFilter} onValueChange={setSourceFilter}>
@@ -241,6 +252,8 @@ export default function EmployeeReportsPage() {
               </SelectContent>
             </Select>
           </div>
+          )}
+          {!isHC && (
           <div>
             <label className="text-xs font-medium text-muted-foreground/70">Status</label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -251,11 +264,21 @@ export default function EmployeeReportsPage() {
               </SelectContent>
             </Select>
           </div>
+          )}
         </CardContent>
       </Card>
 
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}</div>
+      ) : isHC ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <KpiCard label="Leads Assigned" value={hcStats.assigned} icon={Users} color="text-primary" bg="bg-primary/10" />
+            <KpiCard label="Tag Form" value={hcStats.tagForm} icon={FileCheck} color="text-chart-4" bg="bg-chart-4/10" />
+            <KpiCard label="Tag Added" value={hcStats.tagAdded} icon={CheckCircle2} color="text-success-foreground" bg="bg-success/15" />
+            <KpiCard label="Total Calls" value={data.calls} icon={Phone} color="text-primary" bg="bg-primary/10" />
+          </div>
+        </>
       ) : (
         <>
           {/* KPI Cards */}
@@ -378,8 +401,8 @@ export default function EmployeeReportsPage() {
         </>
       )}
 
-      {/* Target Progress */}
-      {product && classifyProductCode(product.code, product.name).isBike && (
+      {/* Bike FT Summary — hidden for HC */}
+      {product && !isHC && classifyProductCode(product.code, product.name).isBike && (
         <Card className="border-white/[0.08]">
           <CardHeader><CardTitle className="text-base">Bike FT Summary</CardTitle></CardHeader>
           <CardContent>

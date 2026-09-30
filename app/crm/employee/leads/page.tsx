@@ -31,7 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import type { Lead, Platform, ProductCity, LeadStatusHistory, LeadAssignment, ScheduledTransition } from "@/lib/types";
-import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus } from "@/lib/types";
+import { LEAD_STATUSES, STATUS_LABELS, type LeadStatus, HCFormStatus, HC_FORM_STATUSES, HC_FORM_LABELS } from "@/lib/types";
 
 const PAGE_SIZE = 25;
 const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
@@ -39,6 +39,7 @@ const SOURCES = ["Showroom Data", "ANFT", "Dealer", "Reference", "Other"];
 const HC_INLINE_STATUSES = [
   { value: "TAG_ADDED", label: "Tag Added" },
   { value: "RINGING", label: "Ringing" },
+  { value: "SWITCH_OFF", label: "Switch Off" },
 ];
 
 interface LeadWithDetails extends Lead {
@@ -87,6 +88,22 @@ export default function EmployeeLeadsPage() {
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inlineStatusSaving, setInlineStatusSaving] = useState<string | null>(null);
+  const [inlineFormSaving, setInlineFormSaving] = useState<string | null>(null);
+
+  const handleInlineFormChange = async (leadId: string, newForm: HCFormStatus) => {
+    setInlineFormSaving(leadId);
+    const { error } = await supabase
+      .from("leads")
+      .update({ form_status: newForm, updated_at: new Date().toISOString() })
+      .eq("id", leadId);
+    if (error) {
+      toast({ title: `Failed: ${error.message}`, variant: "destructive" });
+    } else {
+      toast({ title: `Form updated to ${HC_FORM_LABELS[newForm]}` });
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, form_status: newForm } : l));
+    }
+    setInlineFormSaving(null);
+  };
 
   const handleInlineStatusChange = async (leadId: string, newStatus: string) => {
     setInlineStatusSaving(leadId);
@@ -347,6 +364,7 @@ export default function EmployeeLeadsPage() {
               <SelectItem value="ALL">All Status</SelectItem>
               <SelectItem value="RINGING">Ringing</SelectItem>
               <SelectItem value="TAG_ADDED">Tag Added</SelectItem>
+              <SelectItem value="SWITCH_OFF">Switch Off</SelectItem>
             </SelectContent>
           </Select>
           <DateFilter range={dateRange} onRangeChange={setDateRange} />
@@ -380,6 +398,8 @@ export default function EmployeeLeadsPage() {
                       <th className="px-3 py-3">DL No</th>
                       <th className="px-3 py-3">Total Trips</th>
                       <th className="px-3 py-3">License No</th>
+                      <th className="px-3 py-3">Last Trip</th>
+                      <th className="px-3 py-3">Form</th>
                       <th className="px-3 py-3">Status</th>
                       <th className="px-3 py-3">Call</th>
                       <th className="px-3 py-3 text-right">Actions</th>
@@ -409,6 +429,27 @@ export default function EmployeeLeadsPage() {
                         <td className="px-3 py-3 text-muted-foreground">{lead.dl_no || "—"}</td>
                         <td className="px-3 py-3 text-muted-foreground">{lead.total_trips != null ? lead.total_trips : "—"}</td>
                         <td className="px-3 py-3 text-muted-foreground">{lead.license_no || "—"}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{lead.last_trip_date ? format(new Date(lead.last_trip_date), "dd MMM yyyy") : "—"}</td>
+                        <td className="px-3 py-3">
+                          <Select
+                            value={(lead.form_status as HCFormStatus) || undefined}
+                            onValueChange={(v) => handleInlineFormChange(lead.id, v as HCFormStatus)}
+                            disabled={inlineFormSaving === lead.id}
+                          >
+                            <SelectTrigger className="h-8 w-[120px] border-white/[0.08] text-xs font-medium">
+                              {inlineFormSaving === lead.id ? (
+                                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving...</span>
+                              ) : (
+                                <SelectValue placeholder="—" />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              {HC_FORM_STATUSES.map((f) => (
+                                <SelectItem key={f} value={f} className="text-xs">{HC_FORM_LABELS[f]}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
                         <td className="px-3 py-3">
                           <Select
                             value={lead.status && HC_INLINE_STATUSES.some((s) => s.value === lead.status) ? lead.status : undefined}
@@ -494,9 +535,11 @@ export default function EmployeeLeadsPage() {
                   <DetailItem label="DL No" value={viewLead.dl_no || "—"} />
                   <DetailItem label="Total Trips" value={viewLead.total_trips != null ? String(viewLead.total_trips) : "—"} />
                   <DetailItem label="License No" value={viewLead.license_no || "—"} />
+                  <DetailItem label="Last Trip" value={viewLead.last_trip_date ? format(new Date(viewLead.last_trip_date), "dd MMM yyyy") : "—"} />
+                  <DetailItem label="Form" value={viewLead.form_status ? (HC_FORM_LABELS[(viewLead.form_status as HCFormStatus)] || viewLead.form_status) : "—"} />
                   <DetailItem label="Source" value={viewLead.source || "—"} />
                   <DetailItem label="City" value={viewLead.city || "—"} />
-                  <DetailItem label="Current Status" value={STATUS_LABELS[viewLead.status as LeadStatus] || viewLead.status} />
+                  <DetailItem label="Current Status" value={STATUS_LABELS[viewLead.status as LeadStatus] || viewLead.status || "—"} />
                   <DetailItem label="Created Date" value={format(new Date(viewLead.created_at), "dd MMM yyyy, HH:mm")} />
                 </div>
 
