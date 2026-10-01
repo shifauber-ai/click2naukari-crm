@@ -36,6 +36,7 @@ import {
   Users, Search, Plus, Pencil, Loader2, Eye, EyeOff, MapPin, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
+import { classifyProductCode } from "@/lib/target-config";
 
 interface CityRow { id: string; city_name: string; is_active: boolean; }
 
@@ -81,6 +82,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
   const [editTargetId, setEditTargetId] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
   const isAdmin = profile?.role === "ADMIN";
+  const isHC = classifyProductCode(product.code, product.name).isHC;
 
   useEffect(() => {
     (async () => {
@@ -113,7 +115,9 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
       const cityMap: Record<string, string[]> = {};
       (cityAssigns as { employee_id: string; city_id: string; employee_type: string; city: { city_name: string } }[] | null)?.forEach((a) => {
         if (!cityMap[a.employee_id]) cityMap[a.employee_id] = [];
-        const label = a.city?.city_name ? `${a.city.city_name} (${a.employee_type})` : a.employee_type;
+        const label = isHC
+          ? (a.city?.city_name || a.employee_type)
+          : (a.city?.city_name ? `${a.city.city_name} (${a.employee_type})` : a.employee_type);
         if (!cityMap[a.employee_id].some((l) => l.startsWith(a.city?.city_name || ""))) {
           cityMap[a.employee_id].push(label);
         }
@@ -289,7 +293,11 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
               cityInserts.push({ employee_id: editTargetId, product_id: product.id, city_id: cid, is_active: true, employee_type: t });
             }
           }
-          await supabase.from("employee_product_cities").insert(cityInserts);
+          const { error: cityErr } = await supabase.from("employee_product_cities").insert(cityInserts);
+          if (cityErr) {
+            toast({ title: `City assignment failed: ${cityErr.message}`, variant: "destructive" });
+            return;
+          }
         }
       }
       toast({ title: "Employee updated" });
@@ -467,7 +475,7 @@ export function ProductEmployeeTab({ product }: { product: Product }) {
               <div key={c.id} className="flex items-center gap-3">
                 <Checkbox checked={selectedCityIds.has(c.id)} onCheckedChange={() => toggleCity(c.id)} id={`city-${c.id}`} />
                 <Label htmlFor={`city-${c.id}`} className="text-sm font-normal cursor-pointer flex-1">{c.city_name}</Label>
-                {selectedCityIds.has(c.id) && (
+                {selectedCityIds.has(c.id) && !isHC && (
                   <Select
                     value={cityTypes[c.id] || "ULP"}
                     onValueChange={(v) => setCityTypes((t) => ({ ...t, [c.id]: v as "ULP" | "FT" | "BOTH" }))}
